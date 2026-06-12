@@ -1,0 +1,317 @@
+import asyncio
+import threading
+import tkinter as tk
+from telethon import TelegramClient, events
+from typing import Optional, cast
+
+from utils.config import (load_api_creds, load_risk_config,
+                          load_channels, BASE_DIR)
+from utils.logger import logger
+from utils.helpers import patch_aiohttp_dns
+from services.exchange_service import exchange_service
+from core.engine import trading_engine
+from core.parser import parse_trading_signal
+from ui.main_window import TradingBotGUI
+
+
+class TradingBotApp:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.gui = TradingBotGUI(self.root)
+        self.bot_running = False
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.telegram_client: Optional[TelegramClient] = None
+
+        # Configurar parche DNS
+        patch_aiohttp_dns()
+
+        # Sobrescribir el comando del botón en la GUI
+        self.gui.toggle_bot = self.toggle_bot
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def toggle_bot(self):
+        logger.info(
+            f"Bot toggle presionado. Estado actual bot_running: "
+            f"{self.bot_running}"
+        )
+        if not self.bot_running:
+            self.start_bot()
+        else:
+            self.stop_bot()
+
+    def start_bot(self):
+        if self.bot_running:
+            return
+        self.bot_running = True
+        self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
+        logger.info("Iniciando bot en segundo plano...")
+
+        # Iniciamos el hilo pero sin bloquear la UI
+        thread = threading.Thread(
+            target=self._run_async_loop, daemon=True
+        )
+        thread.start()
+
+    def stop_bot(self):
+        if not self.bot_running:
+            return
+        self.bot_running = False
+        self.gui.btn_toggle_bot.config(text="🚀 INICIAR BOT")
+        logger.info("Solicitud de detención enviada.")
+
+        # Limpiar conexiones de exchanges
+        if self.loop:
+            self.loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(exchange_service.close_all())
+            )
+
+        if self.loop and self.telegram_client:
+            try:
+                tc = cast(TelegramClient, self.telegram_client)
+                self.loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(
+                        tc.disconnect()  # type: ignore[arg-type]
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error al desconectar Telegram: {e}")
+
+    def _run_async_loop(self):
+        try:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            self.loop.run_until_complete(self.main_async())
+        except Exception as e:
+            logger.error(
+                f"Error en el motor del bot: {e}", exc_info=True
+            )
+        finally:
+            if self.loop:
+                self.loop.close()
+                self.loop = None
+            self.bot_running = False
+            # Actualizar UI desde otro hilo de forma segura
+            self.root.after(
+                0,
+                lambda: self.gui.btn_toggle_bot.config(
+                    text="🚀 INICIAR BOT"
+                )
+            )
+
+    async def _setup_telegram(self, creds, config, channels):
+        """Configura y conecta el cliente de Telegram con reconexión
+        automática."""
+        tg = creds["telegram"]
+
+        # Asegurar que la carpeta de sesión existe
+        session_dir = BASE_DIR / "telegram_session"
+        session_dir.mkdir(parents=True, exist_ok=True)
+        session_path = str(session_dir / "user_session")
+
+        self.telegram_client = TelegramClient(
+            session_path, int(tg["API_ID"]), tg["API_HASH"]
+        )
+
+        @self.telegram_client.on(events.NewMessage(chats=list(channels)))
+        async def handler(event):
+            if not self.bot_running:
+                return
+            text = event.raw_text
+            logger.info(f"📥 Mensaje recibido: {text[:50]}...")
+
+            signal = parse_trading_signal(text)
+            if signal:
+                active_exchanges = list(exchange_service.clients.keys())
+                logger.info(
+                    f"📊 Señal detectada: {signal.simbolo} "
+                    f"{signal.direccion}. "
+                    f"Procesando en {len(active_exchanges)} exchanges: "
+                    f"{active_exchanges}"
+                )
+                for ex_id in active_exchanges:
+                    asyncio.create_task(
+                        trading_engine.execute_signal(signal, config, ex_id)
+                    )
+            else:
+                logger.info("Formato de señal no reconocido.")
+
+        # Funciones de autenticación vía GUI
+        def get_code_gui():
+            logger.info("Solicitando código de verificación al usuario...")
+            from tkinter import simpledialog
+            import queue
+
+            q = queue.Queue()
+
+            def ask():
+                code = simpledialog.askstring(
+                    "Telegram Auth",
+                    "Introduce el código recibido:",
+                    parent=self.root
+                )
+                q.put(code)
+
+            self.root.after(0, ask)
+            code = q.get()
+            logger.info(f"Código recibido desde la GUI: {code}")
+            return code
+
+        def get_password_gui():
+            logger.info("Solicitando contraseña 2FA al usuario...")
+            from tkinter import simpledialog
+            import queue
+
+            q = queue.Queue()
+
+            def ask():
+                pwd = simpledialog.askstring(
+                    "Telegram 2FA",
+                    "TU CUENTA TIENE VERIFICACIÓN EN DOS PASOS.\n\n"
+                    "Introduce tu contraseña de Telegram:",
+                    parent=self.root,
+                    show='*'
+                )
+                q.put(pwd)
+
+            self.root.after(0, ask)
+            pwd = q.get()
+            if pwd:
+                logger.info("Contraseña 2FA recibida desde la GUI.")
+            else:
+                logger.warning("No se introdujo contraseña 2FA.")
+            return pwd
+
+        # Conectar con Telegram
+        try:
+            logger.info(
+                "Iniciando cliente de Telegram "
+                "(esperando autenticación si es necesaria)..."
+            )
+            tc = cast(TelegramClient, self.telegram_client)
+            await tc.start(  # type: ignore[misc]
+                phone=tg["PHONE_NUMBER"],
+                code_callback=get_code_gui,
+                password=get_password_gui
+            )
+            logger.info("✅ Bot conectado a Telegram con éxito.")
+
+            me = await tc.get_me()
+            user_first = getattr(me, 'first_name', '?')
+            user_username = getattr(me, 'username', '?')
+            logger.info(
+                f"Sesión iniciada como: {user_first} (@{user_username})"
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"Error fatal en la conexión de Telegram: {e}",
+                exc_info=True
+            )
+            return False
+
+    async def _telegram_reconnection_loop(self, creds, config, channels):
+        """Bucle que mantiene la conexión de Telegram con reconexión
+        automática."""
+        while self.bot_running:
+            try:
+                # Desconectar cliente previo si existe
+                tc_conn = self.telegram_client
+                if tc_conn and tc_conn.is_connected():
+                    tc = cast(TelegramClient, tc_conn)
+                    await tc.disconnect()  # type: ignore[misc]
+
+                # Configurar y conectar Telegram
+                connected = await self._setup_telegram(creds, config, channels)
+                if not connected:
+                    logger.warning(
+                        "⚠️ No se pudo conectar Telegram. "
+                        "Reintentando en 30 segundos..."
+                    )
+                    await asyncio.sleep(30)
+                    continue
+
+                logger.info(
+                    f"📡 Escuchando en {len(channels)} canales..."
+                )
+
+                # Iniciar Watchdog
+                asyncio.create_task(trading_engine.watchdog())
+
+                # Mantener conexión hasta que se desconecte o se detenga el bot
+                tc = cast(TelegramClient, self.telegram_client)
+                await tc.run_until_disconnected()  # type: ignore[misc]
+
+                if self.bot_running:
+                    logger.warning(
+                        "⚠️ Conexión de Telegram perdida. "
+                        "Reintentando en 10 segundos..."
+                    )
+                    await asyncio.sleep(10)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(
+                    f"Error en bucle de Telegram: {e}", exc_info=True
+                )
+                if self.bot_running:
+                    logger.warning(
+                        "🔄 Reintentando conexión en 30 segundos..."
+                    )
+                    await asyncio.sleep(30)
+
+        # Asegurar desconexión limpia al salir
+        if self.telegram_client:
+            try:
+                tc = cast(TelegramClient, self.telegram_client)
+                await tc.disconnect()  # type: ignore[misc]
+            except Exception:
+                pass
+
+    async def main_async(self):
+        creds = load_api_creds()
+        config = load_risk_config()
+        channels = load_channels()
+
+        # 1. Inicializar Exchanges
+        logger.info("Inicializando exchanges activos...")
+        for ex_id, ex_creds in creds["exchanges"].items():
+            if ex_creds.get("enabled"):
+                await exchange_service.create_client(ex_id, ex_creds)
+
+        # 2. Verificar credenciales de Telegram
+        tg = creds["telegram"]
+        if not tg["API_ID"] or not tg["PHONE_NUMBER"]:
+            logger.error("Credenciales de Telegram incompletas.")
+            self.stop_bot()
+            return
+
+        # 3. Ejecutar el bucle de reconexión de Telegram
+        await self._telegram_reconnection_loop(creds, config, channels)
+
+    def on_closing(self):
+        self.stop_bot()
+        self.root.destroy()
+
+    def run(self):
+        # Iniciar bot automáticamente si hay credenciales configuradas
+        creds = load_api_creds()
+        tg_ok = bool(
+            creds["telegram"].get("API_ID")
+            and creds["telegram"].get("PHONE_NUMBER")
+        )
+        exchanges_ok = any(
+            ex.get("enabled") and ex.get("api_key") and ex.get("secret")
+            for ex in creds["exchanges"].values()
+        )
+        if tg_ok and exchanges_ok:
+            logger.info(
+                "Credenciales detectadas. Iniciando bot automáticamente..."
+            )
+            self.root.after(500, self.start_bot)
+        self.root.mainloop()
+
+
+if __name__ == "__main__":
+    app = TradingBotApp()
+    app.run()

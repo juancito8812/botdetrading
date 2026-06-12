@@ -1,0 +1,47 @@
+# Credenciales y Configuración sensible
+.env
+config.json
+canales.json
+posiciones.json
+
+# Entorno virtual
+venv/
+.venv/
+env/
+*.pyc
+__pycache__/
+
+# Logs
+logs/
+log_bot.txt
+_temp_run_test.txt
+
+# Build
+build/
+dist/
+*.spec
+*.rar
+*.zip
+
+# Sesión Telegram
+telegram_session/
+
+# IDE
+.vscode/
+.continue/
+
+# Archivos temporales/legacy
+_fix_probar.py
+_fix_probar2.py
+_fix_probar3.py
+_fx.py
+_new_method.py
+fix_guifreeze.py
+fix_step.py
+nul
+bot_unificado_backup.zip
+"bot de trading ultima version.rar"
+
+# Directorios legacy
+backup_modulos/
+legacy_code/
