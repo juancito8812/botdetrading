@@ -74,6 +74,7 @@ MiBotTrading/
 ## Cambios Recientes
 
 - **[11/06/2026]** — Inicialización estructura modular completa y funcional.
+- **[11/06/2026]** — Subido a GitHub: https://github.com/juancito8812/botdetrading.git
 
 ## Próximos Pasos / TODOs
 
@@ -81,6 +82,7 @@ MiBotTrading/
 
 ## Notas / Problemas Conocidos
 
-- Archivos temporales/legacy presentes en raíz: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `bot_unificado v2.py`, `backup_modulos/`, `legacy_code/` — pendientes de limpieza.
-- Sin commits en git aún (repositorio no inicializado).
+- Archivos temporales/legacy excluidos vía `.gitignore`: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `bot_unificado v2.py`, `backup_modulos/`, `legacy_code/` — no se subieron al repositorio.
+- Repositorio GitHub inicializado: https://github.com/juancito8812/botdetrading.git (rama master).
 - Tests de parser y manager pasan correctamente.
+- Credenciales (.env, config.json, canales.json) excluidas del repositorio por seguridad.
