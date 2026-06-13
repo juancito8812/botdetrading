@@ -3,14 +3,34 @@ import logging
 import ccxt.async_support as ccxt_async
 from typing import Dict, Optional, Any
 from utils.config import EXCHANGES_DEFAULTS
+from utils.resilience.decorators import (
+    retry_decorator, circuit_breaker_decorator_dynamic,
+    timeout_decorator, log_errors_decorator,
+)
+from utils.resilience.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger("TradingBot")
+
+# Circuit breakers por exchange
+_circuit_breakers = {}
+
+def _get_circuit_breaker(exchange_id: str) -> CircuitBreaker:
+    """Obtiene o crea un circuit breaker para un exchange."""
+    if exchange_id not in _circuit_breakers:
+        _circuit_breakers[exchange_id] = CircuitBreaker(
+            name=exchange_id,
+            failure_threshold=5,
+            reset_timeout=60,
+        )
+    return _circuit_breakers[exchange_id]
 
 class ExchangeService:
     def __init__(self):
         self.clients: Dict[str, Any] = {}
         self.failed_exchanges = set()
 
+    @retry_decorator(max_retries=2, base_delay=2.0)
+    @timeout_decorator(seconds=60)
     async def create_client(self, exchange_id: str, creds: Dict[str, Any]) -> Optional[Any]:
         """Crea e inicializa un cliente de CCXT."""
         # Limpiar cliente previo si existe para evitar conflictos de loop
@@ -53,11 +73,21 @@ class ExchangeService:
             return None
 
     async def close_all(self):
+        # Persistir estado de circuit breakers
+        from utils.config import DATA_DIR
+        cb_dir = DATA_DIR / "resilience"
+        cb_dir.mkdir(parents=True, exist_ok=True)
+        for ex_id, cb in _circuit_breakers.items():
+            cb.persist(str(cb_dir / f"cb_{ex_id}.json"))
         for client in self.clients.values():
             try: await asyncio.wait_for(client.close(), timeout=5)
             except: pass
         self.clients.clear()
 
+    @retry_decorator(max_retries=3, base_delay=1.0)
+    @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
+    @timeout_decorator(seconds=30)
+    @log_errors_decorator(context={"module": "exchange_service"})
     async def get_balance(self, exchange_id: str) -> float:
         client = self.clients.get(exchange_id)
         if not client: return 0.0
@@ -75,12 +105,18 @@ class ExchangeService:
             logger.error(f"Error balance {exchange_id}: {e}")
             return 0.0
 
+    @retry_decorator(max_retries=3, base_delay=1.0)
+    @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
+    @timeout_decorator(seconds=15)
     async def get_ticker_price(self, exchange_id: str, market_symbol: str) -> float:
         client = self.clients.get(exchange_id)
         if not client: return 0.0
         ticker = await client.fetch_ticker(market_symbol)
         return float(ticker['last'])
 
+    @retry_decorator(max_retries=2, base_delay=1.0)
+    @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
+    @timeout_decorator(seconds=30)
     async def set_leverage(self, exchange_id: str, market_symbol: str, leverage: int, margin_mode: str = 'cross', side: str = 'LONG'):
         client = self.clients.get(exchange_id)
         if not client: return
@@ -139,6 +175,8 @@ class ExchangeService:
         logger.warning(f"❌ No se encontró símbolo de mercado para {symbol_base} en {exchange_id}")
         return None
 
+    @retry_decorator(max_retries=2, base_delay=1.0)
+    @timeout_decorator(seconds=30)
     async def fetch_position(self, exchange_id: str, market_symbol: str) -> Optional[Dict[str, Any]]:
         client = self.clients.get(exchange_id)
         if not client: return None
@@ -152,6 +190,8 @@ class ExchangeService:
             logger.error(f"Error consultando posición en {exchange_id}: {e}")
             return None
 
+    @retry_decorator(max_retries=2, base_delay=1.0)
+    @timeout_decorator(seconds=30)
     async def cancel_order(self, exchange_id: str, market_symbol: str, order_id: str):
         client = self.clients.get(exchange_id)
         if not client: return False

@@ -1,0 +1,188 @@
+"""Decoradores de resiliencia: @retry, @circuit_breaker, @timeout, @log_errors."""
+
+import asyncio
+import functools
+import logging
+import time
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Type
+
+from utils.resilience.retry_service import RetryService
+from utils.resilience.circuit_breaker import CircuitBreaker
+from utils.resilience.error_handler import MaxRetriesExceeded
+
+logger = logging.getLogger("TradingBot")
+
+
+# ─── TIMEOUT DECORATOR ───────────────────────────────────────────────
+
+def timeout_decorator(
+    seconds: float = 30.0,
+    timeout_message: str = "Operation timed out",
+):
+    """
+    Decorador que aplica un timeout a una función async.
+
+    Uso:
+        @timeout_decorator(seconds=15)
+        async def fetch_ticker(exchange_id, symbol):
+            ...
+    """
+    def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await asyncio.wait_for(
+                    func(*args, **kwargs), timeout=seconds
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"⏰ Timeout ({seconds}s) en {func.__name__} "
+                    f"args={args}, kwargs={kwargs}"
+                )
+                raise
+        return wrapper
+    return decorator
+
+
+# ─── RETRY DECORATOR ─────────────────────────────────────────────────
+
+def retry_decorator(
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 30.0,
+    backoff_factor: float = 2.0,
+    jitter: bool = True,
+    retry_on: Optional[Tuple[Type[Exception], ...]] = None,
+):
+    """
+    Decorador que reintenta una función async con backoff exponencial.
+
+    El exchange_id se extrae del primer argumento de la función.
+
+    Uso:
+        @retry_decorator(max_retries=3, base_delay=1.0)
+        async def get_balance(exchange_id, ...):
+            ...
+    """
+    retry_service = RetryService(
+        max_retries=max_retries,
+        base_delay=base_delay,
+        max_delay=max_delay,
+        backoff_factor=backoff_factor,
+        jitter=jitter,
+        retry_on=retry_on,
+    )
+
+    def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+            return await retry_service.execute(
+                lambda: func(*args, **kwargs),
+                exchange_id=exchange_id,
+                operation=func.__name__,
+            )
+        return wrapper
+    return decorator
+
+
+# ─── CIRCUIT BREAKER DECORATOR (estático) ────────────────────────────
+
+def circuit_breaker_decorator(
+    circuit_breaker: CircuitBreaker,
+):
+    """
+    Decorador que aplica un circuit breaker a una función async.
+
+    Uso:
+        cb = CircuitBreaker(name="bitget", failure_threshold=5, reset_timeout=60)
+
+        @circuit_breaker_decorator(circuit_breaker=cb)
+        async def some_func(exchange_id, ...):
+            ...
+    """
+    def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+
+            circuit_breaker.call(exchange_id)
+
+            try:
+                result = await func(*args, **kwargs)
+                circuit_breaker.record_success()
+                return result
+            except Exception as e:
+                circuit_breaker.record_failure()
+                raise
+        return wrapper
+    return decorator
+
+
+# ─── CIRCUIT BREAKER DECORATOR (dinámico por exchange_id) ────────────
+
+def circuit_breaker_decorator_dynamic(
+    resolver: Callable[[str], CircuitBreaker],
+):
+    """
+    Decorador que resuelve el circuit breaker dinámicamente por exchange_id.
+
+    El exchange_id debe ser el primer argumento de la función decorada.
+
+    Uso:
+        def get_cb(exchange_id):
+            return _circuit_breakers[exchange_id]
+
+        @circuit_breaker_decorator_dynamic(resolver=get_cb)
+        async def get_balance(exchange_id, ...):
+            ...
+    """
+    def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+            cb = resolver(exchange_id)
+            cb.call(exchange_id)
+            try:
+                result = await func(*args, **kwargs)
+                cb.record_success()
+                return result
+            except Exception as e:
+                cb.record_failure()
+                raise
+        return wrapper
+    return decorator
+
+
+# ─── LOG ERRORS DECORATOR ────────────────────────────────────────────
+
+def log_errors_decorator(
+    context: Optional[Dict[str, Any]] = None,
+):
+    """
+    Decorador que captura errores y los loguea con contexto estructurado.
+
+    Uso:
+        @log_errors_decorator(context={"module": "exchange_service"})
+        async def execute_signal(signal, config, exchange_id):
+            ...
+    """
+    ctx = context or {}
+
+    def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            start = time.time()
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                duration_ms = (time.time() - start) * 1000
+                exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+
+                logger.error(
+                    f"❌ Error en {func.__name__}: {e} "
+                    f"[exchange={exchange_id}, duration={duration_ms:.0f}ms]"
+                )
+                raise
+        return wrapper
+    return decorator

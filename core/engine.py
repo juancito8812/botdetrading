@@ -6,14 +6,21 @@ from models.data_classes import Signal, Position
 from services.exchange_service import exchange_service
 from core.manager import pos_manager
 from utils.config import load_risk_config
+from utils.resilience.health_monitor import HealthMonitor
+from utils.resilience.decorators import log_errors_decorator
 
 logger = logging.getLogger("TradingBot")
+
+# Instancia global de HealthMonitor
+health_monitor = HealthMonitor(check_interval=60.0)
 
 class TradingEngine:
     def __init__(self):
         self.active_tasks = set()
         self.processed_signals = {}  # {(symbol, side): timestamp}
         self._pending_limit_orders = {}  # {order_id: {exchange_id, market_symbol, signal_data}}
+        self.health_monitor = health_monitor
+        self._health_check_task = None
 
     def _is_duplicate(self, symbol, side, exchange_id, cooldown=30):
         key = (symbol, side, exchange_id)
@@ -24,6 +31,7 @@ class TradingEngine:
         self.processed_signals[key] = now
         return False
 
+    @log_errors_decorator(context={"module": "trading_engine"})
     async def execute_signal(self, signal: Signal, config: dict, exchange_id: str):
         """Orquesta la ejecución de una señal en un exchange específico."""
         cooldown = config.get("cooldown_segundos", 30)
@@ -557,7 +565,12 @@ class TradingEngine:
         logger.info(f"✅ Posición creada desde orden LIMIT en {exchange_id}")
 
     async def watchdog(self):
-        """Vigila órdenes pendientes y sincroniza estados."""
+        """Vigila órdenes pendientes, sincroniza estados y monitorea salud."""
+        
+        # Integrar HealthMonitor
+        self.health_monitor.set_health_check_func(self._health_check_exchange)
+        self._health_check_task = asyncio.create_task(self.health_monitor._run_cycle())
+        
         while True:
             try:
                 config = load_risk_config()
@@ -656,6 +669,10 @@ class TradingEngine:
 
                     except Exception as e:
                         logger.debug(f"Watchdog: Error verificando posición {pos.symbol}: {e}")
+
+                # Health check de exchanges activos
+                for ex_id in list(exchange_service.clients.keys()):
+                    self.health_monitor.add_exchange(ex_id)
 
                 # 2. Reintentar exchanges fallidos
                 failed_snapshot = list(exchange_service.failed_exchanges)
@@ -757,6 +774,24 @@ class TradingEngine:
             logger.info(f"🔄 Trailing SL movido a {new_sl:.4f} para {pos.symbol}")
         except Exception as e:
             logger.warning(f"⚠️ Error moviendo trailing SL: {e}")
+
+    async def _health_check_exchange(self, exchange_id: str) -> bool:
+        """
+        Función de health check para un exchange.
+        Intenta obtener un ticker de prueba para verificar conectividad.
+        """
+        # Intentar varios formatos de símbolo comunes
+        symbols_to_try = ["BTC/USDT", "BTC/USDT:USDT", "BTCUSDT"]
+        for sym in symbols_to_try:
+            try:
+                price = await exchange_service.get_ticker_price(
+                    exchange_id, sym
+                )
+                if price > 0:
+                    return True
+            except Exception:
+                continue
+        return False
 
     async def _move_sl_to_breakeven(self, pos: Position, client):
         """Mueve el SL al precio de entrada."""
