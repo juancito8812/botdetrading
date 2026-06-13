@@ -40,6 +40,16 @@ TRANSLATIONS = {
         "dash_error": "Error al obtener datos",
         "dash_loading": "Cargando datos del mercado...",
         "dash_source": "Fuente: CoinGecko",
+        # Health
+        "dash_health": "🩺 Salud de Exchanges",
+        "dash_health_healthy": "🟢 Saludable",
+        "dash_health_degraded": "🟡 Degradado",
+        "dash_health_down": "🔴 Caído",
+        "dash_health_unknown": "⚪ Sin datos",
+        "dash_health_latency": "ms",
+        "dash_health_failures": "fallos",
+        "dash_health_cb": "CB:",
+        "dash_health_refresh": "🔄 Refresh Health",
         
         # APIs
         "apis_title": "Configuración de APIs",
@@ -176,6 +186,16 @@ TRANSLATIONS = {
         "dash_error": "Error fetching data",
         "dash_loading": "Loading market data...",
         "dash_source": "Source: CoinGecko",
+        # Health
+        "dash_health": "🩺 Exchange Health",
+        "dash_health_healthy": "🟢 Healthy",
+        "dash_health_degraded": "🟡 Degraded",
+        "dash_health_down": "🔴 Down",
+        "dash_health_unknown": "⚪ No data",
+        "dash_health_latency": "ms",
+        "dash_health_failures": "failures",
+        "dash_health_cb": "CB:",
+        "dash_health_refresh": "🔄 Refresh Health",
         
         # APIs
         "apis_title": "API Configuration",

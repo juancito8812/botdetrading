@@ -71,6 +71,7 @@ class ExchangeHealth:
             "last_ok_time": self.last_ok_time,
             "consecutive_failures": self.consecutive_failures,
             "avg_latency_ms": self.avg_latency_ms,
+            "circuit_breaker_state": self.circuit_breaker_state,
         }
 
 

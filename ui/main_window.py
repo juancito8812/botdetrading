@@ -16,6 +16,7 @@ from utils.settings_manager import (
 from services.exchange_service import exchange_service
 from services.market_data import fetch_top20, fetch_market_indices
 from core.manager import pos_manager
+from core.engine import health_monitor
 from utils.logger import logger
 
 
@@ -145,6 +146,17 @@ class TradingBotGUI:
         
         ttk.Label(indices_frame, text=i18n.t("dash_source"), foreground="gray", font=("", 8)).grid(row=0, column=len(indices_data), padx=10)
 
+        # --- Health Frame ---
+        health_frame = ttk.LabelFrame(frame, text=i18n.t("dash_health"), padding=5)
+        health_frame.pack(fill='x', padx=10, pady=2)
+
+        # Contenedor interno con grid para los health cards
+        self.health_container = ttk.Frame(health_frame)
+        self.health_container.pack(fill='x', padx=5, pady=2)
+
+        self.health_refresh_btn = ttk.Button(health_frame, text=i18n.t("dash_health_refresh"), command=self.refresh_health)
+        self.health_refresh_btn.pack(anchor='e', padx=5, pady=2)
+
         # Treeview for crypto data
         columns = ("rank", "symbol", "name", "price", "change", "volume", "market_cap")
         self.dash_tree = ttk.Treeview(frame, columns=columns, show='headings', height=18)
@@ -184,6 +196,9 @@ class TradingBotGUI:
 
         self.dash_auto_active = False
         self.dash_auto_job = None
+
+        # Cargar health indicators al inicio
+        self.root.after(500, self.refresh_health)
 
     def refresh_dashboard(self):
         self.dash_status.config(text=i18n.t("dash_loading"))
@@ -278,6 +293,67 @@ class TradingBotGUI:
         self.dash_tree.tag_configure("up", foreground="#00ff00")
         self.dash_tree.tag_configure("down", foreground="#ff4444")
 
+    def refresh_health(self):
+        """Actualiza los indicadores de salud de exchanges desde health_monitor."""
+        try:
+            summary = health_monitor.get_summary()
+            if not summary:
+                # Si no hay datos, intentar usar exchanges activos
+                for ex_id in list(exchange_service.clients.keys()):
+                    health_monitor.add_exchange(ex_id)
+                summary = health_monitor.get_summary()
+
+            # Reconstruir labels si cambió la cantidad de exchanges
+            for child in self.health_container.winfo_children():
+                child.destroy()
+
+            if not summary:
+                lbl = ttk.Label(self.health_container, text=i18n.t("dash_health_unknown"), foreground="gray")
+                lbl.pack(side='left', padx=10, pady=2)
+                return
+
+            for ex_id in sorted(summary.keys()):
+                data = summary[ex_id]
+                status = data.get("status", "unknown")
+                failures = data.get("consecutive_failures", 0)
+                latency = data.get("avg_latency_ms", 0.0)
+
+                # Color según estado
+                if status == "healthy":
+                    status_text = i18n.t("dash_health_healthy")
+                    fg_color = "#00cc00"
+                elif status == "degraded":
+                    status_text = i18n.t("dash_health_degraded")
+                    fg_color = "#ccaa00"
+                elif status == "down":
+                    status_text = i18n.t("dash_health_down")
+                    fg_color = "#ff4444"
+                else:
+                    status_text = i18n.t("dash_health_unknown")
+                    fg_color = "gray"
+
+                # Card para cada exchange
+                card = ttk.LabelFrame(self.health_container, text=ex_id.upper(), padding=3)
+                card.pack(side='left', padx=4, pady=2, fill='y')
+
+                # Estado con color
+                status_lbl = ttk.Label(card, text=status_text, foreground=fg_color, font=("", 10, "bold"))
+                status_lbl.pack(anchor='w', padx=2)
+
+                # Latencia
+                latency_text = f"{latency:.0f}ms" if latency > 0 else "-"
+                ttk.Label(card, text=f"⏱ {latency_text}", font=("", 8)).pack(anchor='w', padx=2)
+
+                # Fallos
+                fail_text = f"{failures} {i18n.t('dash_health_failures')}" if failures > 0 else "✓"
+                fail_color = "#ff4444" if failures > 0 else "#00cc00"
+                ttk.Label(card, text=f"⚠ {fail_text}", foreground=fail_color, font=("", 8)).pack(anchor='w', padx=2)
+
+
+
+        except Exception as e:
+            logger.warning(f"Error actualizando health en UI: {e}")
+
     def toggle_dash_auto_refresh(self):
         if self.dash_auto_active:
             self.dash_auto_active = False
@@ -294,7 +370,8 @@ class TradingBotGUI:
         if not self.dash_auto_active:
             return
         self.refresh_dashboard()
-        self.dash_auto_job = self.root.after(60000, self._dash_auto_tick)
+        self.refresh_health()
+        self.dash_auto_job = self.root.after(30000, self._dash_auto_tick)
 
     # ==================== TAB: SETTINGS ====================
     def setup_settings_tab(self):
