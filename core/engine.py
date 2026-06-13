@@ -8,6 +8,7 @@ from core.manager import pos_manager
 from utils.config import load_risk_config
 from utils.resilience.health_monitor import HealthMonitor
 from utils.resilience.decorators import log_errors_decorator
+from services.notifier import TelegramNotifier
 
 logger = logging.getLogger("TradingBot")
 
@@ -21,6 +22,8 @@ class TradingEngine:
         self._pending_limit_orders = {}  # {order_id: {exchange_id, market_symbol, signal_data}}
         self.health_monitor = health_monitor
         self._health_check_task = None
+        self.notifier: Optional[TelegramNotifier] = None
+        self._last_daily_report = 0.0  # timestamp del último reporte diario
 
     def _is_duplicate(self, symbol, side, exchange_id, cooldown=30):
         key = (symbol, side, exchange_id)
@@ -112,6 +115,10 @@ class TradingEngine:
 
             pos_manager.add_position(new_pos)
             logger.info(f"✅ Ejecución completa en {exchange_id} a {entry_price}")
+
+            # Notificar apertura de posición
+            if self.notifier:
+                await self.notifier.notify_trade_open(new_pos)
 
         except Exception as e:
             logger.error(f"Error fatal ejecutando señal en {exchange_id}: {e}", exc_info=True)
@@ -396,7 +403,8 @@ class TradingEngine:
                         "side_upper": side_upper,
                         "leverage": leverage,
                         "usdt_to_use": usdt_per_order,
-                        "timestamp": time.time()
+                        "timestamp": time.time(),
+                        "is_dca": True,
                     }
                     placed_count += 1
             except Exception as e:
@@ -564,6 +572,12 @@ class TradingEngine:
         pos_manager.add_position(new_pos)
         logger.info(f"✅ Posición creada desde orden LIMIT en {exchange_id}")
 
+        # Notificar si fue una orden DCA que se ejecutó
+        if pending.get("is_dca") and self.notifier:
+            await self.notifier.notify_dca_executed(
+                exchange_id, market_symbol, entry_price
+            )
+
     async def watchdog(self):
         """Vigila órdenes pendientes, sincroniza estados y monitorea salud."""
         
@@ -632,6 +646,9 @@ class TradingEngine:
                                 pos.status = "closed"
                                 pos_manager.save()
                                 logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
+                                # Notificar cierre
+                                if self.notifier:
+                                    await self.notifier.notify_trade_closed(pos)
                                 continue
 
                             # Actualizar precio más alto/bajo para trailing (#4)
@@ -663,6 +680,8 @@ class TradingEngine:
                                             pos.tp1_hit = True
                                             pos_manager.save()
                                             logger.info(f"🎯 TP1 alcanzado para {pos.symbol} en {pos.exchange_id}")
+                                            if self.notifier:
+                                                await self.notifier.notify_tp_hit(pos, 1)
                                             break
                                     except Exception:
                                         pass
@@ -691,6 +710,19 @@ class TradingEngine:
                 if stale_keys:
                     logger.debug(f"🧹 Limpiadas {len(stale_keys)} señales antiguas del caché")
 
+                # 4. Reporte diario (cada 24h)
+                if self.notifier and now - self._last_daily_report > 86400:
+                    self._last_daily_report = now
+                    all_positions = pos_manager.get_all_positions()
+                    balances = {}
+                    for ex_id in list(exchange_service.clients.keys()):
+                        try:
+                            bal = await exchange_service.get_balance(ex_id)
+                            balances[ex_id] = bal
+                        except Exception:
+                            balances[ex_id] = 0.0
+                    await self.notifier.send_daily_report(all_positions, balances)
+
             except Exception as e:
                 logger.error(f"Error en watchdog: {e}", exc_info=True)
 
@@ -714,6 +746,8 @@ class TradingEngine:
             if gain_pct >= activacion_pct and not pos.trailing_activated:
                 pos.trailing_activated = True
                 logger.info(f"🔝 Trailing activado para {pos.symbol} (ganancia: {gain_pct:.2f}%)")
+                if self.notifier:
+                    await self.notifier.notify_trailing_activated(pos)
 
             if pos.trailing_activated:
                 new_sl = pos.highest_price * (1 - distancia_pct / 100)
@@ -727,6 +761,8 @@ class TradingEngine:
             if gain_pct >= activacion_pct and not pos.trailing_activated:
                 pos.trailing_activated = True
                 logger.info(f"🔝 Trailing activado para {pos.symbol} (ganancia: {gain_pct:.2f}%)")
+                if self.notifier:
+                    await self.notifier.notify_trailing_activated(pos)
 
             if pos.trailing_activated:
                 new_sl = pos.lowest_price * (1 + distancia_pct / 100)

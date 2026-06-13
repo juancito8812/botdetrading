@@ -1,4 +1,5 @@
 import asyncio
+import os
 import threading
 import tkinter as tk
 from telethon import TelegramClient, events
@@ -9,7 +10,7 @@ from utils.config import (load_api_creds, load_risk_config,
 from utils.logger import logger
 from utils.helpers import patch_aiohttp_dns
 from services.exchange_service import exchange_service
-from core.engine import trading_engine
+from core.engine import trading_engine, health_monitor
 from core.parser import parse_trading_signal
 from ui.main_window import TradingBotGUI
 
@@ -233,6 +234,39 @@ class TradingBotApp:
                 logger.info(
                     f"📡 Escuchando en {len(channels)} canales..."
                 )
+
+                # Inicializar notificador después de conectar Telegram
+                from services.notifier import TelegramNotifier
+                notifier = None
+                if self.telegram_client:
+                    notification_chat_id = os.getenv("NOTIFICATION_CHAT_ID", "").strip()
+                    if not notification_chat_id:
+                        try:
+                            me = await self.telegram_client.get_me()
+                            notification_chat_id = str(me.id)
+                        except Exception:
+                            pass
+
+                    if notification_chat_id:
+                        notifier = TelegramNotifier(
+                            telegram_client=self.telegram_client,
+                            chat_id=notification_chat_id,
+                            enabled=True,
+                        )
+                        logger.info(
+                            f"🔔 Notificador inicializado (chat_id: {notification_chat_id})"
+                        )
+
+                # Conectar notificador al engine
+                trading_engine.notifier = notifier
+
+                # Conectar notificador al health monitor via callback
+                if notifier:
+                    async def health_callback(exchange, status, failures, latency):
+                        await notifier.notify_health_change(
+                            exchange, status, failures, latency
+                        )
+                    health_monitor.on_status_change = health_callback
 
                 # Iniciar Watchdog
                 asyncio.create_task(trading_engine.watchdog())

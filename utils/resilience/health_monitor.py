@@ -34,8 +34,9 @@ class ExchangeHealth:
     down_after: int = 6
     circuit_breaker_state: str = "closed"
 
-    def record_success(self, latency_ms: float = 0.0):
-        """Registra un health check exitoso."""
+    def record_success(self, latency_ms: float = 0.0) -> bool:
+        """Registra un health check exitoso. Retorna True si el estado cambió."""
+        old_status = self.status
         self.consecutive_failures = 0
         self.last_ok_time = time.time()
         self.status = HealthStatus.HEALTHY
@@ -43,14 +44,17 @@ class ExchangeHealth:
         self.latencies_ms.append(latency_ms)
         if len(self.latencies_ms) > MAX_LATENCIES:
             self.latencies_ms = self.latencies_ms[-MAX_LATENCIES:]
+        return old_status != self.status
 
-    def record_failure(self):
-        """Registra un health check fallido."""
+    def record_failure(self) -> bool:
+        """Registra un health check fallido. Retorna True si el estado cambió."""
+        old_status = self.status
         self.consecutive_failures += 1
         if self.consecutive_failures >= self.down_after:
             self.status = HealthStatus.DOWN
         elif self.consecutive_failures >= self.degraded_after:
             self.status = HealthStatus.DEGRADED
+        return old_status != self.status
 
     @property
     def avg_latency_ms(self) -> float:
@@ -83,6 +87,7 @@ class HealthMonitor:
         self._health_check_func: Optional[Callable[..., Awaitable[bool]]] = None
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        self.on_status_change: Optional[Callable[..., Awaitable[None]]] = None
 
     def set_health_check_func(self, func: Callable[..., Awaitable[bool]]):
         """Establece la función de health check (debe aceptar exchange_id como arg)."""
@@ -123,12 +128,26 @@ class HealthMonitor:
             ok = await self._health_check_func(exchange_id)
             latency_ms = (time.time() - start) * 1000
             if ok:
-                health.record_success(latency_ms)
+                changed = health.record_success(latency_ms)
+                if changed and self.on_status_change:
+                    await self.on_status_change(
+                        exchange_id, "healthy", 0, health.avg_latency_ms
+                    )
             else:
-                health.record_failure()
+                changed = health.record_failure()
+                if changed and self.on_status_change:
+                    await self.on_status_change(
+                        exchange_id, health.status.value,
+                        health.consecutive_failures, health.avg_latency_ms
+                    )
         except Exception as e:
             latency_ms = (time.time() - start) * 1000
-            health.record_failure()
+            changed = health.record_failure()
+            if changed and self.on_status_change:
+                await self.on_status_change(
+                    exchange_id, health.status.value,
+                    health.consecutive_failures, health.avg_latency_ms
+                )
             logger.warning(
                 f"⚠️ Health check falló para {exchange_id}: {e} "
                 f"(latencia: {latency_ms:.0f}ms)"
