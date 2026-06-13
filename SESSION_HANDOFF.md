@@ -12,7 +12,7 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest
 
-**Último commit:** `f731307` — ci(tests): update tests.yml to run all tests via pytest
+**Último commit:** `eb595e5` — chore: remove legacy files (bot_unificado v2.py, README_BACKUP.md, build_distribucion.bat)
 **Tests:** 72/72 pasando ✅
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
@@ -24,10 +24,32 @@
 | `9e23c53` | Sistema de resiliencia (retry, circuit breaker, health monitor, state recovery, backups) |
 | `e063655` | Sistema de notificaciones Telegram (10 métodos, 9 tests) |
 | `f731307` | CI: tests.yml con pytest para todos los tests + pytest-asyncio en requirements |
+| `eb595e5` | Limpieza de archivos legacy (bot_unificado v2.py, README_BACKUP.md, build_distribucion.bat) |
 
 ---
 
-## 🎯 Última Sesión: Sistema de Notificaciones Telegram (Completado)
+## 🎯 Última Sesión: Limpieza de Archivos Legacy (Completado)
+
+### ¿Qué se eliminó?
+
+Se eliminaron 3 archivos legacy que ya no son necesarios:
+
+| Archivo | Motivo |
+|---------|--------|
+| `bot_unificado v2.py` | Versión monolítica antigua — el bot ahora es modular (`core/`, `services/`, etc.) |
+| `README_BACKUP.md` | Backup obsoleto del README original |
+| `build_distribucion.bat` | Script de build manual — ahora se usa GitHub Actions |
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `.agents/MEMORY.md` | Referencias a legacy eliminadas |
+| `SESSION_HANDOFF.md` | Referencias a legacy eliminadas |
+
+---
+
+## 🎯 Sesión Anterior: Sistema de Notificaciones Telegram (Completado)
 
 ### ¿Qué se hizo?
 Se implementó un sistema completo de notificaciones vía Telegram siguiendo la metodología Superpowers:
@@ -65,6 +87,11 @@ class TelegramNotifier:
 ### Tests nuevos (1 archivo, 9 tests)
 
 - `tests/test_notifier.py` — send_message, disabled, trade_open/closed, health_change, circuit_breaker, trailing_activated, daily_report, error handling
+
+### Estado del proyecto
+- **72 tests, todos pasando** ✅
+- **Sin archivos legacy en el repo** — solo código activo y documentación
+- **GitHub Actions:** tests.yml ejecuta pytest completo, lint.yml con flake8+mypy, build.yml para releases
 
 ---
 
@@ -181,8 +208,8 @@ Framework de metodología de desarrollo instalado (14 skills). Los skills están
 ## ⚠️ Notas Importantes
 
 - **Credenciales excluidas de git:** `.env`, `config.json`, `canales.json` — están en `.gitignore`
-- **Archivos legacy ignorados:** `_fix_probar*.py`, `_new_method.py`, `_fx.py`, `backup_modulos/`, `legacy_code/`
-- **Archivos legacy eliminados del repo:** `bot_unificado v2.py`, `README_BACKUP.md`, `build_distribucion.bat`
+- **Archivos legacy eliminados del repo:** `bot_unificado v2.py`, `README_BACKUP.md`, `build_distribucion.bat` (commit `eb595e5`)
+- **Archivos legacy ignorados (`.gitignore`):** `_fix_probar*.py`, `_new_method.py`, `_fx.py`, `backup_modulos/`, `legacy_code/`
 - **Los tests async requieren `pytest-asyncio`** (ya está en `requirements.txt`)
 - **Para activar notificaciones:** Crear variable `NOTIFICATION_CHAT_ID` en `.env`. Si no existe, se usa el ID del usuario autenticado de Telegram por defecto.
 - **Para empezar una nueva sesión:** Leer este archivo + `.agents/MEMORY.md` + `git log --oneline -3`
