@@ -155,7 +155,8 @@ Cada llamada a exchange pasa por:
 
 ## Notas / Problemas Conocidos
 
-- Archivos temporales/legacy excluidos vía `.gitignore`: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `bot_unificado v2.py`, `backup_modulos/`, `legacy_code/` — no se subieron al repositorio.
+- Archivos temporales/legacy excluidos vía `.gitignore`: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `backup_modulos/`, `legacy_code/` — no se subieron al repositorio.
+- Archivos legacy eliminados del repositorio: `bot_unificado v2.py`, `README_BACKUP.md`, `build_distribucion.bat`.
 - Repositorio GitHub inicializado: https://github.com/juancito8812/botdetrading.git (rama master).
 - Tests: 72 tests en total (14 originales + 49 de resiliencia + 9 de notificaciones), todos pasando.
 - Credenciales (.env, config.json, canales.json) excluidas del repositorio por seguridad.
