@@ -1,5 +1,16 @@
 # 🤖 MiBotTrading
 
+<div align="center">
+
+![Tests](https://github.com/juancito8812/botdetrading/actions/workflows/tests.yml/badge.svg?branch=master)
+![Lint](https://github.com/juancito8812/botdetrading/actions/workflows/lint.yml/badge.svg?branch=master)
+![Build](https://github.com/juancito8812/botdetrading/actions/workflows/build.yml/badge.svg)
+![Python](https://img.shields.io/badge/Python-3.10%20|%203.11%20|%203.12-blue)
+![License](https://img.shields.io/badge/Licencia-Privado-red)
+![Last Commit](https://img.shields.io/github/last-commit/juancito8812/botdetrading)
+
+</div>
+
 Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecuta órdenes **LONG/SHORT** en múltiples exchanges con gestión inteligente de riesgo.
 
 ## ✨ Características
