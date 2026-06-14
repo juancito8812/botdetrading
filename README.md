@@ -25,8 +25,9 @@ Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecu
 - **🖥️ Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges en tiempo real
 - **📊 Reportes**: Resumen de trading, performance por exchange e historial de trades
 - **📱 Telegram Unificado**: Conexión, credenciales, canales e historial de notificaciones en una pestaña
+- **📊 PnL en Tiempo Real**: Cálculo de ganancia/pérdida desde el exchange en cada ciclo del watchdog
 - **💾 Backup Cifrado**: Export/Import de toda la configuración en archivo .botconfig protegido con contraseña (AES)
-- **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor, retry con backoff, state recovery y backups automáticos
+- **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor (cada 60s), retry con backoff, state recovery y backups automáticos
 - **🔔 Notificaciones**: Alertas por Telegram de apertura/cierre de trades, TP alcanzados, trailing, salud y errores
 - **🌐 Multi-idioma**: Español e Inglés
 
@@ -142,6 +143,7 @@ MiBotTrading/
 │       └── decorators.py       # Decoradores @retry, @circuit_breaker, @log_errors
 ├── utils/
 │   ├── config_backup.py        # Export/Import cifrado con AES (cryptography.fernet)
+├── MiBotTrading.spec           # Spec de PyInstaller para compilar .exe
 ├── tests/                      # ★ TESTS (82 tests)
 │   ├── test_parser.py
 │   ├── test_config_backup.py   # 10 tests: cifrado/descifrado, round-trip, errores
@@ -180,6 +182,17 @@ pyinstaller MiBotTrading.spec
 El instalador para Windows se genera con Inno Setup usando `Installer_Script.iss`.
 
 ## 🧪 Tests
+
+## 🔧 Bug Fixes Recientes
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 🔴 | **HealthMonitor solo se ejecutaba una vez** | Ahora se ejecuta cada 60s dentro del watchdog con time-check |
+| 🔴 | **PnL nunca calculado** | Se calcula desde `unrealizedPnl` del exchange o fórmula manual LONG/SHORT |
+| 🟡 | **Event loop no cerrado en error** | `loop.close()` ahora está dentro de `try/finally` |
+| 🟡 | **Indentación extraña en export** | Código formateado correctamente |
+| 🟢 | **Language change sin actualizar backup** | `_on_language_change` ahora llama `_update_backup_status()` |
+| 🟢 | **Re-imports redundantes** | Eliminados imports duplicados en `refresh_reports()` |
 
 ```bash
 # Todos los tests (82)

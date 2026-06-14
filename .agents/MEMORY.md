@@ -4,8 +4,8 @@
 
 - **Propósito:** Bot de trading automatizado que recibe señales vía Telegram y ejecuta órdenes en exchanges de criptomonedas (Bitget, BingX).
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexión exchanges), Telethon (Telegram), asyncio
-- **Última sesión:** 14/06/2026 - Backup cifrado, pestaña Reportes, Posiciones mejorada, modificación SL/TP real
-- **Versión de memoria:** 4
+- **Última sesión:** 14/06/2026 - Bug fixes críticos (HealthMonitor periódico, PnL real, event loop) + compilación .exe con hiddenimports
+- **Versión de memoria:** 5
 
 ## Arquitectura
 
@@ -159,6 +159,17 @@ Cada llamada a exchange pasa por:
   - UI: Sección en Ajustes + indicador de último backup
   - Dependencia: cryptography (ya instalada)
   - Commit: `a9d7a05`
+- **[14/06/2026]** — Bug fixes críticos pre-operaciones reales:
+  - 🔴 HealthMonitor ahora se ejecuta cada 60s dentro del watchdog (antes solo una vez al inicio)
+  - 🔴 PnL calculado desde `unrealizedPnl` del exchange o fórmula manual LONG/SHORT
+  - 🟡 Event loop cerrado correctamente con `try/finally` en `_fetch_balances()`
+  - 🟢 `_on_language_change` ahora actualiza el label de último backup
+  - 🟢 Re-imports redundantes eliminados de `refresh_reports()`
+  - Commits: incluidos en bug fixes
+- **[14/06/2026]** — Compilación .exe con hiddenimports:
+  - Agregado `MiBotTrading.spec` al repositorio (estaba ignorado por `*.spec` en `.gitignore`)
+  - hiddenimports para todos los módulos del proyecto (ui, core, services, utils, models)
+  - Commit: `5450cf7`
 
 ## Próximos Pasos / TODOs
 
@@ -168,7 +179,9 @@ Cada llamada a exchange pasa por:
 - [x] Pestaña Reportes con estadísticas de trading
 - [x] Mejora de pestaña Posiciones (solo activas, SL/TP real, export CSV)
 - [x] Backup/restore cifrado de configuración
+- [x] Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
+- [ ] Tests de integración con exchanges simulados
 
 ## Notas / Problemas Conocidos
 

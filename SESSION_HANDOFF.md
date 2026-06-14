@@ -1,7 +1,7 @@
 # 🪪 Session Handoff — MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Última actualización:** 14/06/2026
+> **Última actualización:** 14/06/2026 (v2 - Bug fixes + .exe)
 > **Propósito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESIÓN.**
 
 ---
@@ -33,7 +33,7 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
-**Último commit:** `a9d7a05` — feat: export/import cifrado de configuracion + tests + indicador ultimo backup
+**Último commit:** `5450cf7` — chore: agregar hiddenimports a MiBotTrading.spec para evitar ModuleNotFoundError en .exe
 **Tests:** 82/82 pasando ✅
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
@@ -41,6 +41,8 @@
 **Commits recientes en origin/master:**
 | Commit | Descripción |
 |--------|-------------|
+| `5450cf7` | chore: agregar hiddenimports a MiBotTrading.spec para evitar ModuleNotFoundError en .exe |
+| `e5e7311` | docs: actualizar README, MEMORY y SESSION_HANDOFF con backup cifrado y mejoras recientes |
 | `a9d7a05` | feat: export/import cifrado de configuracion + tests + indicador ultimo backup |
 | `968bddd` | feat: conectar modificacion SL/TP al exchange real (cancelar orden anterior + crear nueva) |
 | `1788f73` | feat: mejorar pestaña Posiciones (solo activas, acciones, modificar SL/TP, cerrar) + export CSV en Reportes |
@@ -118,6 +120,30 @@
 
 **Archivos:** `utils/config_backup.py`, `tests/test_config_backup.py`, `ui/main_window.py`, `utils/translations.py`
 **Spec:** `docs/superpowers/specs/2026-06-14-config-backup-design.md`
+
+### 9. Bug Fixes críticos pre-operaciones reales (commits en master)
+
+**Qué se hizo:** Revisión completa del código encontró 6 bugs que fueron arreglados:
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| 🔴 | **HealthMonitor solo se ejecuta una vez** | Ahora se ejecuta cada 60s dentro del watchdog con time-check | `core/engine.py` |
+| 🔴 | **PnL nunca calculado** | Se calcula desde `unrealizedPnl` del exchange o fórmula manual LONG/SHORT | `core/engine.py` |
+| 🟡 | **Event loop no cerrado en error** | `loop.close()` ahora dentro de `try/finally` | `ui/main_window.py` |
+| 🟡 | **Indentación extraña en export** | Código formateado correctamente | `ui/main_window.py` |
+| 🟢 | **Language change sin backup** | `_on_language_change` llama `_update_backup_status()` | `ui/main_window.py` |
+| 🟢 | **Re-imports redundantes** | Eliminados imports duplicados en `refresh_reports()` | `ui/main_window.py` |
+
+**82 tests pasando** ✅
+
+### 10. MiBotTrading.spec con hiddenimports (commit `5450cf7`)
+
+**Qué se hizo:**
+- El .exe compilado fallaba con `ModuleNotFoundError: No module named 'ui.main_window'`
+- Agregados todos los módulos como `hiddenimports` en el spec (ui, core, services, utils, models, resilience)
+- El archivo estaba ignorado por `*.spec` en `.gitignore` → se forzó `git add -f`
+
+**Archivos:** `MiBotTrading.spec`
 
 ---
 
@@ -213,8 +239,11 @@ Priorizados por impacto:
 6. ✅ ~~Pestaña Reportes / Estadísticas~~ (completado)
 7. ✅ ~~Pestaña Posiciones mejorada (solo activas, SL/TP real, export CSV)~~ (completado)
 8. ✅ ~~Backup/restore cifrado de configuración~~ (completado)
-9. **Tests para market_data.py** — El módulo de CoinGecko no tiene tests unitarios
-10. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
+9. ✅ ~~Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)~~ (completado)
+10. ✅ ~~MiBotTrading.spec con hiddenimports~~ (completado)
+11. **Tests para market_data.py** — El módulo de CoinGecko no tiene tests unitarios
+12. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
+13. **Tests de integración** con exchanges simulados (mock CCXT)
 
 ---
 
