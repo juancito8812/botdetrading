@@ -11,12 +11,17 @@ on:
         required: false
         default: 'v1.0.0'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: false
 
     - name: Set up Python 3.10
       uses: actions/setup-python@v5
@@ -30,9 +35,7 @@ jobs:
         pip install pyinstaller
 
     - name: Build executable with PyInstaller
-      run: |
-        pyinstaller MiBotTrading.spec
-      shell: cmd
+      run: pyinstaller MiBotTrading.spec
 
     - name: Upload executable artifact
       uses: actions/upload-artifact@v4
