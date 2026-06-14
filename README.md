@@ -24,7 +24,7 @@ Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecu
 - **🔄 Break-even Automático**: Mueve el SL al precio de entrada cuando se alcanza el primer TP
 - **🖥️ Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges en tiempo real
 - **📊 Reportes**: Resumen de trading, performance por exchange e historial de trades
-- **📱 Telegram Unificado**: Conexión, credenciales, canales e historial de notificaciones en una pestaña
+- **📱 Telegram Unificado**: Conexión, credenciales, canales, historial de notificaciones y **Chat ID configurable desde la UI** en una pestaña
 - **📊 PnL en Tiempo Real**: Cálculo de ganancia/pérdida desde el exchange en cada ciclo del watchdog
 - **💾 Backup Cifrado**: Export/Import de toda la configuración en archivo .botconfig protegido con contraseña (AES)
 - **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor (cada 60s), retry con backoff, state recovery y backups automáticos
@@ -224,6 +224,7 @@ python -m pytest tests/test_config_backup.py -v
 | 🔴 | **Retry reintentaba RuntimeError** — Errores fatales se reintentaban en vano | `_never_retry` con `RuntimeError` y `CancelledError` | `utils/resilience/retry_service.py` |
 | 🔴 | **Event loop must not change (Telegram)** — Telethon detectaba cambio de loop al reconectar | Cliente Telegram se crea UNA vez, reconexiones usan `connect()` + `start()` en el mismo cliente | `main.py` (refactor completo) |
 | 🟡 | **Notifier crash en Windows** — `disconnect()` rompía IOCP de Windows | Solo loguea warning sin manipular conexión | `services/notifier.py` |
+| 🟢 | **Nuevo: Chat ID configurable desde UI** — Antes solo se podía cambiar en `.env` | Campo Entry + botón Guardar en pestaña 📱 Telegram, guarda en `settings.json` | `ui/main_window.py`, `main.py`, `utils/translations.py` |
 
 ```bash
 # Todos los tests (82)

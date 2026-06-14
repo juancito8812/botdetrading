@@ -194,6 +194,10 @@ TRANSLATIONS = {
         "tg_send_test": "Enviar Test",
         "tg_recent_notifications": "Últimas Notificaciones",
         "tg_no_notifications": "Sin notificaciones",
+        "tg_notif_chat_id_label": "Chat ID para Notificaciones:",
+        "tg_notif_chat_id_current": "Actual:",
+        "tg_notif_chat_id_save": "Guardar Chat ID",
+        "tg_notif_chat_id_saved": "Chat ID de notificaciones guardado. Reconecta el bot para aplicar.",
         
         # Botones comunes
         "btn_save_all": "💾 GUARDAR TODA LA CONFIGURACIÓN",
@@ -419,6 +423,10 @@ TRANSLATIONS = {
         "tg_send_test": "Send Test",
         "tg_recent_notifications": "Recent Notifications",
         "tg_no_notifications": "No notifications",
+        "tg_notif_chat_id_label": "Notification Chat ID:",
+        "tg_notif_chat_id_current": "Current:",
+        "tg_notif_chat_id_save": "Save Chat ID",
+        "tg_notif_chat_id_saved": "Notification Chat ID saved. Reconnect the bot to apply.",
         
         # Botones comunes
         "btn_save_all": "💾 SAVE ALL CONFIGURATION",

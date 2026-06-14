@@ -188,14 +188,25 @@ class TradingBotApp:
         return get_code_gui, get_password_gui
 
     async def _init_notifier(self):
-        """Inicializa o actualiza el notificador después de conectar Telegram."""
+        """Inicializa o actualiza el notificador después de conectar Telegram.
+        Prioridad del chat_id: 1) settings.json (UI) 2) .env 3) ID del usuario autenticado
+        """
         from services.notifier import TelegramNotifier
+        from utils.settings_manager import load_settings
 
         if not self.telegram_client or not self.telegram_client.is_connected():
             return None
 
-        notification_chat_id = os.getenv("NOTIFICATION_CHAT_ID", "").strip()
+        # 1. Intentar desde settings.json (configurado en UI)
+        settings = load_settings()
+        notification_chat_id = settings.get("notification_chat_id", "").strip()
         me_info = None
+
+        # 2. Fallback a .env
+        if not notification_chat_id:
+            notification_chat_id = os.getenv("NOTIFICATION_CHAT_ID", "").strip()
+
+        # 3. Fallback al ID del usuario autenticado
         if not notification_chat_id:
             try:
                 me_info = await self.telegram_client.get_me()

@@ -1,7 +1,7 @@
 # 🪪 Session Handoff — MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Última actualización:** 14/06/2026 (v3 - Bug fixes producción + Telegram reconexión)
+> **Última actualización:** 14/06/2026 (v4 - Chat ID configurable desde la UI Telegram)
 > **Propósito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESIÓN.**
 
 ---
@@ -33,7 +33,8 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
-**Último commit:** `88577ab` — docs: actualizar README, MEMORY y SESSION_HANDOFF con bug fixes, spec y compilacion .exe
+**Último commit:** `f7595e0` — fix: bugs de produccion - notifier chat_id, CoinGecko cache, event loop CCXT, reconexion Telegram
+**Release:** `v1.0.1` — Bug fixes de producción (creada en GitHub con .exe)
 **Tests:** 82/82 pasando ✅
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
@@ -146,7 +147,7 @@
 
 **Archivos:** `MiBotTrading.spec`
 
-### 11. Bug fixes de producción (14/06/2026 — pendiente de commit)
+### 11. Bug fixes de producción — Commit `f7595e0` / Release `v1.0.1`
 
 **Qué se hizo:** Sesión completa de estabilización tras probar el .exe en operaciones reales. Se encontraron y corrigieron 6 bugs:
 
@@ -159,7 +160,25 @@
 | 🔴 | **Event loop must not change (Telegram)** — Se recreaba cliente en cada reconexión | Refactor: cliente creado UNA vez, reconexiones con `connect()` + `start()` | `main.py` |
 | 🟡 | **Notifier crash en Windows** — `disconnect()` rompía IOCP del event loop | Solo loguear warning, no tocar conexión | `services/notifier.py` |
 
-**Archivos:** `services/notifier.py`, `services/market_data.py`, `services/exchange_service.py`, `utils/resilience/retry_service.py`, `main.py`
+**Tag:** `v1.0.1` — Release creada en GitHub con .exe compilado incluido.
+
+### 12. Chat ID configurable desde la UI (14/06/2026)
+
+**Qué se hizo:** Las notificaciones de Telegram solo podían configurarse editando `.env`. Se agregó un campo directo en la UI para que el usuario pueda cambiar el destino de las notificaciones sin editar archivos.
+
+**Cambios:**
+| Archivo | Cambio |
+|---------|--------|
+| `ui/main_window.py` | Nuevo campo Entry + botón "Guardar Chat ID" en pestaña 📱 Telegram. Método `_save_notification_chat_id()` que guarda en `settings.json` |
+| `main.py` | `_init_notifier()` ahora lee `notification_chat_id` desde `settings.json` primero (prioridad máxima), luego `.env`, luego `get_me()` como fallback |
+| `utils/translations.py` | Nuevas claves: `tg_notif_chat_id_label`, `tg_notif_chat_id_current`, `tg_notif_chat_id_save`, `tg_notif_chat_id_saved` en es/en |
+
+**Orden de prioridad del `notification_chat_id`:**
+1. ✅ `settings.json` (configurado desde la UI) — máxima prioridad
+2. 🔄 `.env` (`NOTIFICATION_CHAT_ID`) — fallback
+3. 🔄 ID del usuario autenticado (`get_me()`) — fallback final (Mensajes Guardados)
+
+**.exe compilado:** `dist/MiBotTrading.exe` — con todos los bug fixes + Chat ID UI
 
 ---
 

@@ -476,6 +476,38 @@ class TradingBotGUI:
 
         ttk.Button(cred_frame, text=i18n.t("save"), command=self.save_telegram_creds).grid(row=3, column=0, columnspan=2, pady=5)
 
+        # ─── Chat ID de Notificaciones ────
+        chatid_frame = ttk.LabelFrame(scrollable, text=i18n.t("tg_notifications"), padding=10)
+        chatid_frame.pack(fill='x', padx=10, pady=5)
+
+        # Mostrar el chat_id actual si está disponible
+        current_chat_id = self.settings.get("notification_chat_id", "")
+        if current_chat_id:
+            ttk.Label(
+                chatid_frame,
+                text=f"{i18n.t('tg_notif_chat_id_current')} {current_chat_id}",
+                foreground="gray", font=("", 8)
+            ).pack(anchor='w', pady=2)
+
+        ttk.Label(chatid_frame, text=i18n.t("tg_notif_chat_id_label"), font=("", 9)).pack(anchor='w', pady=2)
+
+        chatid_row = ttk.Frame(chatid_frame)
+        chatid_row.pack(fill='x', pady=2)
+        self.tg_entry_chat_id = ttk.Entry(chatid_row, width=30)
+        self.tg_entry_chat_id.insert(0, current_chat_id)
+        self.tg_entry_chat_id.pack(side='left', padx=5)
+        ttk.Button(
+            chatid_row,
+            text=i18n.t("tg_notif_chat_id_save"),
+            command=self._save_notification_chat_id
+        ).pack(side='left', padx=5)
+
+        ttk.Label(
+            chatid_frame,
+            text=i18n.t("tg_notif_chat_id_saved"),
+            wraplength=600, foreground="gray", font=("", 8)
+        ).pack(anchor='w', pady=2)
+
         # ─── Canales ─────────────────────
         ch_frame = ttk.LabelFrame(scrollable, text="Canales", padding=10)
         ch_frame.pack(fill='x', padx=10, pady=5)
@@ -551,6 +583,19 @@ class TradingBotGUI:
                 self.tg_notif_list.insert(tk.END, entry)
         else:
             self.tg_notif_list.insert(tk.END, i18n.t("tg_no_notifications"))
+
+    def _save_notification_chat_id(self):
+        """Guarda el Chat ID de notificaciones desde la UI."""
+        cid = self.tg_entry_chat_id.get().strip()
+        if cid:
+            self.settings["notification_chat_id"] = cid
+            save_settings(self.settings)
+            messagebox.showinfo(i18n.t("save"), i18n.t("tg_notif_chat_id_saved"))
+        else:
+            # Si está vacío, eliminar la clave
+            self.settings.pop("notification_chat_id", None)
+            save_settings(self.settings)
+            messagebox.showinfo(i18n.t("save"), i18n.t("tg_notif_chat_id_saved"))
 
     def send_test_notification(self):
         """Envía una notificación de prueba."""

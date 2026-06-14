@@ -4,8 +4,8 @@
 
 - **Propósito:** Bot de trading automatizado que recibe señales vía Telegram y ejecuta órdenes en exchanges de criptomonedas (Bitget, BingX).
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexión exchanges), Telethon (Telegram), asyncio
-- **Última sesión:** 14/06/2026 - Bug fixes de producción: notifier chat_id, CoinGecko caché, event loop CCXT, reconexión Telegram sin recrear cliente
-- **Versión de memoria:** 6
+- **Última sesión:** 14/06/2026 - Chat ID configurable desde la UI para notificaciones Telegram
+- **Versión de memoria:** 7
 
 ## Arquitectura
 
@@ -170,13 +170,17 @@ Cada llamada a exchange pasa por:
   - Agregado `MiBotTrading.spec` al repositorio (estaba ignorado por `*.spec` en `.gitignore`)
   - hiddenimports para todos los módulos del proyecto (ui, core, services, utils, models)
   - Commit: `5450cf7`
-- **[14/06/2026]** — Bug fixes de producción (sesión actual):
+- **[14/06/2026]** — Bug fixes de producción:
   - 🔴 **notifier.py**: `chat_id` convertido a `int` para Telethon (antes string, no encontraba entidad)
   - 🟡 **market_data.py**: Caché de 60s para CoinGecko + manejo de 429 y timeouts
   - 🔴 **exchange_service.py**: `_ensure_event_loop()` detecta loop cerrado y recrea client automáticamente
   - 🔴 **retry_service.py**: `_never_retry` con `RuntimeError` — errores fatales no se reintentan
   - 🔴 **main.py**: Refactor completo de reconexión Telegram — cliente se crea UNA vez, reconexiones reusan el mismo
   - 🟡 **notifier.py**: Eliminado `disconnect()` del notifier (causaba crash del event loop en Windows)
+- **[14/06/2026]** — Chat ID configurable desde la UI:
+  - 🟢 **ui/main_window.py**: Nuevo campo Entry + botón Guardar en pestaña 📱 Telegram para `notification_chat_id`
+  - 🟢 **main.py**: `_init_notifier()` ahora lee `notification_chat_id` desde `settings.json` primero (prioridad máxima), luego `.env`, luego `get_me()` como fallback
+  - 🟢 **utils/translations.py**: Nuevas claves i18n para el campo de Chat ID
 
 ## Próximos Pasos / TODOs
 
@@ -188,6 +192,7 @@ Cada llamada a exchange pasa por:
 - [x] Backup/restore cifrado de configuración
 - [x] Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)
 - [x] Bug fixes de producción (notifier, CoinGecko, event loop CCXT, reconexión Telegram)
+- [x] Chat ID configurable desde la UI
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
 - [ ] Tests de integración con exchanges simulados
 
@@ -200,7 +205,8 @@ Cada llamada a exchange pasa por:
 - Credenciales (.env, config.json, canales.json) excluidas del repositorio por seguridad.
 - Todo el desarrollo sigue la metodología Superpowers (brainstorming → writing-plans → subagent-driven-development).
 - Archivos de diseño y plan guardados en `docs/superpowers/specs/` y `docs/superpowers/plans/`.
-- Para activar las notificaciones: configurar `NOTIFICATION_CHAT_ID` en `.env`, o se usará el ID del usuario autenticado por defecto.
+- Para activar las notificaciones: configurar `NOTIFICATION_CHAT_ID` en `.env`, o desde la UI en la pestaña 📱 Telegram > Chat ID para Notificaciones, o se usará el ID del usuario autenticado por defecto.
+- Orden de prioridad del `notification_chat_id`: 1) `settings.json` (UI) → 2) `.env` → 3) `get_me()` del usuario autenticado.
 
 ---
 
