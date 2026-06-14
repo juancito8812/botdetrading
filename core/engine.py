@@ -665,7 +665,8 @@ class TradingEngine:
                             await self._check_trailing_stop(pos, config, client)
 
                             # Auto Breakeven (existente)
-                            if config.get("auto_breakeven", True) and not pos.is_breakeven and pos.tp1_hit:
+                            # No activar break-even si trailing stop ya se activó (son mutuamente excluyentes)
+                            if config.get("auto_breakeven", True) and not pos.is_breakeven and pos.tp1_hit and not pos.trailing_activated:
                                 logger.info(f"🔄 Moviendo SL a break-even para {pos.symbol}")
                                 await self._move_sl_to_breakeven(pos, client)
                                 pos.is_breakeven = True
@@ -733,6 +734,9 @@ class TradingEngine:
         if not config.get("trailing_stop_habilitado", True):
             return
         if not pos.sl_order_id:
+            return
+        # No usar trailing si ya se activó break-even (son mutuamente excluyentes)
+        if pos.is_breakeven:
             return
 
         activacion_pct = float(config.get("trailing_activacion_porcentaje", 1.5))

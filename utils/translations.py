@@ -50,6 +50,13 @@ TRANSLATIONS = {
         "dash_health_failures": "fallos",
         "dash_health_cb": "CB:",
         "dash_health_refresh": "🔄 Refresh Health",
+        "health_cb_closed": "Cerrado",
+        "health_cb_open": "Abierto",
+        "health_cb_half_open": "Medio abierto",
+        "health_last_ok": "Última vez OK",
+        "health_never": "Nunca",
+        "health_failures": "fallos",
+        "health_latency": "Latencia",
         
         # APIs
         "apis_title": "Configuración de APIs",
@@ -196,6 +203,13 @@ TRANSLATIONS = {
         "dash_health_failures": "failures",
         "dash_health_cb": "CB:",
         "dash_health_refresh": "🔄 Refresh Health",
+        "health_cb_closed": "Closed",
+        "health_cb_open": "Open",
+        "health_cb_half_open": "Half-open",
+        "health_last_ok": "Last OK",
+        "health_never": "Never",
+        "health_failures": "failures",
+        "health_latency": "Latency",
         
         # APIs
         "apis_title": "API Configuration",

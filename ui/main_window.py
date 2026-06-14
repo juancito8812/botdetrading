@@ -18,6 +18,8 @@ from services.market_data import fetch_top20, fetch_market_indices
 from core.manager import pos_manager
 from core.engine import health_monitor
 from utils.logger import logger
+from datetime import datetime
+from typing import Optional
 
 
 class GuiHandler(logging.Handler):
@@ -293,6 +295,16 @@ class TradingBotGUI:
         self.dash_tree.tag_configure("up", foreground="#00ff00")
         self.dash_tree.tag_configure("down", foreground="#ff4444")
 
+    def _format_timestamp(self, timestamp: Optional[float]) -> str:
+        """Formatea un timestamp UNIX a hora legible o 'Nunca'."""
+        if not timestamp:
+            return i18n.t("health_never")
+        dt = datetime.fromtimestamp(timestamp)
+        now = datetime.now()
+        if dt.date() == now.date():
+            return dt.strftime("%H:%M")
+        return dt.strftime("%d/%m %H:%M")
+
     def refresh_health(self):
         """Actualiza los indicadores de salud de exchanges desde health_monitor."""
         try:
@@ -317,39 +329,68 @@ class TradingBotGUI:
                 status = data.get("status", "unknown")
                 failures = data.get("consecutive_failures", 0)
                 latency = data.get("avg_latency_ms", 0.0)
+                cb_state = data.get("circuit_breaker_state", "closed")
+                last_ok = data.get("last_ok_time", None)
 
-                # Color según estado
+                # LED y color según estado
                 if status == "healthy":
+                    led = "🟢"
                     status_text = i18n.t("dash_health_healthy")
                     fg_color = "#00cc00"
                 elif status == "degraded":
+                    led = "🟡"
                     status_text = i18n.t("dash_health_degraded")
                     fg_color = "#ccaa00"
                 elif status == "down":
+                    led = "🔴"
                     status_text = i18n.t("dash_health_down")
                     fg_color = "#ff4444"
                 else:
+                    led = "⚪"
                     status_text = i18n.t("dash_health_unknown")
                     fg_color = "gray"
 
-                # Card para cada exchange
-                card = ttk.LabelFrame(self.health_container, text=ex_id.upper(), padding=3)
+                # Circuit breaker state
+                if cb_state == "closed":
+                    cb_icon = "🔒"
+                    cb_text = i18n.t("health_cb_closed")
+                    cb_color = "#00cc00"
+                elif cb_state == "open":
+                    cb_icon = "🔓"
+                    cb_text = i18n.t("health_cb_open")
+                    cb_color = "#ff4444"
+                elif cb_state == "half_open":
+                    cb_icon = "⚠️"
+                    cb_text = i18n.t("health_cb_half_open")
+                    cb_color = "#ccaa00"
+                else:
+                    cb_icon = "?"
+                    cb_text = cb_state
+                    cb_color = "gray"
+
+                # Card con LED en el título
+                card = ttk.LabelFrame(self.health_container, text=f"{led} {ex_id.upper()}", padding=3)
                 card.pack(side='left', padx=4, pady=2, fill='y')
 
-                # Estado con color
+                # Status
                 status_lbl = ttk.Label(card, text=status_text, foreground=fg_color, font=("", 10, "bold"))
                 status_lbl.pack(anchor='w', padx=2)
 
                 # Latencia
                 latency_text = f"{latency:.0f}ms" if latency > 0 else "-"
-                ttk.Label(card, text=f"⏱ {latency_text}", font=("", 8)).pack(anchor='w', padx=2)
+                ttk.Label(card, text=f"⏱ {i18n.t('health_latency')}: {latency_text}", font=("", 8)).pack(anchor='w', padx=2)
 
                 # Fallos
-                fail_text = f"{failures} {i18n.t('dash_health_failures')}" if failures > 0 else "✓"
+                fail_text = f"{failures} {i18n.t('health_failures')}" if failures > 0 else "✓ 0"
                 fail_color = "#ff4444" if failures > 0 else "#00cc00"
                 ttk.Label(card, text=f"⚠ {fail_text}", foreground=fail_color, font=("", 8)).pack(anchor='w', padx=2)
 
+                # Circuit breaker
+                ttk.Label(card, text=f"{cb_icon} CB: {cb_text}", foreground=cb_color, font=("", 8)).pack(anchor='w', padx=2)
 
+                # Última vez OK
+                last_ok_text = self._format_timestamp(last_ok)
+                ttk.Label(card, text=f"🕐 {i18n.t('health_last_ok')}: {last_ok_text}", font=("", 8)).pack(anchor='w', padx=2)
 
         except Exception as e:
             logger.warning(f"Error actualizando health en UI: {e}")
