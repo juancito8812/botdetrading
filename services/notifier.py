@@ -40,14 +40,29 @@ class TelegramNotifier:
         return self.history[-count:]
 
     async def send_message(self, text: str) -> bool:
-        """Envía un mensaje de texto a Telegram."""
+        """
+        Envía un mensaje de texto a Telegram.
+        NOTA: El error 'event loop must not change' de Telethon es intermitente
+        y el mensaje se envía igual. La reconexión la maneja main.py,
+        no el notifier (para evitar crash del event loop en Windows).
+        """
         if not self.enabled:
             return False
         try:
-            await self.client.send_message(self.chat_id, text)
+            # Telethon requiere int para IDs numéricos, string para @usuarios
+            chat_id: int | str = self.chat_id
+            if isinstance(chat_id, str) and chat_id.lstrip('-').isdigit():
+                chat_id = int(chat_id)
+            await self.client.send_message(chat_id, text)
             return True
         except Exception as e:
-            logger.error(f"Error enviando notificación: {e}")
+            error_str = str(e).lower()
+            if "event loop" in error_str and "must not change" in error_str:
+                # Error conocido de Telethon - el mensaje suele llegar igual
+                # No hacer disconnect() aquí porque rompe el event loop en Windows
+                logger.debug(f"Telethon event loop warning (el mensaje probablemente llegó): {e}")
+            else:
+                logger.error(f"Error enviando notificación: {e}")
             return False
 
     async def notify_trade_open(self, position: Position):

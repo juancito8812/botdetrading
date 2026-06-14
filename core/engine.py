@@ -581,16 +581,21 @@ class TradingEngine:
     async def watchdog(self):
         """Vigila órdenes pendientes, sincroniza estados y monitorea salud."""
         
-        # Integrar HealthMonitor
+        # Integrar HealthMonitor — se ejecuta cada 60s dentro del watchdog
         self.health_monitor.set_health_check_func(self._health_check_exchange)
-        self._health_check_task = asyncio.create_task(self.health_monitor._run_cycle())
+        self._last_health_check_time = time.time()
         
         while True:
             try:
                 config = load_risk_config()
                 now = time.time()
 
-                # 0. Revisar órdenes LIMIT pendientes (#1 timeout)
+                # 0. Health check periódico (cada 60s)
+                if now - self._last_health_check_time >= 60:
+                    self._last_health_check_time = now
+                    await self.health_monitor._run_cycle()
+
+                # 1. Revisar órdenes LIMIT pendientes (#1 timeout)
                 stale_orders = []
                 for order_id, pending in list(self._pending_limit_orders.items()):
                     elapsed = now - pending["timestamp"]
@@ -660,6 +665,17 @@ class TradingEngine:
                                 else:
                                     if pos.lowest_price == 0 or mark_price < pos.lowest_price:
                                         pos.lowest_price = mark_price
+
+                            # Calcular PnL desde el exchange si está disponible
+                            contracts = float(position_data.get('contracts', pos.amount))
+                            unrealized_pnl = position_data.get('unrealizedPnl')
+                            if unrealized_pnl is not None:
+                                pos.pnl = float(unrealized_pnl)
+                            elif mark_price > 0 and contracts > 0:
+                                if pos.side.lower() == 'buy':
+                                    pos.pnl = (mark_price - pos.entry_price) * contracts
+                                else:
+                                    pos.pnl = (pos.entry_price - mark_price) * contracts
 
                             # #4 Trailing stop automático
                             await self._check_trailing_stop(pos, config, client)

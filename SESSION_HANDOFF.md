@@ -1,7 +1,7 @@
 # 🪪 Session Handoff — MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Última actualización:** 14/06/2026 (v2 - Bug fixes + .exe)
+> **Última actualización:** 14/06/2026 (v3 - Bug fixes producción + Telegram reconexión)
 > **Propósito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESIÓN.**
 
 ---
@@ -33,14 +33,15 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
-**Último commit:** `5450cf7` — chore: agregar hiddenimports a MiBotTrading.spec para evitar ModuleNotFoundError en .exe
+**Último commit:** `88577ab` — docs: actualizar README, MEMORY y SESSION_HANDOFF con bug fixes, spec y compilacion .exe
 **Tests:** 82/82 pasando ✅
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
 
-**Commits recientes en origin/master:**
+**Commits recientes (pendientes de push, aún no en origin/master):**
 | Commit | Descripción |
 |--------|-------------|
+| `88577ab` | docs: actualizar README, MEMORY y SESSION_HANDOFF con bug fixes, spec y compilacion .exe |
 | `5450cf7` | chore: agregar hiddenimports a MiBotTrading.spec para evitar ModuleNotFoundError en .exe |
 | `e5e7311` | docs: actualizar README, MEMORY y SESSION_HANDOFF con backup cifrado y mejoras recientes |
 | `a9d7a05` | feat: export/import cifrado de configuracion + tests + indicador ultimo backup |
@@ -145,6 +146,21 @@
 
 **Archivos:** `MiBotTrading.spec`
 
+### 11. Bug fixes de producción (14/06/2026 — pendiente de commit)
+
+**Qué se hizo:** Sesión completa de estabilización tras probar el .exe en operaciones reales. Se encontraron y corrigieron 6 bugs:
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| 🔴 | **Telegram entity no encontrada** — `chat_id` string no servía para Telethon | Convertir a `int` si es string numérico | `services/notifier.py` |
+| 🟡 | **CoinGecko 429 constante** — Sin caché, rate limit en cada refresco | Caché con TTL 60s + manejo de 429/timeout | `services/market_data.py` |
+| 🔴 | **Event loop is closed (CCXT)** — Client perdía referencia al loop | `_ensure_event_loop()` recrea client automáticamente | `services/exchange_service.py` |
+| 🔴 | **Retry reintentaba RuntimeError** — Errores fatales se reintentaban | `_never_retry` con `RuntimeError` | `utils/resilience/retry_service.py` |
+| 🔴 | **Event loop must not change (Telegram)** — Se recreaba cliente en cada reconexión | Refactor: cliente creado UNA vez, reconexiones con `connect()` + `start()` | `main.py` |
+| 🟡 | **Notifier crash en Windows** — `disconnect()` rompía IOCP del event loop | Solo loguear warning, no tocar conexión | `services/notifier.py` |
+
+**Archivos:** `services/notifier.py`, `services/market_data.py`, `services/exchange_service.py`, `utils/resilience/retry_service.py`, `main.py`
+
 ---
 
 ## 🏗️ Arquitectura Actual
@@ -241,9 +257,11 @@ Priorizados por impacto:
 8. ✅ ~~Backup/restore cifrado de configuración~~ (completado)
 9. ✅ ~~Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)~~ (completado)
 10. ✅ ~~MiBotTrading.spec con hiddenimports~~ (completado)
-11. **Tests para market_data.py** — El módulo de CoinGecko no tiene tests unitarios
-12. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
-13. **Tests de integración** con exchanges simulados (mock CCXT)
+11. ✅ ~~Bug fixes de producción (notifier, CoinGecko, event loop CCXT, reconexión Telegram)~~ (completado)
+12. **Tests para market_data.py** — El módulo de CoinGecko no tiene tests unitarios
+13. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
+14. **Tests de integración** con exchanges simulados (mock CCXT)
+15. **Commit y push** de los bug fixes de esta sesión
 
 ---
 

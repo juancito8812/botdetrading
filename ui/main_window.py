@@ -117,6 +117,8 @@ class TradingBotGUI:
         self.notebook.tab(self.tab_telegram, text=i18n.t("tab_telegram"))
         self.notebook.tab(self.tab_reportes, text=i18n.t("tab_reportes"))
         self.notebook.tab(self.tab_settings, text=i18n.t("tab_settings"))
+        # Actualizar label de último backup al cambiar idioma
+        self._update_backup_status()
 
     # ==================== TAB: DASHBOARD ====================
     def setup_dashboard_tab(self):
@@ -641,7 +643,8 @@ class TradingBotGUI:
         self._update_backup_status()
 
     def _export_config(self):
-        """Exporta toda la configuración a un archivo .botconfig cifrado."""            from tkinter import filedialog
+        """Exporta toda la configuración a un archivo .botconfig cifrado."""
+        from tkinter import filedialog
 
         filepath = filedialog.asksaveasfilename(
             defaultextension=".botconfig",
@@ -1550,9 +1553,6 @@ class TradingBotGUI:
 
     def refresh_reports(self):
         """Actualiza todas las estadísticas de la pestaña Reportes."""
-        from core.manager import pos_manager
-        from services.exchange_service import exchange_service
-
         all_positions = pos_manager.get_all_positions()
         closed = [p for p in all_positions if p.status == "closed"]
         open_pos = [p for p in all_positions if p.status == "open"]
@@ -1605,14 +1605,16 @@ class TradingBotGUI:
         def _fetch_balances():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            for ex_id in list(ex_data.keys()):
-                if ex_id in exchange_service.clients:
-                    try:
-                        bal = loop.run_until_complete(exchange_service.get_balance(ex_id))
-                        self.root.after(0, lambda e=ex_id, b=bal: self._update_ex_balance(e, b))
-                    except Exception:
-                        pass
-            loop.close()
+            try:
+                for ex_id in list(ex_data.keys()):
+                    if ex_id in exchange_service.clients:
+                        try:
+                            bal = loop.run_until_complete(exchange_service.get_balance(ex_id))
+                            self.root.after(0, lambda e=ex_id, b=bal: self._update_ex_balance(e, b))
+                        except Exception:
+                            pass
+            finally:
+                loop.close()
         threading.Thread(target=_fetch_balances, daemon=True).start()
 
         # ─── Recent Trades (filtered) ───

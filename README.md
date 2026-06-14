@@ -183,17 +183,6 @@ El instalador para Windows se genera con Inno Setup usando `Installer_Script.iss
 
 ## 🧪 Tests
 
-## 🔧 Bug Fixes Recientes
-
-| # | Bug | Fix |
-|---|-----|-----|
-| 🔴 | **HealthMonitor solo se ejecutaba una vez** | Ahora se ejecuta cada 60s dentro del watchdog con time-check |
-| 🔴 | **PnL nunca calculado** | Se calcula desde `unrealizedPnl` del exchange o fórmula manual LONG/SHORT |
-| 🟡 | **Event loop no cerrado en error** | `loop.close()` ahora está dentro de `try/finally` |
-| 🟡 | **Indentación extraña en export** | Código formateado correctamente |
-| 🟢 | **Language change sin actualizar backup** | `_on_language_change` ahora llama `_update_backup_status()` |
-| 🟢 | **Re-imports redundantes** | Eliminados imports duplicados en `refresh_reports()` |
-
 ```bash
 # Todos los tests (82)
 python -m pytest tests/ -v
@@ -211,6 +200,40 @@ python -m pytest tests/test_config_backup.py -v
 | **tests.yml** | push/PR a master | Tests en Python 3.10, 3.11, 3.12 |
 | **lint.yml** | push/PR a master | Flake8 + Mypy |
 | **build.yml** | tag v* o manual | Compila .exe con PyInstaller |
+
+## 🔧 Bug Fixes (14/06/2026 — Sesión de estabilización pre-operaciones reales)
+
+### Bugs críticos pre-operaciones (sesión anterior)
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| 🔴 | **HealthMonitor solo se ejecutaba una vez** | Se ejecuta cada 60s dentro del watchdog con time-check | `core/engine.py` |
+| 🔴 | **PnL nunca calculado** | Se calcula desde `unrealizedPnl` del exchange o fórmula manual | `core/engine.py` |
+| 🟡 | **Event loop no cerrado en error** | `loop.close()` dentro de `try/finally` | `ui/main_window.py` |
+| 🟡 | **Indentación extraña** | Formateado | `ui/main_window.py` |
+| 🟢 | **Language change sin backup** | `_update_backup_status()` en change handler | `ui/main_window.py` |
+| 🟢 | **Re-imports redundantes** | Eliminados | `ui/main_window.py` |
+
+### Bugs corregidos en esta sesión (14/06/2026)
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| 🔴 | **Telegram entity '1399591912' no encontrada** — `send_message()` fallaba con string en vez de int | `chat_id` se convierte a `int` si es string numérico | `services/notifier.py` |
+| 🟡 | **CoinGecko 429 constante** — Cada refresco llamaba sin caché | Caché con TTL de 60s + manejo de 429 y timeout | `services/market_data.py` |
+| 🔴 | **Event loop is closed (CCXT)** — Clientes de exchange perdían referencia al loop | `_ensure_event_loop()` recrea client automáticamente | `services/exchange_service.py` |
+| 🔴 | **Retry reintentaba RuntimeError** — Errores fatales se reintentaban en vano | `_never_retry` con `RuntimeError` y `CancelledError` | `utils/resilience/retry_service.py` |
+| 🔴 | **Event loop must not change (Telegram)** — Telethon detectaba cambio de loop al reconectar | Cliente Telegram se crea UNA vez, reconexiones usan `connect()` + `start()` en el mismo cliente | `main.py` (refactor completo) |
+| 🟡 | **Notifier crash en Windows** — `disconnect()` rompía IOCP de Windows | Solo loguea warning sin manipular conexión | `services/notifier.py` |
+
+```bash
+# Todos los tests (82)
+python -m pytest tests/ -v
+
+# Tests específicos
+python -m pytest tests/test_parser.py -v
+python -m pytest tests/test_notifier.py -v
+python -m pytest tests/test_config_backup.py -v
+```
 
 ## 📄 Licencia
 

@@ -99,9 +99,8 @@ class TradingBotApp:
                 )
             )
 
-    async def _setup_telegram(self, creds, config, channels):
-        """Configura y conecta el cliente de Telegram con reconexión
-        automática."""
+    async def _create_telegram_client(self, creds, channels):
+        """Crea el cliente de Telegram UNA SOLA VEZ y registra el handler."""
         tg = creds["telegram"]
 
         # Asegurar que la carpeta de sesión existe
@@ -113,6 +112,8 @@ class TradingBotApp:
             session_path, int(tg["API_ID"]), tg["API_HASH"]
         )
 
+        # Registrar handler de señales UNA SOLA VEZ (no se pierde al reconectar)
+        # Filtra solo mensajes de los canales configurados
         @self.telegram_client.on(events.NewMessage(chats=list(channels)))
         async def handler(event):
             if not self.bot_running:
@@ -120,6 +121,7 @@ class TradingBotApp:
             text = event.raw_text
             logger.info(f"📥 Mensaje recibido: {text[:50]}...")
 
+            config = load_risk_config()
             signal = parse_trading_signal(text)
             if signal:
                 active_exchanges = list(exchange_service.clients.keys())
@@ -136,7 +138,8 @@ class TradingBotApp:
             else:
                 logger.info("Formato de señal no reconocido.")
 
-        # Funciones de autenticación vía GUI
+    def _get_auth_callbacks(self):
+        """Retorna las funciones de autenticación vía GUI."""
         def get_code_gui():
             logger.info("Solicitando código de verificación al usuario...")
             from tkinter import simpledialog
@@ -182,97 +185,91 @@ class TradingBotApp:
                 logger.warning("No se introdujo contraseña 2FA.")
             return pwd
 
-        # Conectar con Telegram
-        try:
-            logger.info(
-                "Iniciando cliente de Telegram "
-                "(esperando autenticación si es necesaria)..."
-            )
-            tc = cast(TelegramClient, self.telegram_client)
-            await tc.start(  # type: ignore[misc]
-                phone=tg["PHONE_NUMBER"],
-                code_callback=get_code_gui,
-                password=get_password_gui
-            )
-            logger.info("✅ Bot conectado a Telegram con éxito.")
+        return get_code_gui, get_password_gui
 
-            me = await tc.get_me()
-            user_first = getattr(me, 'first_name', '?')
-            user_username = getattr(me, 'username', '?')
-            logger.info(
-                f"Sesión iniciada como: {user_first} (@{user_username})"
-            )
-            return True
-        except Exception as e:
-            logger.error(
-                f"Error fatal en la conexión de Telegram: {e}",
-                exc_info=True
-            )
-            return False
+    async def _init_notifier(self):
+        """Inicializa o actualiza el notificador después de conectar Telegram."""
+        from services.notifier import TelegramNotifier
+
+        if not self.telegram_client or not self.telegram_client.is_connected():
+            return None
+
+        notification_chat_id = os.getenv("NOTIFICATION_CHAT_ID", "").strip()
+        me_info = None
+        if not notification_chat_id:
+            try:
+                me_info = await self.telegram_client.get_me()
+                notification_chat_id = str(me_info.id)
+            except Exception:
+                pass
+
+        if not notification_chat_id:
+            return None
+
+        notifier = TelegramNotifier(
+            telegram_client=self.telegram_client,
+            chat_id=notification_chat_id,
+            enabled=True,
+        )
+        logger.info(f"🔔 Notificador inicializado (chat_id: {notification_chat_id})")
+
+        # Actualizar estado en UI
+        try:
+            if not me_info:
+                me_info = await self.telegram_client.get_me()
+            user_str = f"{getattr(me_info, 'first_name', '?')} (@{getattr(me_info, 'username', '?')})"
+            phone_str = getattr(me_info, 'phone', '') or ''
+            self.root.after(0, lambda u=user_str, p=phone_str, cid=notification_chat_id:
+                self.gui.update_telegram_status(True, u, p, cid))
+        except Exception:
+            pass
+
+        return notifier
 
     async def _telegram_reconnection_loop(self, creds, config, channels):
-        """Bucle que mantiene la conexión de Telegram con reconexión
-        automática."""
+        """
+        Bucle que mantiene la conexión de Telegram.
+        El cliente se crea UNA SOLA VEZ, las reconexiones reusan el mismo cliente
+        para evitar el error 'event loop must not change after connection'.
+        """
+        # Crear cliente y registrar handler UNA SOLA VEZ
+        await self._create_telegram_client(creds, channels)
+        get_code, get_password = self._get_auth_callbacks()
+        tg = creds["telegram"]
+
         while self.bot_running:
             try:
-                # Desconectar cliente previo si existe
-                tc_conn = self.telegram_client
-                if tc_conn and tc_conn.is_connected():
-                    tc = cast(TelegramClient, tc_conn)
-                    await tc.disconnect()  # type: ignore[misc]
+                tc = cast(TelegramClient, self.telegram_client)
 
-                # Configurar y conectar Telegram
-                connected = await self._setup_telegram(creds, config, channels)
-                if not connected:
-                    logger.warning(
-                        "⚠️ No se pudo conectar Telegram. "
-                        "Reintentando en 30 segundos..."
-                    )
+                # Conectar/reconectar el MISMO cliente (no crear uno nuevo)
+                if not tc.is_connected():
+                    logger.info("Conectando/reconectando Telegram...")
+                    await tc.connect()
+
+                # Autenticar (usa sesión guardada si existe)
+                await tc.start(
+                    phone=tg["PHONE_NUMBER"],
+                    code_callback=get_code,
+                    password=get_password,
+                )
+
+                if not await tc.is_user_authorized():
+                    logger.error("❌ No se pudo autenticar Telegram.")
                     await asyncio.sleep(30)
                     continue
 
-                logger.info(
-                    f"📡 Escuchando en {len(channels)} canales..."
-                )
+                logger.info("✅ Bot conectado a Telegram con éxito.")
+                me = await tc.get_me()
+                user_first = getattr(me, 'first_name', '?')
+                user_username = getattr(me, 'username', '?')
+                logger.info(f"Sesión iniciada como: {user_first} (@{user_username})")
 
-                # Inicializar notificador después de conectar Telegram
-                from services.notifier import TelegramNotifier
-                notifier = None
-                if self.telegram_client:
-                    notification_chat_id = os.getenv("NOTIFICATION_CHAT_ID", "").strip()
-                    me_info = None
-                    if not notification_chat_id:
-                        try:
-                            me_info = await self.telegram_client.get_me()
-                            notification_chat_id = str(me_info.id)
-                        except Exception:
-                            pass
+                logger.info(f"📡 Escuchando en {len(channels)} canales...")
 
-                    if notification_chat_id:
-                        notifier = TelegramNotifier(
-                            telegram_client=self.telegram_client,
-                            chat_id=notification_chat_id,
-                            enabled=True,
-                        )
-                        logger.info(
-                            f"🔔 Notificador inicializado (chat_id: {notification_chat_id})"
-                        )
-
-                    # Actualizar estado en UI
-                    try:
-                        if not me_info:
-                            me_info = await self.telegram_client.get_me()
-                        user_str = f"{getattr(me_info, 'first_name', '?')} (@{getattr(me_info, 'username', '?')})"
-                        phone_str = getattr(me_info, 'phone', '') or ''
-                        self.root.after(0, lambda u=user_str, p=phone_str, cid=notification_chat_id: 
-                            self.gui.update_telegram_status(True, u, p, cid))
-                    except Exception:
-                        pass
-
-                # Conectar notificador al engine
+                # Actualizar notificador en cada reconexión
+                notifier = await self._init_notifier()
                 trading_engine.notifier = notifier
 
-                # Conectar notificador al health monitor via callback
                 if notifier:
                     async def health_callback(exchange, status, failures, latency):
                         await notifier.notify_health_change(
@@ -280,12 +277,11 @@ class TradingBotApp:
                         )
                     health_monitor.on_status_change = health_callback
 
-                # Iniciar Watchdog
+                # Asegurar que el watchdog se esté ejecutando
                 asyncio.create_task(trading_engine.watchdog())
 
-                # Mantener conexión hasta que se desconecte o se detenga el bot
-                tc = cast(TelegramClient, self.telegram_client)
-                await tc.run_until_disconnected()  # type: ignore[misc]
+                # Bloquear hasta que se pierda la conexión
+                await tc.run_until_disconnected()
 
                 if self.bot_running:
                     logger.warning(
@@ -297,20 +293,16 @@ class TradingBotApp:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(
-                    f"Error en bucle de Telegram: {e}", exc_info=True
-                )
+                logger.error(f"Error en bucle de Telegram: {e}", exc_info=True)
                 if self.bot_running:
-                    logger.warning(
-                        "🔄 Reintentando conexión en 30 segundos..."
-                    )
+                    logger.warning("🔄 Reintentando conexión en 30 segundos...")
                     await asyncio.sleep(30)
 
         # Asegurar desconexión limpia al salir
         if self.telegram_client:
             try:
                 tc = cast(TelegramClient, self.telegram_client)
-                await tc.disconnect()  # type: ignore[misc]
+                await tc.disconnect()
             except Exception:
                 pass
 

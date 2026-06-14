@@ -4,8 +4,8 @@
 
 - **Propósito:** Bot de trading automatizado que recibe señales vía Telegram y ejecuta órdenes en exchanges de criptomonedas (Bitget, BingX).
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexión exchanges), Telethon (Telegram), asyncio
-- **Última sesión:** 14/06/2026 - Bug fixes críticos (HealthMonitor periódico, PnL real, event loop) + compilación .exe con hiddenimports
-- **Versión de memoria:** 5
+- **Última sesión:** 14/06/2026 - Bug fixes de producción: notifier chat_id, CoinGecko caché, event loop CCXT, reconexión Telegram sin recrear cliente
+- **Versión de memoria:** 6
 
 ## Arquitectura
 
@@ -170,6 +170,13 @@ Cada llamada a exchange pasa por:
   - Agregado `MiBotTrading.spec` al repositorio (estaba ignorado por `*.spec` en `.gitignore`)
   - hiddenimports para todos los módulos del proyecto (ui, core, services, utils, models)
   - Commit: `5450cf7`
+- **[14/06/2026]** — Bug fixes de producción (sesión actual):
+  - 🔴 **notifier.py**: `chat_id` convertido a `int` para Telethon (antes string, no encontraba entidad)
+  - 🟡 **market_data.py**: Caché de 60s para CoinGecko + manejo de 429 y timeouts
+  - 🔴 **exchange_service.py**: `_ensure_event_loop()` detecta loop cerrado y recrea client automáticamente
+  - 🔴 **retry_service.py**: `_never_retry` con `RuntimeError` — errores fatales no se reintentan
+  - 🔴 **main.py**: Refactor completo de reconexión Telegram — cliente se crea UNA vez, reconexiones reusan el mismo
+  - 🟡 **notifier.py**: Eliminado `disconnect()` del notifier (causaba crash del event loop en Windows)
 
 ## Próximos Pasos / TODOs
 
@@ -180,6 +187,7 @@ Cada llamada a exchange pasa por:
 - [x] Mejora de pestaña Posiciones (solo activas, SL/TP real, export CSV)
 - [x] Backup/restore cifrado de configuración
 - [x] Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)
+- [x] Bug fixes de producción (notifier, CoinGecko, event loop CCXT, reconexión Telegram)
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
 - [ ] Tests de integración con exchanges simulados
 

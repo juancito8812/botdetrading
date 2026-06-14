@@ -61,6 +61,8 @@ class RetryService:
             ConnectionError, TimeoutError, ExchangeConnectionError,
             RateLimitExceeded,
         )
+        # Excepciones que NUNCA se reintentan (fallo fatal)
+        self._never_retry = (RuntimeError, asyncio.CancelledError)
         self.on_retry = on_retry
 
     async def execute(
@@ -122,4 +124,6 @@ class RetryService:
 
     def _is_retryable(self, exc: Exception) -> bool:
         """Determina si una excepción es reintentable."""
+        if isinstance(exc, self._never_retry):
+            return False
         return isinstance(exc, self.retry_on)
