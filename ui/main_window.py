@@ -50,37 +50,34 @@ class TradingBotGUI:
         self.tab_dashboard = ttk.Frame(self.notebook)
         self.tab_apis = ttk.Frame(self.notebook)
         self.tab_riesgo = ttk.Frame(self.notebook)
-        self.tab_canales = ttk.Frame(self.notebook)
         self.tab_test = ttk.Frame(self.notebook)
         self.tab_posiciones = ttk.Frame(self.notebook)
-        self.tab_saldos = ttk.Frame(self.notebook)
         self.tab_consola = ttk.Frame(self.notebook)
         self.tab_telegram = ttk.Frame(self.notebook)
+        self.tab_reportes = ttk.Frame(self.notebook)
         self.tab_settings = ttk.Frame(self.notebook)
 
         self.notebook.add(self.tab_dashboard, text=i18n.t("tab_dashboard"))
         self.notebook.add(self.tab_telegram, text=i18n.t("tab_telegram"))
+        self.notebook.add(self.tab_reportes, text=i18n.t("tab_reportes"))
         self.notebook.add(self.tab_apis, text=i18n.t("tab_apis"))
         self.notebook.add(self.tab_riesgo, text=i18n.t("tab_riesgo"))
-        self.notebook.add(self.tab_canales, text=i18n.t("tab_canales"))
         self.notebook.add(self.tab_test, text=i18n.t("tab_test"))
         self.notebook.add(self.tab_posiciones, text=i18n.t("tab_posiciones"))
-        self.notebook.add(self.tab_saldos, text=i18n.t("tab_saldos"))
         self.notebook.add(self.tab_consola, text=i18n.t("tab_consola"))
         self.notebook.add(self.tab_settings, text=i18n.t("tab_settings"))
 
         # Pestaña de consola debe ir al final (la usan otras tabs)
-        self.last_tab_index = 8
+        self.last_tab_index = 7
 
         # Inicializar UI de pestañas
         self.setup_dashboard_tab()
         self.setup_telegram_tab()
+        self.setup_reports_tab()
         self.setup_apis_tab()
         self.setup_risk_tab()
-        self.setup_channels_tab()
         self.setup_test_tab()
         self.setup_positions_tab()
-        self.setup_balances_tab()
         self.setup_console_tab()
         self.setup_settings_tab()
 
@@ -112,12 +109,11 @@ class TradingBotGUI:
         self.notebook.tab(self.tab_dashboard, text=i18n.t("tab_dashboard"))
         self.notebook.tab(self.tab_apis, text=i18n.t("tab_apis"))
         self.notebook.tab(self.tab_riesgo, text=i18n.t("tab_riesgo"))
-        self.notebook.tab(self.tab_canales, text=i18n.t("tab_canales"))
         self.notebook.tab(self.tab_test, text=i18n.t("tab_test"))
         self.notebook.tab(self.tab_posiciones, text=i18n.t("tab_posiciones"))
-        self.notebook.tab(self.tab_saldos, text=i18n.t("tab_saldos"))
         self.notebook.tab(self.tab_consola, text=i18n.t("tab_consola"))
         self.notebook.tab(self.tab_telegram, text=i18n.t("tab_telegram"))
+        self.notebook.tab(self.tab_reportes, text=i18n.t("tab_reportes"))
         self.notebook.tab(self.tab_settings, text=i18n.t("tab_settings"))
 
     # ==================== TAB: DASHBOARD ====================
@@ -929,50 +925,6 @@ class TradingBotGUI:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar: {e}")
 
-    # ==================== TAB: Canales ====================
-    def setup_channels_tab(self):
-        frame = self.tab_canales
-
-        top = ttk.Frame(frame)
-        top.pack(fill='x', pady=10, padx=10)
-        ttk.Label(top, text=i18n.t("channels_id")).pack(side='left')
-        self.entry_new_channel = ttk.Entry(top, width=20)
-        self.entry_new_channel.pack(side='left', padx=5)
-        ttk.Button(top, text=i18n.t("channels_add"), command=self.add_channel).pack(side='left')
-
-        self.list_channels = tk.Listbox(frame, height=15)
-        self.list_channels.pack(fill='both', expand=True, padx=10, pady=5)
-
-        ttk.Button(frame, text=i18n.t("channels_remove"), command=self.remove_channel).pack(pady=10)
-
-        self.refresh_channels_list()
-
-    def refresh_channels_list(self):
-        self.list_channels.delete(0, tk.END)
-        for cid in load_channels():
-            self.list_channels.insert(tk.END, str(cid))
-
-    def add_channel(self):
-        try:
-            cid = int(self.entry_new_channel.get().strip())
-            channels = load_channels()
-            channels.add(cid)
-            save_channels(channels)
-            self.refresh_channels_list()
-            self.entry_new_channel.delete(0, tk.END)
-        except ValueError:
-            messagebox.showerror("Error", i18n.t("channels_error_id"))
-
-    def remove_channel(self):
-        sel = self.list_channels.curselection()
-        if not sel:
-            return
-        cid = int(self.list_channels.get(sel[0]))
-        channels = load_channels()
-        channels.discard(cid)
-        save_channels(channels)
-        self.refresh_channels_list()
-
     # ==================== TAB: Test ====================
     def setup_test_tab(self):
         frame = self.tab_test
@@ -1035,27 +987,6 @@ class TradingBotGUI:
                 p.exchange_id, p.symbol, p.side, p.entry_price,
                 p.amount, f"{p.pnl:.2f}" if p.pnl else "0.00", p.status))
 
-    # ==================== TAB: Saldos ====================
-    def setup_balances_tab(self):
-        frame = self.tab_saldos
-        self.tree_balances = ttk.Treeview(frame, columns=("ex", "balance"), show='headings')
-        self.tree_balances.heading("ex", text=i18n.t("balances_col_exchange"))
-        self.tree_balances.heading("balance", text=i18n.t("balances_col_balance"))
-        self.tree_balances.pack(fill='both', expand=True, padx=10, pady=10)
-
-        ttk.Button(frame, text=i18n.t("balances_refresh"), command=self.update_balances).pack(pady=5)
-
-    def update_balances(self):
-        for item in self.tree_balances.get_children():
-            self.tree_balances.delete(item)
-
-        async def _task():
-            for ex_id in exchange_service.clients:
-                bal = await exchange_service.get_balance(ex_id)
-                self.root.after(0, lambda e=ex_id, b=bal: self.tree_balances.insert("", tk.END, values=(e, f"{b:.2f} USDT")))
-
-        threading.Thread(target=lambda: asyncio.run(_task()), daemon=True).start()
-
     # ==================== TAB: Consola ====================
     def setup_console_tab(self):
         frame = self.tab_consola
@@ -1082,3 +1013,196 @@ class TradingBotGUI:
     def on_closing(self):
         if messagebox.askokcancel(i18n.t("cancel"), "¿Desea cerrar el bot?"):
             self.root.destroy()
+
+    # ==================== TAB: REPORTES ====================
+    def setup_reports_tab(self):
+        canvas = tk.Canvas(self.tab_reportes)
+        scrollbar = ttk.Scrollbar(self.tab_reportes, orient="vertical", command=canvas.yview)
+        scrollable = ttk.Frame(canvas)
+        scrollable.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # ─── Summary ────────────────────────
+        summary_frame = ttk.LabelFrame(scrollable, text=i18n.t("reports_summary"), padding=10)
+        summary_frame.pack(fill='x', padx=10, pady=5)
+        self.reports_summary_labels = {}
+        metrics = [
+            ("total_trades", i18n.t("reports_total_trades")),
+            ("win_rate", i18n.t("reports_win_rate")),
+            ("total_pnl", i18n.t("reports_total_pnl")),
+            ("best_trade", i18n.t("reports_best_trade")),
+            ("worst_trade", i18n.t("reports_worst_trade")),
+            ("open_count", i18n.t("reports_open")),
+            ("closed_count", i18n.t("reports_closed")),
+        ]
+        for i, (key, label) in enumerate(metrics):
+            col = i % 4
+            row = i // 4
+            ttk.Label(summary_frame, text=f"{label}:", font=("", 9, "bold")).grid(row=row, column=col*2, sticky='e', padx=2, pady=1)
+            lbl = ttk.Label(summary_frame, text="--", font=("", 9))
+            lbl.grid(row=row, column=col*2+1, sticky='w', padx=2, pady=1)
+            self.reports_summary_labels[key] = lbl
+
+        # ─── Performance by Exchange ─────────
+        ex_frame = ttk.LabelFrame(scrollable, text=i18n.t("reports_per_exchange"), padding=10)
+        ex_frame.pack(fill='x', padx=10, pady=5)
+
+        columns_ex = ("exchange", "trades", "winpct", "pnl", "balance")
+        self.tree_reports_ex = ttk.Treeview(ex_frame, columns=columns_ex, show='headings', height=6)
+        col_texts_ex = [
+            i18n.t("reports_col_exchange"),
+            i18n.t("reports_col_trades"),
+            i18n.t("reports_col_winpct"),
+            i18n.t("reports_col_pnl"),
+            i18n.t("reports_col_balance"),
+        ]
+        widths_ex = {"exchange": 100, "trades": 70, "winpct": 70, "pnl": 100, "balance": 100}
+        for col, text in zip(columns_ex, col_texts_ex):
+            self.tree_reports_ex.heading(col, text=text)
+            self.tree_reports_ex.column(col, width=widths_ex.get(col, 80), anchor='center')
+        self.tree_reports_ex.pack(fill='x')
+
+        # ─── Recent Trades ──────────────────
+        trades_frame = ttk.LabelFrame(scrollable, text=i18n.t("reports_recent"), padding=10)
+        trades_frame.pack(fill='both', expand=True, padx=10, pady=5)
+
+        filter_row = ttk.Frame(trades_frame)
+        filter_row.pack(fill='x', pady=2)
+        self.reports_filter_var = tk.StringVar(value="all")
+        filters = [
+            ("all", i18n.t("reports_filter_all")),
+            ("open", i18n.t("reports_filter_open")),
+            ("closed", i18n.t("reports_filter_closed")),
+        ]
+        for val, text in filters:
+            ttk.Radiobutton(filter_row, text=text, variable=self.reports_filter_var, value=val,
+                            command=self.refresh_reports).pack(side='left', padx=5)
+        ttk.Button(filter_row, text=i18n.t("dash_refresh"), command=self.refresh_reports).pack(side='right', padx=5)
+
+        columns_tr = ("symbol", "side", "pnl", "status", "open_time")
+        self.tree_reports_tr = ttk.Treeview(trades_frame, columns=columns_tr, show='headings', height=14)
+        col_texts_tr = [
+            i18n.t("reports_col_symbol"),
+            i18n.t("reports_col_side"),
+            i18n.t("reports_col_pnl"),
+            i18n.t("reports_col_status"),
+            i18n.t("reports_col_time"),
+        ]
+        widths_tr = {"symbol": 120, "side": 70, "pnl": 100, "status": 80, "open_time": 140}
+        for col, text in zip(columns_tr, col_texts_tr):
+            self.tree_reports_tr.heading(col, text=text)
+            self.tree_reports_tr.column(col, width=widths_tr.get(col, 100), anchor='center')
+        self.tree_reports_tr.pack(fill='both', expand=True)
+
+        # Initial load
+        self.refresh_reports()
+
+    def refresh_reports(self):
+        """Actualiza todas las estadísticas de la pestaña Reportes."""
+        from core.manager import pos_manager
+        from services.exchange_service import exchange_service
+
+        all_positions = pos_manager.get_all_positions()
+        closed = [p for p in all_positions if p.status == "closed"]
+        open_pos = [p for p in all_positions if p.status == "open"]
+
+        # ─── Summary ───
+        total = len(all_positions)
+        closed_count = len(closed)
+        open_count = len(open_pos)
+        win_count = sum(1 for p in closed if p.pnl and p.pnl > 0)
+        win_rate = (win_count / closed_count * 100) if closed_count > 0 else 0.0
+        total_pnl = sum(p.pnl or 0.0 for p in all_positions)
+
+        best = max(closed, key=lambda p: p.pnl or 0) if closed else None
+        worst = min(closed, key=lambda p: p.pnl or 0) if closed else None
+
+        self.reports_summary_labels["total_trades"].config(text=str(total))
+        self.reports_summary_labels["win_rate"].config(
+            text=f"{win_rate:.1f}% ({win_count}/{closed_count})" if closed_count > 0 else "N/A")
+        pnl_text = f"${total_pnl:+.2f}"
+        self.reports_summary_labels["total_pnl"].config(text=pnl_text,
+            foreground="#00cc00" if total_pnl >= 0 else "#ff4444")
+        self.reports_summary_labels["best_trade"].config(
+            text=f"{best.symbol} ${best.pnl:+.2f}" if best else "--")
+        self.reports_summary_labels["worst_trade"].config(
+            text=f"{worst.symbol} ${worst.pnl:+.2f}" if worst else "--")
+        self.reports_summary_labels["open_count"].config(text=str(open_count))
+        self.reports_summary_labels["closed_count"].config(text=str(closed_count))
+
+        # ─── Per Exchange ───
+        for item in self.tree_reports_ex.get_children():
+            self.tree_reports_ex.delete(item)
+
+        ex_data = {}
+        for p in all_positions:
+            if p.exchange_id not in ex_data:
+                ex_data[p.exchange_id] = {"trades": 0, "wins": 0, "pnl": 0.0}
+            ex_data[p.exchange_id]["trades"] += 1
+            if p.pnl:
+                ex_data[p.exchange_id]["pnl"] += p.pnl
+                if p.pnl > 0:
+                    ex_data[p.exchange_id]["wins"] += 1
+
+        for ex_id, data in sorted(ex_data.items(), key=lambda x: x[1]["pnl"], reverse=True):
+            winpct = (data["wins"] / data["trades"] * 100) if data["trades"] > 0 else 0
+            self.tree_reports_ex.insert("", tk.END, values=(
+                ex_id.upper(), data["trades"], f"{winpct:.0f}%",
+                f"${data['pnl']:+.2f}", "--"))
+
+        # Fetch balances async
+        def _fetch_balances():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            for ex_id in list(ex_data.keys()):
+                if ex_id in exchange_service.clients:
+                    try:
+                        bal = loop.run_until_complete(exchange_service.get_balance(ex_id))
+                        self.root.after(0, lambda e=ex_id, b=bal: self._update_ex_balance(e, b))
+                    except Exception:
+                        pass
+            loop.close()
+        threading.Thread(target=_fetch_balances, daemon=True).start()
+
+        # ─── Recent Trades (filtered) ───
+        for item in self.tree_reports_tr.get_children():
+            self.tree_reports_tr.delete(item)
+
+        filter_val = self.reports_filter_var.get()
+        if filter_val == "open":
+            filtered = open_pos
+        elif filter_val == "closed":
+            filtered = closed
+        else:
+            filtered = all_positions
+
+        # Sort by open_time descending
+        filtered_sorted = sorted(filtered, key=lambda p: p.open_time, reverse=True)[:50]
+
+        for p in filtered_sorted:
+            pnl_str = f"${p.pnl:+.2f}" if p.pnl else "$0.00"
+            side_emoji = "🚀" if p.side.lower() == "buy" else "🔻"
+            side_text = "LONG" if p.side.lower() == "buy" else "SHORT"
+            tags = ()
+            if p.pnl and p.pnl > 0:
+                tags = ("profit",)
+            elif p.pnl and p.pnl < 0:
+                tags = ("loss",)
+            self.tree_reports_tr.insert("", tk.END, values=(
+                p.symbol, f"{side_emoji} {side_text}", pnl_str,
+                p.status.upper(), p.open_time), tags=tags)
+
+        self.tree_reports_tr.tag_configure("profit", foreground="#00cc00")
+        self.tree_reports_tr.tag_configure("loss", foreground="#ff4444")
+
+    def _update_ex_balance(self, exchange_id: str, balance: float):
+        """Actualiza la columna Balance en la tabla por exchange."""
+        for item in self.tree_reports_ex.get_children():
+            values = self.tree_reports_ex.item(item, "values")
+            if values and values[0] == exchange_id.upper():
+                self.tree_reports_ex.item(item, values=(
+                    values[0], values[1], values[2], values[3], f"${balance:.2f}"))
+                break

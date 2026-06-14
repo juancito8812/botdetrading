@@ -10,13 +10,14 @@ TRANSLATIONS = {
         # Tabs
         "tab_apis": "🔐 APIs",
         "tab_riesgo": "⚖️ Riesgo",
-        "tab_canales": "📢 Canales",
+
         "tab_test": "🔌 Test",
         "tab_posiciones": "📊 Posiciones",
-        "tab_saldos": "💰 Saldos",
+
         "tab_consola": "📟 Consola",
         "tab_dashboard": "📈 Dashboard",
         "tab_settings": "⚙️ Ajustes",
+        "tab_reportes": "📊 Reportes",
         
         # Dashboard
         "dash_title": "📊 Top 20 Criptomonedas - CoinGecko",
@@ -114,7 +115,6 @@ TRANSLATIONS = {
         "settings_task_exists": "La tarea de inicio ya existe.",
         
         # Canales
-        "channels_title": "Canales de Telegram",
         "channels_id": "ID de Canal:",
         "channels_add": "➕ Añadir",
         "channels_remove": "❌ Eliminar Seleccionado",
@@ -140,11 +140,7 @@ TRANSLATIONS = {
         "positions_refresh": "🔄 Actualizar Lista",
         "positions_empty": "No hay posiciones",
         
-        # Saldos
-        "balances_title": "Saldos en Exchanges",
-        "balances_col_exchange": "Exchange",
-        "balances_col_balance": "Balance USDT",
-        "balances_refresh": "💰 Consultar Todos los Saldos",
+
         
         # Consola
         "console_clear": "🗑️ Limpiar Consola",
@@ -164,6 +160,30 @@ TRANSLATIONS = {
         
         # Botones comunes
         "btn_save_all": "💾 GUARDAR TODA LA CONFIGURACIÓN",
+        
+        # Reportes
+        "reports_summary": "Resumen General",
+        "reports_total_trades": "Total Trades",
+        "reports_win_rate": "Win Rate",
+        "reports_total_pnl": "PnL Total",
+        "reports_best_trade": "Mejor Trade",
+        "reports_worst_trade": "Peor Trade",
+        "reports_open": "Abiertas",
+        "reports_closed": "Cerradas",
+        "reports_per_exchange": "Performance por Exchange",
+        "reports_recent": "Últimos Trades",
+        "reports_col_exchange": "Exchange",
+        "reports_col_trades": "Trades",
+        "reports_col_winpct": "Win %",
+        "reports_col_pnl": "PnL",
+        "reports_col_balance": "Balance",
+        "reports_col_symbol": "Símbolo",
+        "reports_col_side": "Side",
+        "reports_col_status": "Estado",
+        "reports_col_time": "Apertura",
+        "reports_filter_all": "Todas",
+        "reports_filter_open": "Abiertas",
+        "reports_filter_closed": "Cerradas",
     },
     "en": {
         # General
@@ -174,13 +194,14 @@ TRANSLATIONS = {
         # Tabs
         "tab_apis": "🔐 APIs",
         "tab_riesgo": "⚖️ Risk",
-        "tab_canales": "📢 Channels",
+
         "tab_test": "🔌 Test",
         "tab_posiciones": "📊 Positions",
-        "tab_saldos": "💰 Balances",
+
         "tab_consola": "📟 Console",
         "tab_dashboard": "📈 Dashboard",
         "tab_settings": "⚙️ Settings",
+        "tab_reportes": "📊 Reports",
         
         # Dashboard
         "dash_title": "📊 Top 20 Cryptocurrencies - CoinGecko",
@@ -277,7 +298,6 @@ TRANSLATIONS = {
         "settings_task_exists": "Auto-start task already exists.",
         
         # Canales
-        "channels_title": "Telegram Channels",
         "channels_id": "Channel ID:",
         "channels_add": "➕ Add",
         "channels_remove": "❌ Remove Selected",
@@ -303,11 +323,7 @@ TRANSLATIONS = {
         "positions_refresh": "🔄 Refresh List",
         "positions_empty": "No positions",
         
-        # Saldos
-        "balances_title": "Exchange Balances",
-        "balances_col_exchange": "Exchange",
-        "balances_col_balance": "Balance USDT",
-        "balances_refresh": "💰 Check All Balances",
+
         
         # Consola
         "console_clear": "🗑️ Clear Console",
@@ -327,6 +343,30 @@ TRANSLATIONS = {
         
         # Botones comunes
         "btn_save_all": "💾 SAVE ALL CONFIGURATION",
+        
+        # Reportes
+        "reports_summary": "General Summary",
+        "reports_total_trades": "Total Trades",
+        "reports_win_rate": "Win Rate",
+        "reports_total_pnl": "Total PnL",
+        "reports_best_trade": "Best Trade",
+        "reports_worst_trade": "Worst Trade",
+        "reports_open": "Open",
+        "reports_closed": "Closed",
+        "reports_per_exchange": "Performance by Exchange",
+        "reports_recent": "Recent Trades",
+        "reports_col_exchange": "Exchange",
+        "reports_col_trades": "Trades",
+        "reports_col_winpct": "Win %",
+        "reports_col_pnl": "PnL",
+        "reports_col_balance": "Balance",
+        "reports_col_symbol": "Symbol",
+        "reports_col_side": "Side",
+        "reports_col_status": "Status",
+        "reports_col_time": "Open Time",
+        "reports_filter_all": "All",
+        "reports_filter_open": "Open",
+        "reports_filter_closed": "Closed",
     }
 }
 
