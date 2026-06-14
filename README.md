@@ -25,6 +25,7 @@ Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecu
 - **🖥️ Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges en tiempo real
 - **📊 Reportes**: Resumen de trading, performance por exchange e historial de trades
 - **📱 Telegram Unificado**: Conexión, credenciales, canales e historial de notificaciones en una pestaña
+- **💾 Backup Cifrado**: Export/Import de toda la configuración en archivo .botconfig protegido con contraseña (AES)
 - **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor, retry con backoff, state recovery y backups automáticos
 - **🔔 Notificaciones**: Alertas por Telegram de apertura/cierre de trades, TP alcanzados, trailing, salud y errores
 - **🌐 Multi-idioma**: Español e Inglés
@@ -82,13 +83,13 @@ python main.py
 La interfaz gráfica se abrirá con las siguientes pestañas:
 - **📈 Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges
 - **📱 Telegram**: Estado de conexión, credenciales, canales e historial de notificaciones
-- **📊 Reportes**: Resumen general (win rate, PnL), performance por exchange e historial de trades
+- **📊 Reportes**: Resumen general (win rate, PnL), performance por exchange e historial de trades + export CSV
 - **🔐 APIs**: Configuración de API keys de exchanges
 - **⚖️ Riesgo**: Apalancamiento, márgenes, DCA, trailing stop, distribución de TPs
 - **🔌 Test**: Probar conexión con exchanges
-- **📊 Posiciones**: Ver posiciones abiertas con PnL
+- **📊 Posiciones**: Posiciones activas con PnL, modificar SL/TP, cerrar posición, export CSV
 - **📟 Consola**: Logs en tiempo real y botón de iniciar/detener
-- **⚙️ Ajustes**: Idioma e inicio automático con Windows
+- **⚙️ Ajustes**: Idioma, auto-inicio Windows y backup/restore de configuración
 
 ## 🦸 Metodología de Desarrollo: Superpowers
 
@@ -139,8 +140,11 @@ MiBotTrading/
 │       ├── backup_manager.py   # Backups comprimidos automáticos
 │       ├── error_handler.py    # Manejo centralizado de errores
 │       └── decorators.py       # Decoradores @retry, @circuit_breaker, @log_errors
-├── tests/                      # ★ TESTS (72 tests)
+├── utils/
+│   ├── config_backup.py        # Export/Import cifrado con AES (cryptography.fernet)
+├── tests/                      # ★ TESTS (82 tests)
 │   ├── test_parser.py
+│   ├── test_config_backup.py   # 10 tests: cifrado/descifrado, round-trip, errores
 │   ├── test_manager.py
 │   ├── test_notifier.py
 │   └── ... (resiliencia, decoradores, etc.)
@@ -150,6 +154,19 @@ MiBotTrading/
 └── .agents/                    # ★ SKILLS DE IA
     ├── MEMORY.md               # Memoria persistente del proyecto
     └── skills/                 # Skills Superpowers
+```
+
+## 💾 Backup de Configuración
+
+Desde la pestaña **⚙️ Ajustes** puedes exportar/importar toda la configuración:
+
+- **📤 Exportar**: Cifra API keys, riesgo, canales y ajustes en un archivo `.botconfig` protegido con contraseña
+- **📥 Importar**: Restaura toda la configuración desde un `.botconfig` existente
+- **🛡️ Cifrado AES** vía `cryptography.fernet` con derivación PBKDF2 (SHA256, 100k iteraciones)
+
+```bash
+# Dependencia adicional (ya incluida en requirements.txt)
+pip install cryptography
 ```
 
 ## 📦 Distribución
@@ -165,12 +182,13 @@ El instalador para Windows se genera con Inno Setup usando `Installer_Script.iss
 ## 🧪 Tests
 
 ```bash
-# Todos los tests (72)
+# Todos los tests (82)
 python -m pytest tests/ -v
 
 # Tests específicos
 python -m pytest tests/test_parser.py -v
 python -m pytest tests/test_notifier.py -v
+python -m pytest tests/test_config_backup.py -v
 ```
 
 ## 🤖 GitHub Actions

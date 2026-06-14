@@ -4,8 +4,8 @@
 
 - **Propósito:** Bot de trading automatizado que recibe señales vía Telegram y ejecuta órdenes en exchanges de criptomonedas (Bitget, BingX).
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexión exchanges), Telethon (Telegram), asyncio
-- **Última sesión:** 13/06/2026 - Sistema de notificaciones Telegram completo
-- **Versión de memoria:** 3
+- **Última sesión:** 14/06/2026 - Backup cifrado, pestaña Reportes, Posiciones mejorada, modificación SL/TP real
+- **Versión de memoria:** 4
 
 ## Arquitectura
 
@@ -31,6 +31,7 @@ MiBotTrading/
 │   ├── logger.py              # Configuración de logging
 │   ├── settings_manager.py    # Settings de UI + auto-inicio Windows
 │   ├── translations.py        # i18n español/inglés
+│   ├── config_backup.py       # Export/Import cifrado (cryptography.fernet + PBKDF2)
 │   └── resilience/            # Sistema de resiliencia (v2.0)
 │       ├── error_handler.py   # Taxonomía de errores personalizados
 │       ├── retry_service.py   # Reintentos con backoff exponencial + jitter
@@ -113,7 +114,7 @@ Cada llamada a exchange pasa por:
 
 ## Estado Actual
 
-- **Lo que se está trabajando:** Sistema de resiliencia completado. Próximas mejoras por definir.
+- **Lo que se está trabajando:** Export/Import cifrado de configuración completado.
 - **Exchanges activos en config.json:** bitget, bingx
 - **Apalancamiento:** 5x
 - **Modo margen:** Cross
@@ -121,8 +122,9 @@ Cada llamada a exchange pasa por:
 - **Entrada:** Auto (con validación de desviación máx 3%)
 - **DCA:** Habilitado (3 partes)
 - **Trailing stop:** Habilitado (activación 1.5%, distancia 0.8%)
-- **Resiliencia:** Completada (63 tests, todos pasando)
-- **Notificaciones:** Completadas (72 tests, todos pasando)
+- **Resiliencia:** Completada
+- **Notificaciones:** Completadas
+- **Backup cifrado:** Completado (82 tests, todos pasando)
 
 ## Cambios Recientes
 
@@ -144,23 +146,38 @@ Cada llamada a exchange pasa por:
   - Integración: engine.py (trade open/close, TP1, trailing stop, DCA fill), main.py (inicialización), health_monitor.py (callback on_status_change)
   - 9 tests nuevos (72 total), todos pasando
   - Commits: `e063655`
+- **[14/06/2026]** — Pestaña Reportes con resumen, performance por exchange e historial de trades:
+  - 3 secciones: Resumen General, Performance por Exchange, Últimos Trades con filtro
+  - Commits: varias sesiones
+- **[14/06/2026]** — Pestaña Posiciones mejorada (solo activas, columnas completas, colores PnL):
+  - Doble clic → cerrar posición / modificar SL/TP
+  - Conexión real con exchange para SL/TP y cierre
+  - Export CSV en pestaña Reportes
+- **[14/06/2026]** — Export/Import cifrado de configuración:
+  - Nuevo: utils/config_backup.py (cryptography.fernet + PBKDF2)
+  - Tests: 10 tests nuevos para round-trip, contraseña incorrecta, archivo corrupto
+  - UI: Sección en Ajustes + indicador de último backup
+  - Dependencia: cryptography (ya instalada)
+  - Commit: `a9d7a05`
 
 ## Próximos Pasos / TODOs
 
 - [ ] Activar más exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto
 - [x] Sistema de notificaciones Telegram para alertas de trading, health y reportes diarios
 - [ ] Tests para market_data.py y más tests de integración
-- [ ] Mejoras en la interfaz de usuario (dashboard con indicadores de salud + últimas notificaciones)
-- [ ] Reporte semanal de rendimiento (PnL por exchange, tasa de aciertos)
+- [x] Pestaña Reportes con estadísticas de trading
+- [x] Mejora de pestaña Posiciones (solo activas, SL/TP real, export CSV)
+- [x] Backup/restore cifrado de configuración
+- [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
 
 ## Notas / Problemas Conocidos
 
 - Archivos temporales/legacy excluidos vía `.gitignore`: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `backup_modulos/`, `legacy_code/` — no se subieron al repositorio.
 - Archivos legacy eliminados del repositorio: `bot_unificado v2.py`, `README_BACKUP.md`, `build_distribucion.bat`.
 - Repositorio GitHub inicializado: https://github.com/juancito8812/botdetrading.git (rama master).
-- Tests: 72 tests en total (14 originales + 49 de resiliencia + 9 de notificaciones), todos pasando.
+- Tests: 82 tests en total, todos pasando.
 - Credenciales (.env, config.json, canales.json) excluidas del repositorio por seguridad.
-- El sistema de resiliencia y notificaciones se implementaron siguiendo la metodología Superpowers (brainstorming → writing-plans → subagent-driven-development).
+- Todo el desarrollo sigue la metodología Superpowers (brainstorming → writing-plans → subagent-driven-development).
 - Archivos de diseño y plan guardados en `docs/superpowers/specs/` y `docs/superpowers/plans/`.
 - Para activar las notificaciones: configurar `NOTIFICATION_CHAT_ID` en `.env`, o se usará el ID del usuario autenticado por defecto.
 

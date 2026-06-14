@@ -33,21 +33,21 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
-**Último commit:** `0878633` — feat: agregar pestaña Reportes con resumen, performance por exchange e historial de trades
-**Tests:** 72/72 pasando ✅
+**Último commit:** `a9d7a05` — feat: export/import cifrado de configuracion + tests + indicador ultimo backup
+**Tests:** 82/82 pasando ✅
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
 
 **Commits recientes en origin/master:**
 | Commit | Descripción |
 |--------|-------------|
+| `a9d7a05` | feat: export/import cifrado de configuracion + tests + indicador ultimo backup |
+| `968bddd` | feat: conectar modificacion SL/TP al exchange real (cancelar orden anterior + crear nueva) |
+| `1788f73` | feat: mejorar pestaña Posiciones (solo activas, acciones, modificar SL/TP, cerrar) + export CSV en Reportes |
 | `0878633` | feat: agregar pestaña Reportes con resumen, performance por exchange e historial de trades |
 | `62ab7aa` | feat: nueva pestaña Telegram unificada con historial de notificaciones |
 | `b9e3f8e` | fix: convertir superpowers de submodule a carpeta normal para CI/CD |
 | `7893148` | feat: health dashboard mejorado + break-even/trailing mutual exclusion |
-| `9789457` | SESSION_HANDOFF.md para continuidad de sesiones |
-| `9e23c53` | Sistema de resiliencia (retry, circuit breaker, health monitor, state recovery, backups) |
-| `e063655` | Sistema de notificaciones Telegram (10 métodos, 9 tests) |
 
 ---
 
@@ -97,6 +97,28 @@
 **Spec:** `docs/superpowers/specs/2026-06-14-reports-tab-design.md`
 **Plan:** `docs/superpowers/plans/2026-06-14-reports-tab.md`
 
+### 7. Pestaña Posiciones mejorada (commits `1788f73`, `968bddd`)
+
+**Qué se hizo:** Pestaña **📊 Posiciones** mejorada:
+- Solo muestra posiciones **activas** con columnas completas (leverage, SL, TPs)
+- **Doble clic**: en PnL → cerrar posición (orden MARKET opuesta real), en SL/TP → modificar
+- **Popup modificar SL/TP**: ejecuta órdenes reales en el exchange (cancel SL anterior + crear nuevo)
+- **Export CSV** en pestaña Reportes: `trades_YYYY-MM-DD_HH-MM-SS.csv`
+
+**Archivos:** `ui/main_window.py`, `utils/translations.py`
+
+### 8. Export/Import cifrado de configuración (commit `a9d7a05`)
+
+**Qué se hizo:** Nueva funcionalidad en **⚙️ Ajustes**:
+- `utils/config_backup.py` — cifrado AES vía `cryptography.fernet` + PBKDF2
+- **Exportar**: recopila APIs, riesgo, canales y settings → cifra con contraseña → guarda como `.botconfig`
+- **Importar**: selecciona `.botconfig` → pide contraseña → descifra → restaura todos los archivos
+- **Indicador visual** de fecha del último backup en la UI
+- **10 tests** unitarios para round-trip, contraseña incorrecta, archivo corrupto
+
+**Archivos:** `utils/config_backup.py`, `tests/test_config_backup.py`, `ui/main_window.py`, `utils/translations.py`
+**Spec:** `docs/superpowers/specs/2026-06-14-config-backup-design.md`
+
 ---
 
 ## 🏗️ Arquitectura Actual
@@ -129,13 +151,13 @@ Telegram (notificaciones) → TelegramNotifier ← engine.notifier
 GUI (Tkinter — 9 pestañas):
 ├── 📈 Dashboard      → CoinGecko top20 + health cards
 ├── 📱 Telegram       → Estado, credenciales, canales, notificaciones
-├── 📊 Reportes       → Resumen, performance, historial
+├── 📊 Reportes       → Resumen, performance, historial + export CSV
 ├── 🔐 APIs           → API keys de exchanges
 ├── ⚖️ Riesgo         → Configuración de trading
 ├── 🔌 Test           → Probar conexión con exchanges
-├── 📊 Posiciones     → Posiciones abiertas/cerradas
+├── 📊 Posiciones     → Posiciones activas con PnL, SL/TP, cerrar
 ├── 📟 Consola        → Logs en tiempo real
-└── ⚙️ Ajustes        → Idioma + auto-inicio Windows
+└── ⚙️ Ajustes        → Idioma + auto-inicio Windows + backup/restore
 ```
 
 ### Exchanges
@@ -155,18 +177,19 @@ Se activan automáticamente en push/PR a master:
 | **Build** (`build.yml`) | Tags `v*` o `workflow_dispatch` | Windows-latest | PyInstaller → `.exe` → Release |
 
 **Nota:** Para correr el build manual: ir a Actions → Build Executable → Run workflow.
+**Nota:** Para evitar errores del submódulo `superpowers/`, el checkout está configurado con `submodules: false`.
 
 ---
 
 ## 🧪 Cómo verificar el estado
 
 ```bash
-# Tests completos (72 tests)
+# Tests completos (82 tests)
 python -m pytest tests/ -v
 
 # Tests de un módulo específico
 python -m pytest tests/test_notifier.py -v
-python -m pytest tests/test_retry_service.py -v
+python -m pytest tests/test_config_backup.py -v
 
 # Estado de git
 git status
@@ -188,10 +211,10 @@ Priorizados por impacto:
 4. ✅ ~~Break-even vs trailing exclusión mutua~~ (completado)
 5. ✅ ~~Pestaña Telegram unificada~~ (completado)
 6. ✅ ~~Pestaña Reportes / Estadísticas~~ (completado)
-7. **Tests para market_data.py** — El módulo de CoinGecko no tiene tests unitarios
-8. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
-9. **Exportar reportes a CSV** — Botón para descargar datos de trades
-10. **Configurar NOTIFICATION_CHAT_ID** — Variable de entorno para el chat ID de Telegram donde recibir notificaciones
+7. ✅ ~~Pestaña Posiciones mejorada (solo activas, SL/TP real, export CSV)~~ (completado)
+8. ✅ ~~Backup/restore cifrado de configuración~~ (completado)
+9. **Tests para market_data.py** — El módulo de CoinGecko no tiene tests unitarios
+10. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
 
 ---
 
