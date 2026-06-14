@@ -55,9 +55,11 @@ class TradingBotGUI:
         self.tab_posiciones = ttk.Frame(self.notebook)
         self.tab_saldos = ttk.Frame(self.notebook)
         self.tab_consola = ttk.Frame(self.notebook)
+        self.tab_telegram = ttk.Frame(self.notebook)
         self.tab_settings = ttk.Frame(self.notebook)
 
         self.notebook.add(self.tab_dashboard, text=i18n.t("tab_dashboard"))
+        self.notebook.add(self.tab_telegram, text=i18n.t("tab_telegram"))
         self.notebook.add(self.tab_apis, text=i18n.t("tab_apis"))
         self.notebook.add(self.tab_riesgo, text=i18n.t("tab_riesgo"))
         self.notebook.add(self.tab_canales, text=i18n.t("tab_canales"))
@@ -72,6 +74,7 @@ class TradingBotGUI:
 
         # Inicializar UI de pestañas
         self.setup_dashboard_tab()
+        self.setup_telegram_tab()
         self.setup_apis_tab()
         self.setup_risk_tab()
         self.setup_channels_tab()
@@ -80,6 +83,9 @@ class TradingBotGUI:
         self.setup_balances_tab()
         self.setup_console_tab()
         self.setup_settings_tab()
+
+        # Cargar notificaciones recientes al inicio
+        self.root.after(1000, self.refresh_telegram_notifications)
 
         # Configurar Logs
         self.setup_logging_bridge()
@@ -111,6 +117,7 @@ class TradingBotGUI:
         self.notebook.tab(self.tab_posiciones, text=i18n.t("tab_posiciones"))
         self.notebook.tab(self.tab_saldos, text=i18n.t("tab_saldos"))
         self.notebook.tab(self.tab_consola, text=i18n.t("tab_consola"))
+        self.notebook.tab(self.tab_telegram, text=i18n.t("tab_telegram"))
         self.notebook.tab(self.tab_settings, text=i18n.t("tab_settings"))
 
     # ==================== TAB: DASHBOARD ====================
@@ -414,6 +421,163 @@ class TradingBotGUI:
         self.refresh_health()
         self.dash_auto_job = self.root.after(30000, self._dash_auto_tick)
 
+    # ==================== TAB: TELEGRAM ====================
+    def setup_telegram_tab(self):
+        canvas = tk.Canvas(self.tab_telegram)
+        scrollbar = ttk.Scrollbar(self.tab_telegram, orient="vertical", command=canvas.yview)
+        scrollable = ttk.Frame(canvas)
+        scrollable.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        creds = load_api_creds()
+
+        # ─── Conexión ─────────────────────
+        conn_frame = ttk.LabelFrame(scrollable, text=i18n.t("tg_connection"), padding=10)
+        conn_frame.pack(fill='x', padx=10, pady=5)
+
+        self.tg_status_label = ttk.Label(conn_frame, text="⚪ Verificando...", font=("", 10, "bold"))
+        self.tg_status_label.grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
+
+        self.tg_user_label = ttk.Label(conn_frame, text="")
+        self.tg_user_label.grid(row=1, column=0, columnspan=2, sticky='w', pady=2)
+
+        self.tg_chatid_label = ttk.Label(conn_frame, text="")
+        self.tg_chatid_label.grid(row=2, column=0, columnspan=2, sticky='w', pady=2)
+
+        self.tg_notif_var = tk.BooleanVar(value=True)
+        self.tg_notif_cb = ttk.Checkbutton(conn_frame, text=i18n.t("tg_notifications"), variable=self.tg_notif_var)
+        self.tg_notif_cb.grid(row=3, column=0, sticky='w', pady=2)
+
+        btn_row = ttk.Frame(conn_frame)
+        btn_row.grid(row=4, column=0, columnspan=2, pady=5)
+        ttk.Button(btn_row, text=i18n.t("tg_send_test"), command=self.send_test_notification).pack(side='left', padx=2)
+
+        # ─── Credenciales ────────────────
+        cred_frame = ttk.LabelFrame(scrollable, text="Credenciales", padding=10)
+        cred_frame.pack(fill='x', padx=10, pady=5)
+
+        ttk.Label(cred_frame, text="API_ID:").grid(row=0, column=0, sticky='e', pady=2)
+        self.tg_entry_api_id = ttk.Entry(cred_frame, width=30)
+        self.tg_entry_api_id.insert(0, creds["telegram"].get("API_ID", ""))
+        self.tg_entry_api_id.grid(row=0, column=1, padx=5, pady=2, sticky='w')
+
+        ttk.Label(cred_frame, text="API_HASH:").grid(row=1, column=0, sticky='e', pady=2)
+        self.tg_entry_api_hash = ttk.Entry(cred_frame, width=50)
+        self.tg_entry_api_hash.insert(0, creds["telegram"].get("API_HASH", ""))
+        self.tg_entry_api_hash.grid(row=1, column=1, padx=5, pady=2, sticky='w')
+
+        ttk.Label(cred_frame, text="Phone:").grid(row=2, column=0, sticky='e', pady=2)
+        self.tg_entry_phone = ttk.Entry(cred_frame, width=30)
+        self.tg_entry_phone.insert(0, creds["telegram"].get("PHONE_NUMBER", ""))
+        self.tg_entry_phone.grid(row=2, column=1, padx=5, pady=2, sticky='w')
+
+        ttk.Button(cred_frame, text=i18n.t("save"), command=self.save_telegram_creds).grid(row=3, column=0, columnspan=2, pady=5)
+
+        # ─── Canales ─────────────────────
+        ch_frame = ttk.LabelFrame(scrollable, text="Canales", padding=10)
+        ch_frame.pack(fill='x', padx=10, pady=5)
+
+        ch_row = ttk.Frame(ch_frame)
+        ch_row.pack(fill='x', pady=2)
+        ttk.Label(ch_row, text="ID:").pack(side='left')
+        self.tg_entry_new_channel = ttk.Entry(ch_row, width=20)
+        self.tg_entry_new_channel.pack(side='left', padx=5)
+        ttk.Button(ch_row, text=i18n.t("channels_add"), command=self.add_telegram_channel).pack(side='left')
+
+        self.tg_list_channels = tk.Listbox(ch_frame, height=6)
+        self.tg_list_channels.pack(fill='x', pady=5)
+        ttk.Button(ch_frame, text=i18n.t("channels_remove"), command=self.remove_telegram_channel).pack(pady=2)
+
+        # ─── Últimas Notificaciones ──────
+        notif_frame = ttk.LabelFrame(scrollable, text=i18n.t("tg_recent_notifications"), padding=10)
+        notif_frame.pack(fill='both', expand=True, padx=10, pady=5)
+
+        self.tg_notif_list = tk.Listbox(notif_frame, height=8)
+        self.tg_notif_list.pack(fill='both', expand=True, padx=5, pady=5)
+
+        ttk.Button(notif_frame, text=i18n.t("dash_refresh"), command=self.refresh_telegram_notifications).pack(pady=2)
+
+        # Cargar canales
+        self.refresh_telegram_channels()
+
+    def save_telegram_creds(self):
+        """Guarda credenciales de Telegram desde la UI."""
+        creds = load_api_creds()
+        creds["telegram"] = {
+            "API_ID": self.tg_entry_api_id.get().strip(),
+            "API_HASH": self.tg_entry_api_hash.get().strip(),
+            "PHONE_NUMBER": self.tg_entry_phone.get().strip(),
+        }
+        save_api_creds(creds)
+        messagebox.showinfo(i18n.t("save"), i18n.t("apis_save_success"))
+
+    def add_telegram_channel(self):
+        try:
+            cid = int(self.tg_entry_new_channel.get().strip())
+            channels = load_channels()
+            channels.add(cid)
+            save_channels(channels)
+            self.refresh_telegram_channels()
+            self.tg_entry_new_channel.delete(0, tk.END)
+        except ValueError:
+            messagebox.showerror("Error", i18n.t("channels_error_id"))
+
+    def remove_telegram_channel(self):
+        sel = self.tg_list_channels.curselection()
+        if not sel:
+            return
+        cid = int(self.tg_list_channels.get(sel[0]))
+        channels = load_channels()
+        channels.discard(cid)
+        save_channels(channels)
+        self.refresh_telegram_channels()
+
+    def refresh_telegram_channels(self):
+        self.tg_list_channels.delete(0, tk.END)
+        for cid in load_channels():
+            self.tg_list_channels.insert(tk.END, str(cid))
+
+    def refresh_telegram_notifications(self):
+        """Actualiza la lista de últimas notificaciones desde el notifier."""
+        self.tg_notif_list.delete(0, tk.END)
+        from core.engine import trading_engine
+        notifier = trading_engine.notifier
+        if notifier and notifier.enabled:
+            recent = notifier.get_recent()
+            for entry in recent:
+                self.tg_notif_list.insert(tk.END, entry)
+        else:
+            self.tg_notif_list.insert(tk.END, i18n.t("tg_no_notifications"))
+
+    def send_test_notification(self):
+        """Envía una notificación de prueba."""
+        from core.engine import trading_engine
+        notifier = trading_engine.notifier
+        if notifier and notifier.enabled:
+            threading.Thread(
+                target=lambda: asyncio.run(notifier.send_message("🧪 Test desde MiBotTrading UI")),
+                daemon=True
+            ).start()
+            messagebox.showinfo("Test", "Notificación de prueba enviada.")
+        else:
+            messagebox.showwarning("Test", "El notificador no está activo.")
+
+    def update_telegram_status(self, connected: bool, user: str = "", phone: str = "", chat_id: str = ""):
+        """Actualiza el estado de conexión de Telegram en la UI."""
+        if connected:
+            self.tg_status_label.config(text=f"🟢 {i18n.t('tg_connected_as')}: {user}", foreground="#00cc00")
+            if phone:
+                self.tg_user_label.config(text=f"📱 {phone}")
+            if chat_id:
+                self.tg_chatid_label.config(text=f"🆔 {i18n.t('tg_chat_id')}: {chat_id}")
+        else:
+            self.tg_status_label.config(text="🔴 Desconectado", foreground="#ff4444")
+            self.tg_user_label.config(text="")
+            self.tg_chatid_label.config(text="")
+
     # ==================== TAB: SETTINGS ====================
     def setup_settings_tab(self):
         frame = self.tab_settings
@@ -547,32 +711,11 @@ class TradingBotGUI:
 
             self.exchange_widgets[ex_id] = widgets
 
-        # Telegram
-        tg_frame = ttk.LabelFrame(scrollable, text=i18n.t("apis_telegram"), padding=10)
-        tg_frame.pack(fill='x', padx=10, pady=10)
-
-        ttk.Label(tg_frame, text="API_ID:").grid(row=0, column=0, sticky='e')
-        self.entry_api_id = ttk.Entry(tg_frame, width=30)
-        self.entry_api_id.insert(0, creds["telegram"].get("API_ID", ""))
-        self.entry_api_id.grid(row=0, column=1, padx=5, pady=2)
-
-        ttk.Label(tg_frame, text="API_HASH:").grid(row=1, column=0, sticky='e')
-        self.entry_api_hash = ttk.Entry(tg_frame, width=50)
-        self.entry_api_hash.insert(0, creds["telegram"].get("API_HASH", ""))
-        self.entry_api_hash.grid(row=1, column=1, padx=5, pady=2)
-
-        ttk.Label(tg_frame, text="Phone (+...):").grid(row=2, column=0, sticky='e')
-        self.entry_phone = ttk.Entry(tg_frame, width=30)
-        self.entry_phone.insert(0, creds["telegram"].get("PHONE_NUMBER", ""))
-        self.entry_phone.grid(row=2, column=1, padx=5, pady=2)
-
     def save_apis(self):
         new_creds = {"exchanges": {}, "telegram": {}}
-        new_creds["telegram"] = {
-            "API_ID": self.entry_api_id.get().strip(),
-            "API_HASH": self.entry_api_hash.get().strip(),
-            "PHONE_NUMBER": self.entry_phone.get().strip()
-        }
+        # Telegram creds are saved from the Telegram tab
+        creds = load_api_creds()
+        new_creds["telegram"] = creds.get("telegram", {})
         for ex_id, w in self.exchange_widgets.items():
             new_creds["exchanges"][ex_id] = {
                 "api_key": w["api_key"].get().strip(),

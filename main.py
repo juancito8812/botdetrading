@@ -240,10 +240,11 @@ class TradingBotApp:
                 notifier = None
                 if self.telegram_client:
                     notification_chat_id = os.getenv("NOTIFICATION_CHAT_ID", "").strip()
+                    me_info = None
                     if not notification_chat_id:
                         try:
-                            me = await self.telegram_client.get_me()
-                            notification_chat_id = str(me.id)
+                            me_info = await self.telegram_client.get_me()
+                            notification_chat_id = str(me_info.id)
                         except Exception:
                             pass
 
@@ -256,6 +257,17 @@ class TradingBotApp:
                         logger.info(
                             f"🔔 Notificador inicializado (chat_id: {notification_chat_id})"
                         )
+
+                    # Actualizar estado en UI
+                    try:
+                        if not me_info:
+                            me_info = await self.telegram_client.get_me()
+                        user_str = f"{getattr(me_info, 'first_name', '?')} (@{getattr(me_info, 'username', '?')})"
+                        phone_str = getattr(me_info, 'phone', '') or ''
+                        self.root.after(0, lambda u=user_str, p=phone_str, cid=notification_chat_id: 
+                            self.gui.update_telegram_status(True, u, p, cid))
+                    except Exception:
+                        pass
 
                 # Conectar notificador al engine
                 trading_engine.notifier = notifier

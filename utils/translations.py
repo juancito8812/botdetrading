@@ -151,6 +151,17 @@ TRANSLATIONS = {
         "console_bot_start": "🚀 INICIAR BOT",
         "console_bot_stop": "🛑 DETENER BOT",
         
+        # Telegram
+        "tab_telegram": "📱 Telegram",
+        "tg_connection": "Conexión",
+        "tg_connected_as": "Conectado como",
+        "tg_chat_id": "Chat ID",
+        "tg_notifications": "Notificaciones",
+        "tg_disconnect": "Desconectar",
+        "tg_send_test": "Enviar Test",
+        "tg_recent_notifications": "Últimas Notificaciones",
+        "tg_no_notifications": "Sin notificaciones",
+        
         # Botones comunes
         "btn_save_all": "💾 GUARDAR TODA LA CONFIGURACIÓN",
     },
@@ -302,6 +313,17 @@ TRANSLATIONS = {
         "console_clear": "🗑️ Clear Console",
         "console_bot_start": "🚀 START BOT",
         "console_bot_stop": "🛑 STOP BOT",
+        
+        # Telegram
+        "tab_telegram": "📱 Telegram",
+        "tg_connection": "Connection",
+        "tg_connected_as": "Connected as",
+        "tg_chat_id": "Chat ID",
+        "tg_notifications": "Notifications",
+        "tg_disconnect": "Disconnect",
+        "tg_send_test": "Send Test",
+        "tg_recent_notifications": "Recent Notifications",
+        "tg_no_notifications": "No notifications",
         
         # Botones comunes
         "btn_save_all": "💾 SAVE ALL CONFIGURATION",

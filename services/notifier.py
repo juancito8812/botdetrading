@@ -26,6 +26,18 @@ class TelegramNotifier:
         self.client = telegram_client
         self.chat_id = chat_id
         self.enabled = enabled
+        self.history: List[str] = []
+
+    def _add_to_history(self, text: str):
+        """Agrega una entrada al historial (max 20)."""
+        timestamp = datetime.now().strftime("%H:%M")
+        self.history.append(f"[{timestamp}] {text}")
+        if len(self.history) > 20:
+            self.history = self.history[-20:]
+
+    def get_recent(self, count: int = 20) -> List[str]:
+        """Retorna las últimas N notificaciones."""
+        return self.history[-count:]
 
     async def send_message(self, text: str) -> bool:
         """Envía un mensaje de texto a Telegram."""
@@ -56,6 +68,7 @@ class TelegramNotifier:
             f"TPs: {tp_count} niveles"
         )
         await self.send_message(msg)
+        self._add_to_history(f"{side_emoji} {side_text} ABIERTA {position.symbol}")
 
     async def notify_trade_closed(self, position: Position):
         """Notifica cierre de una posición."""
@@ -72,6 +85,8 @@ class TelegramNotifier:
             f"PnL: ${pnl_str}"
         )
         await self.send_message(msg)
+        emoji_closed = "✅" if position.pnl and position.pnl >= 0 else "❌"
+        self._add_to_history(f"{emoji_closed} CERRADA {position.symbol} ${position.pnl:+.2f}" if position.pnl else f"❌ CERRADA {position.symbol}")
 
     async def notify_tp_hit(self, position: Position, tp_number: int):
         """Notifica que se alcanzó un Take Profit."""
@@ -82,6 +97,7 @@ class TelegramNotifier:
             f"Precio entrada: ${position.entry_price:,.2f}"
         )
         await self.send_message(msg)
+        self._add_to_history(f"🎯 TP{tp_number} {position.symbol}")
 
     async def notify_trailing_activated(self, position: Position):
         """Notifica que el trailing stop se activó."""
@@ -92,6 +108,7 @@ class TelegramNotifier:
             f"Precio entrada: ${position.entry_price:,.2f}"
         )
         await self.send_message(msg)
+        self._add_to_history(f"🔝 Trailing {position.symbol}")
 
     async def notify_health_change(
         self, exchange: str, status: str,
@@ -106,6 +123,8 @@ class TelegramNotifier:
             f"Latencia: {avg_latency_ms:.0f}ms"
         )
         await self.send_message(msg)
+        emoji_h = "✅" if status == "healthy" else ("⚠️" if status == "degraded" else "🔴")
+        self._add_to_history(f"{emoji_h} {exchange}: {status.upper()}")
 
     async def notify_circuit_breaker(
         self, exchange: str, state: str, retry_after: float = 0.0,
@@ -117,6 +136,7 @@ class TelegramNotifier:
             f"Reintentar en: {retry_after:.0f}s"
         )
         await self.send_message(msg)
+        self._add_to_history(f"🔴 CB {exchange}: {state.upper()}")
 
     async def notify_error(self, module: str, error_message: str):
         """Notifica un error crítico del sistema."""
@@ -125,6 +145,7 @@ class TelegramNotifier:
             f"{error_message[:200]}"
         )
         await self.send_message(msg)
+        self._add_to_history(f"❌ Error en {module}")
 
     async def send_daily_report(
         self, positions: List[Position], balances: Dict[str, float],
@@ -152,3 +173,4 @@ class TelegramNotifier:
             lines.append(f"  {ex}: ${bal:.2f}")
 
         await self.send_message("\n".join(lines))
+        self._add_to_history("📊 Reporte diario enviado")
