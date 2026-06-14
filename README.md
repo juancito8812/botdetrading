@@ -11,7 +11,11 @@ Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecu
 - **🛡️ Gestión de Riesgo**: Stop Loss, Take Profits personalizados (distribución igual/progresivo)
 - **🔝 Trailing Stop**: Seguimiento automático del stop loss cuando el precio se mueve a favor
 - **🔄 Break-even Automático**: Mueve el SL al precio de entrada cuando se alcanza el primer TP
-- **🖥️ Interfaz Gráfica**: Dashboard con monitoreo en tiempo real, balances, posiciones y logs
+- **🖥️ Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges en tiempo real
+- **📊 Reportes**: Resumen de trading, performance por exchange e historial de trades
+- **📱 Telegram Unificado**: Conexión, credenciales, canales e historial de notificaciones en una pestaña
+- **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor, retry con backoff, state recovery y backups automáticos
+- **🔔 Notificaciones**: Alertas por Telegram de apertura/cierre de trades, TP alcanzados, trailing, salud y errores
 - **🌐 Multi-idioma**: Español e Inglés
 
 ## 🚀 Instalación
@@ -53,7 +57,7 @@ BINGX_ENABLED=true
 ```
 
 ### 2. Canales de Telegram
-Agrega los IDs de los canales de señales desde la interfaz o editando `canales.json`.
+Agrega los IDs de los canales de señales desde la pestaña **📱 Telegram** o editando `canales.json`.
 
 ### 3. Configuración de Riesgo (`config.json`)
 Ajusta apalancamiento, % de capital, modalidad de entrada, DCA, trailing stop, etc.
@@ -65,40 +69,76 @@ python main.py
 ```
 
 La interfaz gráfica se abrirá con las siguientes pestañas:
-- **Dashboard**: Top 20 criptomonedas e índices de mercado (CoinGecko)
-- **APIs**: Configuración de credenciales de exchanges y Telegram
-- **Riesgo**: Apalancamiento, márgenes, DCA, trailing stop, distribución de TPs
-- **Canales**: Gestión de canales de Telegram
-- **Test**: Probar conexión con exchanges
-- **Posiciones**: Ver posiciones abiertas/cerradas
-- **Saldos**: Balances en USDT por exchange
-- **Consola**: Logs en tiempo real y botón de iniciar/detener
+- **📈 Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges
+- **📱 Telegram**: Estado de conexión, credenciales, canales e historial de notificaciones
+- **📊 Reportes**: Resumen general (win rate, PnL), performance por exchange e historial de trades
+- **🔐 APIs**: Configuración de API keys de exchanges
+- **⚖️ Riesgo**: Apalancamiento, márgenes, DCA, trailing stop, distribución de TPs
+- **🔌 Test**: Probar conexión con exchanges
+- **📊 Posiciones**: Ver posiciones abiertas con PnL
+- **📟 Consola**: Logs en tiempo real y botón de iniciar/detener
+- **⚙️ Ajustes**: Idioma e inicio automático con Windows
+
+## 🦸 Metodología de Desarrollo: Superpowers
+
+Este proyecto utiliza el framework **Superpowers** para mantener consistencia entre sesiones de IA y agentes.
+
+### Flujo obligatorio para cualquier IA o agente:
+
+1. **`using-superpowers`** — Al iniciar cada sesión, cargar este skill primero
+2. **`brainstorming`** — Antes de cualquier cambio creativo o implementación
+3. **`writing-plans`** — Para tareas de 3+ pasos, escribir plan detallado
+4. **`subagent-driven-development`** — Ejecutar tareas con agentes especializados
+5. **`requesting-code-review`** — Revisar cambios antes de finalizar
+6. **`verification-before-completion`** — Verificar tests y calidad antes de afirmar completitud
+
+> **⚠️ Importante:** Todo agente de IA que retome este proyecto DEBE cargar el skill `using-superpowers` al inicio de cada sesión y seguir el flujo completo.
+
+### Skills disponibles:
+`.agents/skills/` contiene: brainstorming, writing-plans, subagent-driven-development, test-driven-development, systematic-debugging, requesting-code-review, verification-before-completion, entre otros.
 
 ## 🏗️ Arquitectura
 
 ```
 MiBotTrading/
-├── main.py                 # Punto de entrada
-├── core/                   # Lógica principal
-│   ├── engine.py           # Motor de trading
-│   ├── manager.py          # Gestor de posiciones
-│   └── parser.py           # Parseo de señales
-├── services/               # Servicios externos
-│   ├── exchange_service.py # Conexión con exchanges (CCXT)
-│   └── market_data.py      # Datos de mercado (CoinGecko)
-├── ui/                     # Interfaz de usuario
-│   └── main_window.py      # GUI con Tkinter
-├── models/                 # Modelos de datos
-│   └── data_classes.py     # Signal, Position
-├── utils/                  # Utilidades
-│   ├── config.py           # Carga/guardado de config
-│   ├── helpers.py          # Funciones auxiliares
-│   ├── logger.py           # Logging
-│   ├── settings_manager.py # Configuración de UI
-│   └── translations.py     # i18n
-└── tests/                  # Tests
-    ├── test_parser.py
-    └── test_manager.py
+├── main.py                     # Punto de entrada — TradingBotApp
+├── core/                       # ★ LÓGICA PRINCIPAL
+│   ├── engine.py               # TradingEngine — orquestación de señales + watchdog
+│   ├── manager.py              # PositionManager — gestión de posiciones con resiliencia
+│   └── parser.py               # parse_trading_signal — parseo de señales Telegram
+├── services/                   # ★ SERVICIOS EXTERNOS
+│   ├── exchange_service.py     # ExchangeService — conexión con exchanges vía CCXT async
+│   ├── market_data.py          # Datos de CoinGecko (top 20 + índices)
+│   └── notifier.py             # TelegramNotifier — 10 métodos de notificación
+├── ui/                         # ★ INTERFAZ DE USUARIO
+│   └── main_window.py          # TradingBotGUI — Tkinter (9 pestañas)
+├── models/                     # ★ MODELOS DE DATOS
+│   └── data_classes.py         # Position, Signal (dataclasses)
+├── utils/                      # ★ UTILIDADES
+│   ├── config.py               # Carga/guardado de config, credenciales, canales
+│   ├── helpers.py              # atomic_write_json, patch_aiohttp_dns
+│   ├── logger.py               # Configuración de logging
+│   ├── settings_manager.py     # Settings de UI + auto-inicio Windows
+│   ├── translations.py         # i18n — español/inglés (120+ claves)
+│   └── resilience/             # ★ SISTEMA DE RESILIENCIA
+│       ├── circuit_breaker.py  # Circuit breaker por exchange
+│       ├── retry_service.py    # Retry con backoff exponencial
+│       ├── health_monitor.py   # Monitoreo de salud de exchanges
+│       ├── state_recovery.py   # Checkpoints para recuperación de estado
+│       ├── backup_manager.py   # Backups comprimidos automáticos
+│       ├── error_handler.py    # Manejo centralizado de errores
+│       └── decorators.py       # Decoradores @retry, @circuit_breaker, @log_errors
+├── tests/                      # ★ TESTS (72 tests)
+│   ├── test_parser.py
+│   ├── test_manager.py
+│   ├── test_notifier.py
+│   └── ... (resiliencia, decoradores, etc.)
+├── docs/superpowers/           # ★ DOCUMENTACIÓN DE DISEÑO
+│   ├── specs/                  # Especificaciones de features
+│   └── plans/                  # Planes de implementación
+└── .agents/                    # ★ SKILLS DE IA
+    ├── MEMORY.md               # Memoria persistente del proyecto
+    └── skills/                 # Skills Superpowers
 ```
 
 ## 📦 Distribución
@@ -114,9 +154,21 @@ El instalador para Windows se genera con Inno Setup usando `Installer_Script.iss
 ## 🧪 Tests
 
 ```bash
-python tests/test_parser.py
-python tests/test_manager.py
+# Todos los tests (72)
+python -m pytest tests/ -v
+
+# Tests específicos
+python -m pytest tests/test_parser.py -v
+python -m pytest tests/test_notifier.py -v
 ```
+
+## 🤖 GitHub Actions
+
+| Workflow | Trigger | Descripción |
+|----------|---------|-------------|
+| **tests.yml** | push/PR a master | Tests en Python 3.10, 3.11, 3.12 |
+| **lint.yml** | push/PR a master | Flake8 + Mypy |
+| **build.yml** | tag v* o manual | Compila .exe con PyInstaller |
 
 ## 📄 Licencia
 
