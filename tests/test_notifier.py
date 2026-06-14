@@ -20,10 +20,17 @@ def notifier(mock_telegram):
 
 @pytest.mark.asyncio
 async def test_send_message(notifier, mock_telegram):
-    """Enviar un mensaje básico."""
+    """Enviar un mensaje básico — resuelve entidad primero."""
+    # Mock get_entity para que retorne un input peer simulado
+    mock_entity = AsyncMock()
+    mock_telegram.get_entity.return_value = mock_entity
+
     result = await notifier.send_message("Hello from bot!")
     assert result is True
-    mock_telegram.send_message.assert_called_once_with("test_chat", "Hello from bot!")
+    # Debe haber llamado a get_entity primero para resolver
+    mock_telegram.get_entity.assert_called_once_with("test_chat")
+    # Luego send_message con la entidad resuelta, no el raw
+    mock_telegram.send_message.assert_called_once_with(mock_entity, "Hello from bot!")
 
 
 @pytest.mark.asyncio

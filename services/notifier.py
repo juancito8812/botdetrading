@@ -15,6 +15,12 @@ class TelegramNotifier:
 
     Reusa el cliente Telethon existente. Se integra mediante hooks
     en engine.py, health_monitor.py y main.py.
+
+    IMPORTANTE: Telegram con cuentas de usuario (no bot) SOLO puede enviar a:
+      - Tu propio chat ("Mensajes Guardados") — siempre funciona
+      - Otros usuarios que HAYAN INICIADO conversación contigo primero
+      - Grupos donde la cuenta del bot SEA MIEMBRO
+      - Canales donde la cuenta del bot SEA MIEMBRO/ADMIN
     """
 
     def __init__(
@@ -27,6 +33,7 @@ class TelegramNotifier:
         self.chat_id = chat_id
         self.enabled = enabled
         self.history: List[str] = []
+        self._resolved_entity = None  # Cache de entidad resuelta
 
     def _add_to_history(self, text: str):
         """Agrega una entrada al historial (max 20)."""
@@ -39,27 +46,76 @@ class TelegramNotifier:
         """Retorna las últimas N notificaciones."""
         return self.history[-count:]
 
+    async def _resolve_chat_id(self) -> Any:
+        """
+        Convierte self.chat_id al tipo correcto y resuelve la entidad.
+
+        Retorna la entidad resuelta (int o Entity) para usar en send_message.
+        Primero intenta resolver con get_entity() para obtener un error claro
+        si la entidad no es accesible.
+        """
+        raw: int | str = self.chat_id
+        if isinstance(raw, str) and raw.lstrip('-').isdigit():
+            raw = int(raw)
+
+        # Si ya tenemos la entidad resuelta en caché, la retornamos
+        if self._resolved_entity is not None:
+            return self._resolved_entity
+
+        # Intentar resolver la entidad (obtener error claro si no existe/accesible)
+        try:
+            entity = await self.client.get_entity(raw)
+            self._resolved_entity = entity
+            return entity
+        except ValueError as e:
+            # No se pudo resolver - puede que el usuario/grupo no exista o
+            # la cuenta no tenga acceso. Registrar con contexto.
+            err_msg = str(e).lower()
+            if "cannot find any entity" in err_msg or "no user has" in err_msg:
+                logger.error(
+                    f"Telegram no encuentra la entidad con ID '{raw}'. "
+                    f"Para enviar a OTRO USUARIO: esa cuenta debe escribirte PRIMERO. "
+                    f"Para enviar a un GRUPO: la cuenta del bot debe ser MIEMBRO del grupo."
+                )
+            raise
+        except Exception:
+            # Si falla la resolución, intentar con el raw (por si acaso)
+            return raw
+
     async def send_message(self, text: str) -> bool:
         """
         Envía un mensaje de texto a Telegram.
+
         NOTA: El error 'event loop must not change' de Telethon es intermitente
         y el mensaje se envía igual. La reconexión la maneja main.py,
         no el notifier (para evitar crash del event loop en Windows).
+
+        Telethon (cuenta de usuario) SOLO puede enviar a:
+        - Tu propio ID (Siempre funciona)
+        - Usuarios que te hayan escrito antes
+        - Grupos donde estés agregado
         """
         if not self.enabled:
             return False
         try:
-            # Telethon requiere int para IDs numéricos, string para @usuarios
-            chat_id: int | str = self.chat_id
-            if isinstance(chat_id, str) and chat_id.lstrip('-').isdigit():
-                chat_id = int(chat_id)
-            await self.client.send_message(chat_id, text)
+            entity = await self._resolve_chat_id()
+            await self.client.send_message(entity, text)
             return True
+        except ValueError as e:
+            err_str = str(e).lower()
+            if "cannot find any entity" in err_str or "no user has" in err_str:
+                logger.error(
+                    f"❌ No se puede enviar el mensaje. "
+                    f"La entidad con ID '{self.chat_id}' no es accesible.\n"
+                    f"   📌 Para OTRO USUARIO: esa cuenta debe escribirte PRIMERO en Telegram.\n"
+                    f"   📌 Para un GRUPO: agrega la cuenta del bot al grupo."
+                )
+            else:
+                logger.error(f"Error enviando notificación: {e}")
+            return False
         except Exception as e:
             error_str = str(e).lower()
             if "event loop" in error_str and "must not change" in error_str:
-                # Error conocido de Telethon - el mensaje suele llegar igual
-                # No hacer disconnect() aquí porque rompe el event loop en Windows
                 logger.debug(f"Telethon event loop warning (el mensaje probablemente llegó): {e}")
             else:
                 logger.error(f"Error enviando notificación: {e}")

@@ -598,17 +598,35 @@ class TradingBotGUI:
             messagebox.showinfo(i18n.t("save"), i18n.t("tg_notif_chat_id_saved"))
 
     def send_test_notification(self):
-        """Envía una notificación de prueba."""
+        """Envía una notificación de prueba y muestra el resultado."""
         from core.engine import trading_engine
         notifier = trading_engine.notifier
         if notifier and notifier.enabled:
-            threading.Thread(
-                target=lambda: asyncio.run(notifier.send_message("🧪 Test desde MiBotTrading UI")),
-                daemon=True
-            ).start()
-            messagebox.showinfo("Test", "Notificación de prueba enviada.")
+            def _do_test():
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(
+                        notifier.send_message("🧪 Test desde MiBotTrading UI")
+                    )
+                    if result:
+                        self.root.after(0, lambda: messagebox.showinfo(
+                            "Test", "✅ Notificación enviada correctamente."
+                        ))
+                    else:
+                        self.root.after(0, lambda: messagebox.showerror(
+                            "Test", "❌ La notificación NO se pudo enviar.\nRevisa la consola para más detalles."
+                        ))
+                except Exception as e:
+                    self.root.after(0, lambda e=e: messagebox.showerror(
+                        "Test", f"❌ Error: {str(e)[:200]}"
+                    ))
+                finally:
+                    loop.close()
+            threading.Thread(target=_do_test, daemon=True).start()
         else:
-            messagebox.showwarning("Test", "El notificador no está activo.")
+            messagebox.showwarning("Test", "El notificador no está activo.\nInicia el bot primero.")
 
     def update_telegram_status(self, connected: bool, user: str = "", phone: str = "", chat_id: str = ""):
         """Actualiza el estado de conexión de Telegram en la UI."""
