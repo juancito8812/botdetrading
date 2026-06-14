@@ -1111,28 +1111,147 @@ class TradingBotGUI:
         ttk.Button(btn_frame, text=i18n.t("cancel"), command=popup.destroy).pack(side='left', padx=5)
 
     def _save_sl_modify(self, position, sl_var, popup):
-        """Guarda el nuevo SL."""
+        """Guarda el nuevo SL ejecutando la orden en el exchange."""
         try:
             new_sl = float(sl_var.get())
-            # En un escenario real aquí se cancelaría la orden SL anterior y se crearía una nueva
-            logger.info(f"📝 SL actualizado para {position.symbol}: {new_sl}")
-            messagebox.showinfo(i18n.t("positions_sl_updated"),
-                                f"SL: ${new_sl:.2f}")
-            popup.destroy()
-            self.update_positions_list()
         except ValueError:
             messagebox.showerror("Error", "SL debe ser un número válido.")
+            return
+
+        def _do_sl_update():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                client = exchange_service.clients.get(position.exchange_id)
+                if not client:
+                    self.root.after(0, lambda: messagebox.showerror(
+                        i18n.t("positions_close_error"), "Cliente no disponible"))
+                    loop.close()
+                    return
+
+                # 1. Cancelar SL anterior si existe
+                if position.sl_order_id:
+                    loop.run_until_complete(
+                        exchange_service.cancel_order(
+                            position.exchange_id, position.market_symbol, position.sl_order_id
+                        )
+                    )
+
+                # 2. Crear nuevo SL según exchange
+                sl_side = 'sell' if position.side.lower() == 'buy' else 'buy'
+                sl_amount = float(client.amount_to_precision(position.market_symbol, position.amount))
+                side_upper = 'LONG' if position.side.lower() == 'buy' else 'SHORT'
+
+                if position.exchange_id == "bingx":
+                    sl_order = loop.run_until_complete(client.create_order(
+                        position.market_symbol, 'TRIGGER_MARKET', sl_side, sl_amount, None, {
+                            'stopPrice': new_sl,
+                            'positionSide': side_upper
+                        }
+                    ))
+                elif position.exchange_id == "bitget":
+                    sl_order = loop.run_until_complete(client.create_order(
+                        position.market_symbol, 'limit', sl_side, sl_amount, new_sl, {
+                            'stopPrice': new_sl,
+                            'planType': 'normal_plan',
+                            'reduceOnly': True
+                        }
+                    ))
+                else:
+                    sl_order = loop.run_until_complete(client.create_order(
+                        position.market_symbol, 'market', sl_side, sl_amount, None, {
+                            'stopPrice': new_sl,
+                            'reduceOnly': True
+                        }
+                    ))
+
+                # Actualizar referencia en la posición
+                position.sl_order_id = sl_order.get('id', '')
+                pos_manager.save()
+
+                self.root.after(0, lambda: (
+                    messagebox.showinfo(i18n.t("positions_sl_updated"),
+                                        f"SL movido a ${new_sl:.2f}"),
+                    popup.destroy(),
+                    self.update_positions_list()
+                ))
+                logger.info(f"📝 SL actualizado para {position.symbol} → ${new_sl:.2f}")
+
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror(
+                    i18n.t("positions_close_error"), str(e)))
+                logger.error(f"Error actualizando SL {position.symbol}: {e}")
+            finally:
+                loop.close()
+
+        threading.Thread(target=_do_sl_update, daemon=True).start()
 
     def _add_tp(self, position, tp_var, tp_listbox):
-        """Agrega un nuevo TP (simulado)."""
+        """Agrega un nuevo TP ejecutando la orden en el exchange."""
         try:
             new_tp = float(tp_var.get())
-            tp_listbox.insert(tk.END, f"TP{len(position.tp_order_ids)+1}: ${new_tp:.2f}")
-            tp_var.set("")
-            messagebox.showinfo(i18n.t("positions_tp_added"),
-                                f"TP: ${new_tp:.2f} (requiere conexión con exchange para crear orden)")
         except ValueError:
             messagebox.showerror("Error", "TP debe ser un número válido.")
+            return
+
+        def _do_add_tp():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                client = exchange_service.clients.get(position.exchange_id)
+                if not client:
+                    self.root.after(0, lambda: messagebox.showerror(
+                        i18n.t("positions_close_error"), "Cliente no disponible"))
+                    loop.close()
+                    return
+
+                tp_side = 'sell' if position.side.lower() == 'buy' else 'buy'
+                tp_amount = float(client.amount_to_precision(position.market_symbol, position.amount))
+                side_upper = 'LONG' if position.side.lower() == 'buy' else 'SHORT'
+
+                if position.exchange_id == "bingx":
+                    tp_order = loop.run_until_complete(client.create_order(
+                        position.market_symbol, 'TRIGGER_LIMIT', tp_side, tp_amount, new_tp, {
+                            'stopPrice': new_tp,
+                            'positionSide': side_upper
+                        }
+                    ))
+                elif position.exchange_id == "bitget":
+                    tp_order = loop.run_until_complete(client.create_order(
+                        position.market_symbol, 'limit', tp_side, tp_amount, new_tp, {
+                            'stopPrice': new_tp,
+                            'planType': 'normal_plan',
+                            'reduceOnly': True
+                        }
+                    ))
+                else:
+                    tp_order = loop.run_until_complete(client.create_order(
+                        position.market_symbol, 'limit', tp_side, tp_amount, new_tp, {
+                            'stopPrice': new_tp,
+                            'reduceOnly': True
+                        }
+                    ))
+
+                tp_id = tp_order.get('id', '')
+                position.tp_order_ids.append(tp_id)
+                pos_manager.save()
+
+                self.root.after(0, lambda: (
+                    tp_listbox.insert(tk.END, f"TP{len(position.tp_order_ids)}: ${new_tp:.2f}"),
+                    tp_var.set(""),
+                    messagebox.showinfo(i18n.t("positions_tp_added"),
+                                        f"TP ${new_tp:.2f} creado en {position.exchange_id}")
+                ))
+                logger.info(f"🎯 Nuevo TP agregado para {position.symbol} → ${new_tp:.2f}")
+
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror(
+                    i18n.t("positions_close_error"), str(e)))
+                logger.error(f"Error agregando TP {position.symbol}: {e}")
+            finally:
+                loop.close()
+
+        threading.Thread(target=_do_add_tp, daemon=True).start()
 
     def _close_position(self, position):
         """Cierra una posición en el exchange."""
