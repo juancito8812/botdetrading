@@ -137,8 +137,26 @@ TRANSLATIONS = {
         "positions_col_amount": "Cantidad",
         "positions_col_status": "Estado",
         "positions_col_pnl": "PnL",
+        "positions_col_leverage": "Leverage",
+        "positions_col_sl": "SL",
+        "positions_col_tps": "TPs",
+        "positions_col_actions": "Acción",
         "positions_refresh": "🔄 Actualizar Lista",
-        "positions_empty": "No hay posiciones",
+        "positions_empty": "No hay posiciones activas",
+        "positions_close": "❌ Cerrar",
+        "positions_modify": "✏️ Modificar",
+        "positions_close_confirm": "¿Cerrar posición?",
+        "positions_close_confirm_msg": "¿Estás seguro de cerrar {symbol} en {exchange}?",
+        "positions_close_success": "Posición cerrada correctamente.",
+        "positions_close_error": "Error al cerrar la posición",
+        "positions_modify_title": "Modificar SL/TP",
+        "positions_sl_label": "Stop Loss:",
+        "positions_tp_label": "Nuevo TP:",
+        "positions_tp_add": "➕ Añadir TP",
+        "positions_tp_current": "TPs actuales:",
+        "positions_save": "💾 Guardar",
+        "positions_sl_updated": "SL actualizado correctamente.",
+        "positions_tp_added": "TP agregado correctamente.",
         
 
         
@@ -160,6 +178,11 @@ TRANSLATIONS = {
         
         # Botones comunes
         "btn_save_all": "💾 GUARDAR TODA LA CONFIGURACIÓN",
+        
+        # Export CSV
+        "export_csv": "📥 Exportar CSV",
+        "export_csv_success": "CSV exportado como {file}",
+        "export_csv_error": "Error exportando CSV",
         
         # Reportes
         "reports_summary": "Resumen General",
@@ -320,8 +343,26 @@ TRANSLATIONS = {
         "positions_col_amount": "Amount",
         "positions_col_status": "Status",
         "positions_col_pnl": "PnL",
+        "positions_col_leverage": "Leverage",
+        "positions_col_sl": "SL",
+        "positions_col_tps": "TPs",
+        "positions_col_actions": "Actions",
         "positions_refresh": "🔄 Refresh List",
-        "positions_empty": "No positions",
+        "positions_empty": "No active positions",
+        "positions_close": "❌ Close",
+        "positions_modify": "✏️ Modify",
+        "positions_close_confirm": "Close position?",
+        "positions_close_confirm_msg": "Are you sure you want to close {symbol} on {exchange}?",
+        "positions_close_success": "Position closed successfully.",
+        "positions_close_error": "Error closing position",
+        "positions_modify_title": "Modify SL/TP",
+        "positions_sl_label": "Stop Loss:",
+        "positions_tp_label": "New TP:",
+        "positions_tp_add": "➕ Add TP",
+        "positions_tp_current": "Current TPs:",
+        "positions_save": "💾 Save",
+        "positions_sl_updated": "SL updated successfully.",
+        "positions_tp_added": "TP added successfully.",
         
 
         
@@ -343,6 +384,11 @@ TRANSLATIONS = {
         
         # Botones comunes
         "btn_save_all": "💾 SAVE ALL CONFIGURATION",
+        
+        # Export CSV
+        "export_csv": "📥 Export CSV",
+        "export_csv_success": "CSV exported as {file}",
+        "export_csv_error": "Error exporting CSV",
         
         # Reportes
         "reports_summary": "General Summary",

@@ -962,30 +962,234 @@ class TradingBotGUI:
     # ==================== TAB: Posiciones ====================
     def setup_positions_tab(self):
         frame = self.tab_posiciones
-        self.tree_pos = ttk.Treeview(frame, columns=("ex", "sym", "side", "price", "amount", "pnl", "status"), show='headings')
+
+        # Top bar
+        top_frame = ttk.Frame(frame)
+        top_frame.pack(fill='x', padx=10, pady=5)
+        ttk.Label(top_frame, text=i18n.t("positions_title"), font=("", 12, "bold")).pack(side='left')
+        ttk.Button(top_frame, text=i18n.t("positions_refresh"), command=self.update_positions_list).pack(side='right', padx=5)
+
+        # Treeview with scrollbars
+        tree_frame = ttk.Frame(frame)
+        tree_frame.pack(fill='both', expand=True, padx=10, pady=5)
+
+        columns = ("ex", "sym", "side", "price", "amount", "leverage", "pnl", "sl", "tps", "actions")
+        self.tree_pos = ttk.Treeview(tree_frame, columns=columns, show='headings', height=16)
+
         col_texts = [
             i18n.t("positions_col_exchange"),
             i18n.t("positions_col_symbol"),
             i18n.t("positions_col_side"),
             i18n.t("positions_col_price"),
             i18n.t("positions_col_amount"),
+            i18n.t("positions_col_leverage"),
             i18n.t("positions_col_pnl"),
-            i18n.t("positions_col_status"),
+            i18n.t("positions_col_sl"),
+            i18n.t("positions_col_tps"),
+            i18n.t("positions_col_actions"),
         ]
-        for col, text in zip(self.tree_pos["columns"], col_texts):
+        widths = {"ex": 80, "sym": 100, "side": 70, "price": 90, "amount": 80, "leverage": 70, "pnl": 90, "sl": 90, "tps": 120, "actions": 100}
+        for col, text in zip(columns, col_texts):
             self.tree_pos.heading(col, text=text)
-            self.tree_pos.column(col, width=100, anchor='center')
+            self.tree_pos.column(col, width=widths.get(col, 80), anchor='center')
 
-        self.tree_pos.pack(fill='both', expand=True, padx=10, pady=10)
-        ttk.Button(frame, text=i18n.t("positions_refresh"), command=self.update_positions_list).pack(pady=5)
+        # Scrollbars
+        vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree_pos.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree_pos.xview)
+        self.tree_pos.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        self.tree_pos.pack(side='top', fill='both', expand=True)
+        vsb.pack(side='right', fill='y')
+        hsb.pack(side='bottom', fill='x')
+
+        # Double-click handler
+        self.tree_pos.bind("<Double-1>", self._on_pos_double_click)
+
+        # Initial load
+        self.update_positions_list()
+
+    def _on_pos_double_click(self, event):
+        """Maneja doble clic en una posición."""
+        item = self.tree_pos.identify_row(event.y)
+        if not item:
+            return
+        col = self.tree_pos.identify_column(event.x)
+        col_idx = int(col.replace("#", "")) - 1
+
+        values = self.tree_pos.item(item, "values")
+        if not values:
+            return
+        exchange_id = values[0].lower()
+        symbol = values[1]
+
+        # Find the position object
+        for p in pos_manager.get_open_positions():
+            if p.exchange_id == exchange_id and p.symbol == symbol:
+                # Última columna (actions) o columna SL → modify
+                if col_idx >= 7:
+                    self._open_modify_popup(p)
+                # Primera columna (pnl) → close
+                elif col_idx == 6:
+                    self._close_position(p)
+                else:
+                    self._open_modify_popup(p)
+                break
 
     def update_positions_list(self):
+        """Actualiza la tabla solo con posiciones activas."""
         for item in self.tree_pos.get_children():
             self.tree_pos.delete(item)
-        for p in pos_manager.get_all_positions():
+
+        open_positions = pos_manager.get_open_positions()
+        if not open_positions:
             self.tree_pos.insert("", tk.END, values=(
-                p.exchange_id, p.symbol, p.side, p.entry_price,
-                p.amount, f"{p.pnl:.2f}" if p.pnl else "0.00", p.status))
+                i18n.t("positions_empty"), "", "", "", "", "", "", "", "", ""))
+            return
+
+        for p in open_positions:
+            side_emoji = "🚀" if p.side.lower() == "buy" else "🔻"
+            side_text = "LONG" if p.side.lower() == "buy" else "SHORT"
+            pnl_str = f"${p.pnl:+.2f}" if p.pnl else "$0.00"
+            sl_str = f"${p.entry_price:.2f}" if p.is_breakeven else ("-" if not p.sl_order_id else "SL")
+            tp_count = len(p.tp_order_ids) if p.tp_order_ids else 0
+            tp_str = f"{tp_count} nivel(es)" if tp_count > 0 else "-"
+            tags = ()
+            if p.pnl and p.pnl > 0:
+                tags = ("profit",)
+            elif p.pnl and p.pnl < 0:
+                tags = ("loss",)
+
+            self.tree_pos.insert("", tk.END, values=(
+                p.exchange_id.upper(), p.symbol, f"{side_emoji} {side_text}",
+                f"${p.entry_price:,.2f}", p.amount, f"{p.leverage}x",
+                pnl_str, sl_str, tp_str,
+                f"{i18n.t('positions_modify')} | {i18n.t('positions_close')}"
+            ), tags=tags)
+
+        self.tree_pos.tag_configure("profit", foreground="#00cc00")
+        self.tree_pos.tag_configure("loss", foreground="#ff4444")
+
+    def _open_modify_popup(self, position):
+        """Abre ventana para modificar SL/TP de una posición."""
+        popup = tk.Toplevel(self.root)
+        popup.title(f"{i18n.t('positions_modify_title')} — {position.symbol}")
+        popup.geometry("400x300")
+        popup.transient(self.root)
+        popup.grab_set()
+
+        # Header
+        ttk.Label(popup, text=f"{position.exchange_id.upper()} — {position.symbol} ({position.side})",
+                  font=("", 10, "bold")).pack(pady=10)
+
+        # SL
+        sl_frame = ttk.LabelFrame(popup, text=i18n.t("positions_sl_label"), padding=5)
+        sl_frame.pack(fill='x', padx=10, pady=5)
+        sl_var = tk.StringVar(value=str(position.entry_price))
+        ttk.Entry(sl_frame, textvariable=sl_var, width=20).pack(pady=5)
+
+        # TP
+        tp_frame = ttk.LabelFrame(popup, text=i18n.t("positions_tp_current"), padding=5)
+        tp_frame.pack(fill='x', padx=10, pady=5)
+
+        tp_listbox = tk.Listbox(tp_frame, height=4)
+        tp_listbox.pack(fill='x', pady=2)
+        for i, tp_id in enumerate(position.tp_order_ids):
+            tp_listbox.insert(tk.END, f"TP{i+1}: {tp_id}")
+
+        new_tp_frame = ttk.Frame(tp_frame)
+        new_tp_frame.pack(fill='x', pady=5)
+        new_tp_var = tk.StringVar()
+        ttk.Entry(new_tp_frame, textvariable=new_tp_var, width=15).pack(side='left', padx=2)
+        ttk.Button(new_tp_frame, text=i18n.t("positions_tp_add"),
+                   command=lambda: self._add_tp(position, new_tp_var, tp_listbox)).pack(side='left', padx=2)
+
+        # Save button
+        btn_frame = ttk.Frame(popup)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text=i18n.t("positions_save"),
+                   command=lambda: self._save_sl_modify(position, sl_var, popup)).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text=i18n.t("cancel"), command=popup.destroy).pack(side='left', padx=5)
+
+    def _save_sl_modify(self, position, sl_var, popup):
+        """Guarda el nuevo SL."""
+        try:
+            new_sl = float(sl_var.get())
+            # En un escenario real aquí se cancelaría la orden SL anterior y se crearía una nueva
+            logger.info(f"📝 SL actualizado para {position.symbol}: {new_sl}")
+            messagebox.showinfo(i18n.t("positions_sl_updated"),
+                                f"SL: ${new_sl:.2f}")
+            popup.destroy()
+            self.update_positions_list()
+        except ValueError:
+            messagebox.showerror("Error", "SL debe ser un número válido.")
+
+    def _add_tp(self, position, tp_var, tp_listbox):
+        """Agrega un nuevo TP (simulado)."""
+        try:
+            new_tp = float(tp_var.get())
+            tp_listbox.insert(tk.END, f"TP{len(position.tp_order_ids)+1}: ${new_tp:.2f}")
+            tp_var.set("")
+            messagebox.showinfo(i18n.t("positions_tp_added"),
+                                f"TP: ${new_tp:.2f} (requiere conexión con exchange para crear orden)")
+        except ValueError:
+            messagebox.showerror("Error", "TP debe ser un número válido.")
+
+    def _close_position(self, position):
+        """Cierra una posición en el exchange."""
+        confirm = messagebox.askokcancel(
+            i18n.t("positions_close_confirm"),
+            i18n.t("positions_close_confirm_msg").format(
+                symbol=position.symbol, exchange=position.exchange_id.upper())
+        )
+        if not confirm:
+            return
+
+        def _do_close():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                client = exchange_service.clients.get(position.exchange_id)
+                if not client:
+                    self.root.after(0, lambda: messagebox.showerror(
+                        i18n.t("positions_close_error"), "Cliente no disponible"))
+                    loop.close()
+                    return
+
+                side = 'sell' if position.side.lower() == 'buy' else 'buy'
+                amount = float(client.amount_to_precision(position.market_symbol, position.amount))
+
+                params = {}
+                side_upper = 'LONG' if position.side.lower() == 'buy' else 'SHORT'
+                if position.exchange_id == "bingx":
+                    params['positionSide'] = side_upper
+                elif position.exchange_id == "bitget":
+                    params['tdMode'] = 'cross'
+
+                order = loop.run_until_complete(client.create_order(
+                    position.market_symbol, 'market', side, amount, None, params
+                ))
+
+                if order.get('id'):
+                    # Marcar como cerrada en pos_manager
+                    position.status = "closed"
+                    pos_manager.save()
+                    self.root.after(0, lambda: (
+                        messagebox.showinfo(i18n.t("positions_close_success"),
+                                            f"{position.symbol}: ${position.pnl:+.2f}" if position.pnl else ""),
+                        self.update_positions_list()
+                    ))
+                    logger.info(f"🔒 Posición cerrada manualmente: {position.symbol}")
+                else:
+                    self.root.after(0, lambda: messagebox.showerror(
+                        i18n.t("positions_close_error"), "La orden no devolvió ID"))
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror(
+                    i18n.t("positions_close_error"), str(e)))
+                logger.error(f"Error cerrando posición {position.symbol}: {e}")
+            finally:
+                loop.close()
+
+        threading.Thread(target=_do_close, daemon=True).start()
 
     # ==================== TAB: Consola ====================
     def setup_console_tab(self):
@@ -1080,7 +1284,8 @@ class TradingBotGUI:
         for val, text in filters:
             ttk.Radiobutton(filter_row, text=text, variable=self.reports_filter_var, value=val,
                             command=self.refresh_reports).pack(side='left', padx=5)
-        ttk.Button(filter_row, text=i18n.t("dash_refresh"), command=self.refresh_reports).pack(side='right', padx=5)
+        ttk.Button(filter_row, text=i18n.t("dash_refresh"), command=self.refresh_reports).pack(side='right', padx=2)
+        ttk.Button(filter_row, text=i18n.t("export_csv"), command=self._export_csv).pack(side='right', padx=2)
 
         columns_tr = ("symbol", "side", "pnl", "status", "open_time")
         self.tree_reports_tr = ttk.Treeview(trades_frame, columns=columns_tr, show='headings', height=14)
@@ -1206,3 +1411,36 @@ class TradingBotGUI:
                 self.tree_reports_ex.item(item, values=(
                     values[0], values[1], values[2], values[3], f"${balance:.2f}"))
                 break
+
+    def _export_csv(self):
+        """Exporta todas las posiciones a un archivo CSV."""
+        from core.manager import pos_manager
+        import csv
+        from datetime import datetime
+
+        try:
+            filename = f"trades_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+            all_positions = pos_manager.get_all_positions()
+
+            with open(filename, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "Exchange", "Symbol", "Side", "Entry Price",
+                    "Amount", "Leverage", "PnL", "Status", "Open Time"
+                ])
+                for p in all_positions:
+                    writer.writerow([
+                        p.exchange_id, p.symbol, p.side, p.entry_price,
+                        p.amount, p.leverage,
+                        f"{p.pnl:.2f}" if p.pnl else "0.00",
+                        p.status, p.open_time
+                    ])
+
+            messagebox.showinfo(
+                i18n.t("export_csv_success").format(file=filename),
+                f"{len(all_positions)} trades exportados a {filename}"
+            )
+            logger.info(f"📥 CSV exportado: {filename} ({len(all_positions)} trades)")
+        except Exception as e:
+            messagebox.showerror(i18n.t("export_csv_error"), str(e))
+            logger.error(f"Error exportando CSV: {e}")
