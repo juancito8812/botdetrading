@@ -114,6 +114,25 @@ TRANSLATIONS = {
         "settings_task_error": "Error al configurar inicio automático:",
         "settings_task_exists": "La tarea de inicio ya existe.",
         
+        # Backup / Restore
+        "backup_title": "💾 Respaldo de Configuración",
+        "backup_export": "📤 Exportar configuración",
+        "backup_import": "📥 Importar configuración",
+        "backup_desc": "Exporta API keys, riesgo, canales y ajustes en un archivo .botconfig cifrado.",
+        "backup_password": "Contraseña de cifrado:",
+        "backup_confirm_password": "Confirmar contraseña:",
+        "backup_input_password": "Contraseña:",
+        "backup_success": "Configuración exportada correctamente.",
+        "backup_import_success": "Configuración importada correctamente.\nReinicia la aplicación para aplicar todos los cambios.",
+        "backup_error": "Error al procesar el respaldo",
+        "backup_wrong_password": "Contraseña incorrecta o archivo corrupto.",
+        "backup_passwords_mismatch": "Las contraseñas no coinciden.",
+        "backup_password_min": "La contraseña debe tener al menos 4 caracteres.",
+        "backup_file_desc": "Archivo de respaldo (*.botconfig)",
+        "backup_last": "Último respaldo",
+        "backup_never": "Nunca",
+        "backup_file": "Archivo",
+        
         # Canales
         "channels_id": "ID de Canal:",
         "channels_add": "➕ Añadir",
@@ -319,6 +338,25 @@ TRANSLATIONS = {
         "settings_task_removed": "Auto-start task removed.",
         "settings_task_error": "Error configuring auto-start:",
         "settings_task_exists": "Auto-start task already exists.",
+        
+        # Backup / Restore
+        "backup_title": "💾 Config Backup",
+        "backup_export": "📤 Export configuration",
+        "backup_import": "📥 Import configuration",
+        "backup_desc": "Export API keys, risk, channels and settings in an encrypted .botconfig file.",
+        "backup_password": "Encryption password:",
+        "backup_confirm_password": "Confirm password:",
+        "backup_input_password": "Password:",
+        "backup_success": "Configuration exported successfully.",
+        "backup_import_success": "Configuration imported successfully.\nRestart the application to apply all changes.",
+        "backup_error": "Error processing backup",
+        "backup_wrong_password": "Wrong password or corrupted file.",
+        "backup_passwords_mismatch": "Passwords do not match.",
+        "backup_password_min": "Password must be at least 4 characters.",
+        "backup_file_desc": "Backup file (*.botconfig)",
+        "backup_last": "Last backup",
+        "backup_never": "Never",
+        "backup_file": "File",
         
         # Canales
         "channels_id": "Channel ID:",

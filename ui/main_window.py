@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, scrolledtext
 import asyncio
 import threading
 import logging
+import os
 
 from utils.config import (
     load_api_creds, save_api_creds, load_risk_config, save_risk_config,
@@ -13,6 +14,7 @@ from utils.settings_manager import (
     load_settings, save_settings,
     is_autostart_enabled, enable_autostart, disable_autostart
 )
+from utils import config_backup
 from services.exchange_service import exchange_service
 from services.market_data import fetch_top20, fetch_market_indices
 from core.manager import pos_manager
@@ -617,10 +619,132 @@ class TradingBotGUI:
         self.btn_install_task = ttk.Button(btn_frame, text=i18n.t("settings_install_task"), command=self._install_autostart_task)
         self.btn_install_task.pack(side='left', padx=5)
 
-        self.btn_remove_task = ttk.Button(btn_frame, text=i18n.t("settings_uninstall_task"), command=self._remove_autostart_task)
+        self.btn_remove_task =        ttk.Button(btn_frame, text=i18n.t("settings_uninstall_task"), command=self._remove_autostart_task)
         self.btn_remove_task.pack(side='left', padx=5)
 
         self._update_autostart_status()
+
+        # --- Config Backup ---
+        backup_frame = ttk.LabelFrame(frame, text=i18n.t("backup_title"), padding=10)
+        backup_frame.pack(fill='x', padx=10, pady=10)
+
+        ttk.Label(backup_frame, text=i18n.t("backup_desc"), wraplength=700, foreground="gray").pack(anchor='w', pady=5)
+
+        backup_btn_frame = ttk.Frame(backup_frame)
+        backup_btn_frame.pack(fill='x', pady=5)
+        ttk.Button(backup_btn_frame, text=i18n.t("backup_export"), command=self._export_config).pack(side='left', padx=5)
+        ttk.Button(backup_btn_frame, text=i18n.t("backup_import"), command=self._import_config).pack(side='left', padx=5)
+
+        # Backup status label
+        self.backup_status_label = ttk.Label(backup_frame, text="", foreground="gray")
+        self.backup_status_label.pack(anchor='w', padx=5, pady=5)
+        self._update_backup_status()
+
+    def _export_config(self):
+        """Exporta toda la configuración a un archivo .botconfig cifrado."""            from tkinter import filedialog
+
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".botconfig",
+            filetypes=[(i18n.t("backup_file_desc"), "*.botconfig")],
+            title=i18n.t("backup_export")
+        )
+        if not filepath:
+            return
+
+        # Popup para contraseña
+        pw_popup = tk.Toplevel(self.root)
+        pw_popup.title(i18n.t("backup_title"))
+        pw_popup.geometry("350x200")
+        pw_popup.transient(self.root)
+        pw_popup.grab_set()
+
+        ttk.Label(pw_popup, text=i18n.t("backup_password"), font=("", 10)).pack(pady=10)
+        pw_var = tk.StringVar()
+        ttk.Entry(pw_popup, textvariable=pw_var, show="*", width=30).pack(pady=5)
+
+        ttk.Label(pw_popup, text=i18n.t("backup_confirm_password")).pack()
+        pw_confirm_var = tk.StringVar()
+        ttk.Entry(pw_popup, textvariable=pw_confirm_var, show="*", width=30).pack(pady=5)
+
+        def _do_export():
+            pw = pw_var.get()
+            if len(pw) < 4:
+                messagebox.showerror(i18n.t("backup_error"), i18n.t("backup_password_min"))
+                return
+            if pw != pw_confirm_var.get():
+                messagebox.showerror(i18n.t("backup_error"), i18n.t("backup_passwords_mismatch"))
+                return
+
+            success = config_backup.export_config(pw, filepath)
+            if success:
+                # Guardar timestamp del backup en settings
+                self.settings["last_backup_at"] = datetime.now().isoformat()
+                self.settings["last_backup_file"] = filepath
+                save_settings(self.settings)
+                self._update_backup_status()
+
+                messagebox.showinfo(i18n.t("backup_title"), i18n.t("backup_success"))
+                pw_popup.destroy()
+            else:
+                messagebox.showerror(i18n.t("backup_error"), i18n.t("backup_error"))
+
+        ttk.Button(pw_popup, text=i18n.t("backup_export"), command=_do_export).pack(pady=10)
+        ttk.Button(pw_popup, text=i18n.t("cancel"), command=pw_popup.destroy).pack()
+
+    def _import_config(self):
+        """Importa configuración desde un archivo .botconfig cifrado."""
+        from tkinter import filedialog
+
+        filepath = filedialog.askopenfilename(
+            filetypes=[(i18n.t("backup_file_desc"), "*.botconfig")],
+            title=i18n.t("backup_import")
+        )
+        if not filepath:
+            return
+
+        # Popup para contraseña
+        pw_popup = tk.Toplevel(self.root)
+        pw_popup.title(i18n.t("backup_title"))
+        pw_popup.geometry("350x150")
+        pw_popup.transient(self.root)
+        pw_popup.grab_set()
+
+        ttk.Label(pw_popup, text=i18n.t("backup_input_password"), font=("", 10)).pack(pady=10)
+        pw_var = tk.StringVar()
+        ttk.Entry(pw_popup, textvariable=pw_var, show="*", width=30).pack(pady=5)
+
+        def _do_import():
+            pw = pw_var.get()
+            result = config_backup.import_config(pw, filepath)
+            if result:
+                messagebox.showinfo(
+                    i18n.t("backup_title"),
+                    i18n.t("backup_import_success")
+                )
+                pw_popup.destroy()
+            else:
+                messagebox.showerror(i18n.t("backup_error"), i18n.t("backup_wrong_password"))
+
+        ttk.Button(pw_popup, text=i18n.t("backup_import"), command=_do_import).pack(pady=10)
+        ttk.Button(pw_popup, text=i18n.t("cancel"), command=pw_popup.destroy).pack()
+
+    def _update_backup_status(self):
+        """Actualiza la etiqueta con la fecha del último respaldo."""
+        last_at = self.settings.get("last_backup_at", "")
+        last_file = self.settings.get("last_backup_file", "")
+        if last_at:
+            try:
+                dt = datetime.fromisoformat(last_at)
+                fecha = dt.strftime("%d/%m/%Y %H:%M")
+                texto = f"🟢 {i18n.t('backup_last')}: {fecha}"
+                if last_file:
+                    nombre = os.path.basename(last_file)
+                    texto += f"  |  {i18n.t('backup_file')}: {nombre}"
+                self.backup_status_label.config(text=texto, foreground="#00cc00")
+            except Exception:
+                self.backup_status_label.config(text=f"⚪ {i18n.t('backup_last')}: {i18n.t('backup_never')}", foreground="gray")
+        else:
+            self.backup_status_label.config(text=f"⚪ {i18n.t('backup_last')}: {i18n.t('backup_never')}", foreground="gray")
 
     def _on_lang_selected(self, event=None):
         lang = self.lang_var.get()
