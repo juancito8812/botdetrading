@@ -60,6 +60,10 @@ class TradingBotApp:
         self.gui.btn_toggle_bot.config(text="🚀 INICIAR BOT")
         logger.info("Solicitud de detención enviada.")
 
+        # Detener watchdog (método sincrónico, no necesita create_task)
+        if self.loop:
+            self.loop.call_soon_threadsafe(trading_engine.stop_watchdog)
+
         # Limpiar conexiones de exchanges
         if self.loop:
             self.loop.call_soon_threadsafe(
@@ -288,8 +292,9 @@ class TradingBotApp:
                         )
                     health_monitor.on_status_change = health_callback
 
-                # Asegurar que el watchdog se esté ejecutando
-                asyncio.create_task(trading_engine.watchdog())
+                # Asegurar que el watchdog se esté ejecutando (solo uno a la vez)
+                trading_engine.stop_watchdog()
+                trading_engine._watchdog_task = asyncio.create_task(trading_engine.watchdog())
 
                 # Bloquear hasta que se pierda la conexión
                 await tc.run_until_disconnected()

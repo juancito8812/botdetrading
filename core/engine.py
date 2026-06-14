@@ -1,16 +1,21 @@
 import asyncio
+import json
 import logging
 import time
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from models.data_classes import Signal, Position
 from services.exchange_service import exchange_service
 from core.manager import pos_manager
-from utils.config import load_risk_config
+from utils.config import load_risk_config, DATA_DIR
 from utils.resilience.health_monitor import HealthMonitor
 from utils.resilience.decorators import log_errors_decorator
 from services.notifier import TelegramNotifier
+from utils.helpers import atomic_write_json
 
 logger = logging.getLogger("TradingBot")
+
+# Archivo de persistencia para órdenes LIMIT pendientes
+_PENDING_LIMITS_FILE = DATA_DIR / "pending_limits.json"
 
 # Instancia global de HealthMonitor
 health_monitor = HealthMonitor(check_interval=60.0)
@@ -19,11 +24,33 @@ class TradingEngine:
     def __init__(self):
         self.active_tasks = set()
         self.processed_signals = {}  # {(symbol, side): timestamp}
-        self._pending_limit_orders = {}  # {order_id: {exchange_id, market_symbol, signal_data}}
+        self._pending_limit_orders: Dict[str, Any] = {}  # {order_id: {exchange_id, market_symbol, signal_data}}
+        self._watchdog_task: Optional[asyncio.Task] = None
         self.health_monitor = health_monitor
         self._health_check_task = None
         self.notifier: Optional[TelegramNotifier] = None
         self._last_daily_report = 0.0  # timestamp del último reporte diario
+        # Cargar órdenes LIMIT pendientes desde disco
+        self._load_pending_limits()
+
+    def _load_pending_limits(self):
+        """Carga órdenes LIMIT pendientes desde archivo (persistencia entre reinicios)."""
+        try:
+            if _PENDING_LIMITS_FILE.exists():
+                with open(_PENDING_LIMITS_FILE, "r") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    self._pending_limit_orders = data
+                    logger.info(f"📂 Cargadas {len(data)} órdenes LIMIT pendientes desde disco")
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudieron cargar órdenes LIMIT pendientes: {e}")
+
+    def _save_pending_limits(self):
+        """Persiste órdenes LIMIT pendientes a disco."""
+        try:
+            atomic_write_json(_PENDING_LIMITS_FILE, self._pending_limit_orders, indent=2)
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudieron persistir órdenes LIMIT: {e}")
 
     def _is_duplicate(self, symbol, side, exchange_id, cooldown=30):
         key = (symbol, side, exchange_id)
@@ -335,6 +362,7 @@ class TradingEngine:
                 "usdt_to_use": usdt_to_use,
                 "timestamp": time.time()
             }
+            self._save_pending_limits()  # Persistir inmediatamente
             logger.info(f"✅ Orden LIMIT colocada: {order_id} a {limit_price}")
             return True, "limit_placed"
         except Exception as e:
@@ -411,6 +439,7 @@ class TradingEngine:
                 logger.warning(f"⚠️ DCA {i+1} falló en {exchange_id}: {e}")
 
         if placed_count > 0:
+            self._save_pending_limits()  # Persistir DCA
             logger.info(f"✅ {placed_count}/{dca_parts} órdenes DCA colocadas en {exchange_id}")
             return True, "limit_placed"
         return False, "No se pudo colocar ninguna orden DCA"
@@ -578,6 +607,13 @@ class TradingEngine:
                 exchange_id, market_symbol, entry_price
             )
 
+    def stop_watchdog(self):
+        """Cancela el watchdog si está corriendo."""
+        if self._watchdog_task and not self._watchdog_task.done():
+            self._watchdog_task.cancel()
+            self._watchdog_task = None
+            logger.info("⏹️ Watchdog detenido")
+
     async def watchdog(self):
         """Vigila órdenes pendientes, sincroniza estados y monitorea salud."""
         
@@ -631,6 +667,8 @@ class TradingEngine:
 
                 for oid in stale_orders:
                     self._pending_limit_orders.pop(oid, None)
+                if stale_orders:
+                    self._save_pending_limits()
 
                 # 1. Sincronizar posiciones abiertas
                 open_positions = pos_manager.get_open_positions()
@@ -709,6 +747,10 @@ class TradingEngine:
                 # Health check de exchanges activos
                 for ex_id in list(exchange_service.clients.keys()):
                     self.health_monitor.add_exchange(ex_id)
+
+                # Sincronizar circuit breaker states con health monitor
+                from services.exchange_service import _circuit_breakers
+                self.health_monitor.sync_circuit_breaker_states(_circuit_breakers)
 
                 # 2. Reintentar exchanges fallidos
                 failed_snapshot = list(exchange_service.failed_exchanges)
@@ -834,15 +876,27 @@ class TradingEngine:
     async def _health_check_exchange(self, exchange_id: str) -> bool:
         """
         Función de health check para un exchange.
-        Intenta obtener un ticker de prueba para verificar conectividad.
+        Usa los mercados disponibles del exchange para probar conectividad,
+        fallback a símbolos hardcodeados.
         """
-        # Intentar varios formatos de símbolo comunes
-        symbols_to_try = ["BTC/USDT", "BTC/USDT:USDT", "BTCUSDT"]
+        # Primero intentar usar mercados reales del exchange
+        client = exchange_service.clients.get(exchange_id)
+        if client and client.markets:
+            # Buscar un mercado USDT swap/future activo
+            for sym, market in client.markets.items():
+                if 'USDT' in sym and (market.get('swap') or market.get('future')):
+                    try:
+                        price = await exchange_service.get_ticker_price(exchange_id, sym)
+                        if price > 0:
+                            return True
+                    except Exception:
+                        continue
+
+        # Fallback a símbolos hardcodeados comunes
+        symbols_to_try = ["BTC/USDT", "BTC/USDT:USDT", "BTCUSDT", "ETH/USDT", "ETH/USDT:USDT"]
         for sym in symbols_to_try:
             try:
-                price = await exchange_service.get_ticker_price(
-                    exchange_id, sym
-                )
+                price = await exchange_service.get_ticker_price(exchange_id, sym)
                 if price > 0:
                     return True
             except Exception:

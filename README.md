@@ -144,11 +144,15 @@ MiBotTrading/
 ├── utils/
 │   ├── config_backup.py        # Export/Import cifrado con AES (cryptography.fernet)
 ├── MiBotTrading.spec           # Spec de PyInstaller para compilar .exe
-├── tests/                      # ★ TESTS (82 tests)
+├── tests/                      # ★ TESTS (197 tests)
 │   ├── test_parser.py
-│   ├── test_config_backup.py   # 10 tests: cifrado/descifrado, round-trip, errores
+│   ├── test_config_backup.py   # Cifrado/descifrado, round-trip, errores
 │   ├── test_manager.py
 │   ├── test_notifier.py
+│   ├── test_engine.py          # 31 tests: TradingEngine (watchdog, DCA, trailing, etc.)
+│   ├── test_exchange_service.py # 44 tests: ExchangeService (CCXT clients)
+│   ├── test_settings_manager.py # 21 tests: Settings (idioma, autostart Windows)
+│   ├── test_market_data.py     # 19 tests: CoinGecko caché, 429, timeout
 │   └── ... (resiliencia, decoradores, etc.)
 ├── docs/superpowers/           # ★ DOCUMENTACIÓN DE DISEÑO
 │   ├── specs/                  # Especificaciones de features
@@ -184,13 +188,14 @@ El instalador para Windows se genera con Inno Setup usando `Installer_Script.iss
 ## 🧪 Tests
 
 ```bash
-# Todos los tests (82)
+# Todos los tests (197)
 python -m pytest tests/ -v
 
 # Tests específicos
 python -m pytest tests/test_parser.py -v
 python -m pytest tests/test_notifier.py -v
-python -m pytest tests/test_config_backup.py -v
+python -m pytest tests/test_engine.py -v
+python -m pytest tests/test_exchange_service.py -v
 ```
 
 ## 🤖 GitHub Actions
@@ -227,13 +232,14 @@ python -m pytest tests/test_config_backup.py -v
 | 🟢 | **Nuevo: Chat ID configurable desde UI** — Antes solo se podía cambiar en `.env` | Campo Entry + botón Guardar en pestaña 📱 Telegram, guarda en `settings.json` | `ui/main_window.py`, `main.py`, `utils/translations.py` |
 
 ```bash
-# Todos los tests (82)
+# Todos los tests (197)
 python -m pytest tests/ -v
 
 # Tests específicos
 python -m pytest tests/test_parser.py -v
 python -m pytest tests/test_notifier.py -v
-python -m pytest tests/test_config_backup.py -v
+python -m pytest tests/test_engine.py -v
+python -m pytest tests/test_exchange_service.py -v
 ```
 
 ## 📄 Licencia

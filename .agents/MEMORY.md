@@ -181,18 +181,35 @@ Cada llamada a exchange pasa por:
   - 🟢 **ui/main_window.py**: Nuevo campo Entry + botón Guardar en pestaña 📱 Telegram para `notification_chat_id`
   - 🟢 **main.py**: `_init_notifier()` ahora lee `notification_chat_id` desde `settings.json` primero (prioridad máxima), luego `.env`, luego `get_me()` como fallback
   - 🟢 **utils/translations.py**: Nuevas claves i18n para el campo de Chat ID
+- **[14/06/2026]** — Fixes masivos de estabilidad + tests:
+  - 🔴 Watchdogs duplicados eliminados en reconexión | `main.py`, `core/engine.py`
+  - 🔴 `asyncio.TimeoutError` ahora se reintenta en Python 3.10 | `utils/resilience/retry_service.py`
+  - 🔴 Órdenes LIMIT pendientes persistidas en disco | `core/engine.py`
+  - 🟡 Rate limiting en notificaciones (2s) | `services/notifier.py`
+  - 🟡 Entity cache invalidation al cambiar chat_id | `services/notifier.py`
+  - 🟡 Circuit breaker states sincronizados en health | `health_monitor.py`, `engine.py`
+  - 🟡 Health check usa mercados reales del exchange | `core/engine.py`
+  - 🟢 Event loop leaks en dashboard fix | `ui/main_window.py`
+  - 🆕 **31 tests** para `core/engine.py` — TradingEngine (watchdog, DCA, trailing, SL)
+  - 🆕 **44 tests** para `services/exchange_service.py` — ExchangeService (CCXT clients)
+  - 🆕 **21 tests** para `utils/settings_manager.py` — Settings (idioma, autostart)
+  - 🆕 **19 tests** para `services/market_data.py` — CoinGecko caché, 429, timeout
 
 ## Próximos Pasos / TODOs
 
 - [ ] Activar más exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto
 - [x] Sistema de notificaciones Telegram para alertas de trading, health y reportes diarios
-- [ ] Tests para market_data.py y más tests de integración
+- [x] Tests para market_data.py (19 tests)
+- [x] Tests para engine.py (31 tests)
+- [x] Tests para exchange_service.py (44 tests)
+- [x] Tests para settings_manager.py (21 tests)
 - [x] Pestaña Reportes con estadísticas de trading
 - [x] Mejora de pestaña Posiciones (solo activas, SL/TP real, export CSV)
 - [x] Backup/restore cifrado de configuración
 - [x] Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)
 - [x] Bug fixes de producción (notifier, CoinGecko, event loop CCXT, reconexión Telegram)
 - [x] Chat ID configurable desde la UI
+- [x] Fixes estabilidad: watchdogs duplicados, persistencia LIMIT, rate limiting, etc.
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
 - [ ] Tests de integración con exchanges simulados
 
@@ -201,7 +218,7 @@ Cada llamada a exchange pasa por:
 - Archivos temporales/legacy excluidos vía `.gitignore`: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `backup_modulos/`, `legacy_code/` — no se subieron al repositorio.
 - Archivos legacy eliminados del repositorio: `bot_unificado v2.py`, `README_BACKUP.md`, `build_distribucion.bat`.
 - Repositorio GitHub inicializado: https://github.com/juancito8812/botdetrading.git (rama master).
-- Tests: 82 tests en total, todos pasando.
+- Tests: 197 tests en total, todos pasando.
 - Credenciales (.env, config.json, canales.json) excluidas del repositorio por seguridad.
 - Todo el desarrollo sigue la metodología Superpowers (brainstorming → writing-plans → subagent-driven-development).
 - Archivos de diseño y plan guardados en `docs/superpowers/specs/` y `docs/superpowers/plans/`.

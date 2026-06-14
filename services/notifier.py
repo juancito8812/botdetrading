@@ -1,6 +1,8 @@
 """Servicio de notificaciones vía Telegram."""
 
+import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -23,6 +25,9 @@ class TelegramNotifier:
       - Canales donde la cuenta del bot SEA MIEMBRO/ADMIN
     """
 
+    # Rate limiting: mínimo 2s entre notificaciones
+    _MIN_INTERVAL = 2.0
+
     def __init__(
         self,
         telegram_client: Any,
@@ -34,6 +39,8 @@ class TelegramNotifier:
         self.enabled = enabled
         self.history: List[str] = []
         self._resolved_entity = None  # Cache de entidad resuelta
+        self._last_send_time = 0.0  # Para rate limiting
+        self._cached_chat_id: Optional[str] = None  # chat_id con el que se resolvió la entidad
 
     def _add_to_history(self, text: str):
         """Agrega una entrada al historial (max 20)."""
@@ -51,12 +58,17 @@ class TelegramNotifier:
         Convierte self.chat_id al tipo correcto y resuelve la entidad.
 
         Retorna la entidad resuelta (int o Entity) para usar en send_message.
-        Primero intenta resolver con get_entity() para obtener un error claro
-        si la entidad no es accesible.
+        Si self.chat_id cambió (ej: usuario lo modificó en settings.json),
+        invalida la caché automáticamente.
         """
         raw: int | str = self.chat_id
         if isinstance(raw, str) and raw.lstrip('-').isdigit():
             raw = int(raw)
+
+        # Invalidar caché si el chat_id cambió
+        if self._cached_chat_id is not None and self._cached_chat_id != self.chat_id:
+            self._resolved_entity = None
+            self._cached_chat_id = None
 
         # Si ya tenemos la entidad resuelta en caché, la retornamos
         if self._resolved_entity is not None:
@@ -66,10 +78,9 @@ class TelegramNotifier:
         try:
             entity = await self.client.get_entity(raw)
             self._resolved_entity = entity
+            self._cached_chat_id = self.chat_id
             return entity
         except ValueError as e:
-            # No se pudo resolver - puede que el usuario/grupo no exista o
-            # la cuenta no tenga acceso. Registrar con contexto.
             err_msg = str(e).lower()
             if "cannot find any entity" in err_msg or "no user has" in err_msg:
                 logger.error(
@@ -79,27 +90,29 @@ class TelegramNotifier:
                 )
             raise
         except Exception:
-            # Si falla la resolución, intentar con el raw (por si acaso)
             return raw
 
     async def send_message(self, text: str) -> bool:
         """
-        Envía un mensaje de texto a Telegram.
+        Envía un mensaje de texto a Telegram con rate limiting.
 
-        NOTA: El error 'event loop must not change' de Telethon es intermitente
-        y el mensaje se envía igual. La reconexión la maneja main.py,
-        no el notifier (para evitar crash del event loop en Windows).
-
-        Telethon (cuenta de usuario) SOLO puede enviar a:
-        - Tu propio ID (Siempre funciona)
-        - Usuarios que te hayan escrito antes
-        - Grupos donde estés agregado
+        - Mínimo {_MIN_INTERVAL}s entre mensajes para evitar rate limit de Telegram.
+        - NOTA: El error 'event loop must not change' de Telethon es intermitente
+          y el mensaje se envía igual. La reconexión la maneja main.py.
         """
         if not self.enabled:
             return False
+
+        # Rate limiting: esperar si se envió hace poco
+        now = time.time()
+        elapsed = now - self._last_send_time
+        if elapsed < self._MIN_INTERVAL:
+            await asyncio.sleep(self._MIN_INTERVAL - elapsed)
+
         try:
             entity = await self._resolve_chat_id()
             await self.client.send_message(entity, text)
+            self._last_send_time = time.time()
             return True
         except ValueError as e:
             err_str = str(e).lower()

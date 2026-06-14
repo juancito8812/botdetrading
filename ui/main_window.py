@@ -217,15 +217,21 @@ class TradingBotGUI:
             self.dash_tree.delete(item)
 
         def _fetch():
+            loop = None
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 coins, indices = loop.run_until_complete(self._fetch_dash_data())
-                loop.close()
                 self.root.after(0, lambda: self._populate_dashboard(coins, indices))
             except Exception as e:
                 self.root.after(0, lambda: self.dash_status.config(text=f"{i18n.t('dash_error')}: {str(e)[:60]}"))
             finally:
+                if loop:
+                    try:
+                        if not loop.is_closed():
+                            loop.close()
+                    except Exception:
+                        pass
                 self.root.after(0, lambda: self.dash_btn.config(state='normal'))
 
         threading.Thread(target=_fetch, daemon=True).start()

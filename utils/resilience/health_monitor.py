@@ -94,6 +94,16 @@ class HealthMonitor:
         """Establece la función de health check (debe aceptar exchange_id como arg)."""
         self._health_check_func = func
 
+    def sync_circuit_breaker_states(self, circuit_breakers: Dict[str, Any]):
+        """
+        Sincroniza el estado de los circuit breakers de exchange_service
+        con el health monitor para reflejar el estado real en el dashboard.
+        """
+        for ex_id, cb in circuit_breakers.items():
+            health = self._health_map.get(ex_id)
+            if health:
+                health.circuit_breaker_state = cb.state.value
+
     def add_exchange(self, exchange_id: str):
         """Añade un exchange al monitoreo."""
         if exchange_id not in self._health_map:

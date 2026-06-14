@@ -1,7 +1,7 @@
 # 🪪 Session Handoff — MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Última actualización:** 14/06/2026 (v4 - Chat ID configurable desde la UI Telegram)
+> **Última actualización:** 14/06/2026 (v5 - Fixes estabilidad + 115 tests nuevos)
 > **Propósito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESIÓN.**
 
 ---
@@ -33,25 +33,20 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
-**Último commit:** `f7595e0` — fix: bugs de produccion - notifier chat_id, CoinGecko cache, event loop CCXT, reconexion Telegram
-**Release:** `v1.0.1` — Bug fixes de producción (creada en GitHub con .exe)
-**Tests:** 82/82 pasando ✅
+**Última release:** `v1.1.0` — Chat ID UI, entity resolution, 19 tests market_data, test feedback
+**Tests:** 197/197 pasando ✅
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
 
-**Commits recientes (pendientes de push, aún no en origin/master):**
+**Commits (ya en origin/master):**
 | Commit | Descripción |
 |--------|-------------|
-| `88577ab` | docs: actualizar README, MEMORY y SESSION_HANDOFF con bug fixes, spec y compilacion .exe |
-| `5450cf7` | chore: agregar hiddenimports a MiBotTrading.spec para evitar ModuleNotFoundError en .exe |
-| `e5e7311` | docs: actualizar README, MEMORY y SESSION_HANDOFF con backup cifrado y mejoras recientes |
-| `a9d7a05` | feat: export/import cifrado de configuracion + tests + indicador ultimo backup |
-| `968bddd` | feat: conectar modificacion SL/TP al exchange real (cancelar orden anterior + crear nueva) |
-| `1788f73` | feat: mejorar pestaña Posiciones (solo activas, acciones, modificar SL/TP, cerrar) + export CSV en Reportes |
-| `0878633` | feat: agregar pestaña Reportes con resumen, performance por exchange e historial de trades |
-| `62ab7aa` | feat: nueva pestaña Telegram unificada con historial de notificaciones |
-| `b9e3f8e` | fix: convertir superpowers de submodule a carpeta normal para CI/CD |
-| `7893148` | feat: health dashboard mejorado + break-even/trailing mutual exclusion |
+| `6f39977` | fix: entity resolution en notifier + test notification con feedback real |
+| `6bc4f0f` | feat: Chat ID configurable desde UI + 19 tests market_data + docs |
+
+**Próximos commits (fixes estabilidad + 115 tests nuevos):**
+- Fix: watchdogs duplicados, persistencia LIMIT, rate limiting, etc.
+- Tests: engine.py (31), exchange_service.py (44), settings_manager.py (21)
 
 ---
 
@@ -178,7 +173,45 @@
 2. 🔄 `.env` (`NOTIFICATION_CHAT_ID`) — fallback
 3. 🔄 ID del usuario autenticado (`get_me()`) — fallback final (Mensajes Guardados)
 
-**.exe compilado:** `dist/MiBotTrading.exe` — con todos los bug fixes + Chat ID UI
+### 13. Fixes masivos de estabilidad + 115 tests nuevos (14/06/2026)
+
+**Qué se hizo:** Auditoría profunda de todo el código encontró 8 bugs críticos/importantes que fueron corregidos, más 115 tests nuevos para 4 módulos que no tenían cobertura.
+
+#### 🔴 Fixes críticos
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| **C1** | **Watchdogs duplicados** en cada reconexión — tras 3 reconexiones, 3 watchdogs en paralelo | `stop_watchdog()` cancela la tarea anterior antes de crear una nueva | `main.py`, `core/engine.py` |
+| **C2** | **`asyncio.TimeoutError` no se reintentaba** en Python 3.10 | Agregado explícitamente a `retry_on` tuple | `utils/resilience/retry_service.py` |
+| **C3** | **Órdenes LIMIT pendientes se perdían** al reiniciar el bot | Persistencia en `pending_limits.json` con `_load_pending_limits()` / `_save_pending_limits()` | `core/engine.py` |
+| **C4** | **stop_bot() no cancelaba el watchdog** — seguía procesando posiciones con bot detenido | Llama `trading_engine.stop_watchdog()` al detener | `main.py` |
+
+#### 🟡 Fixes importantes
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| **I1** | **circuit_breaker_state** nunca se sincronizaba en health monitor | Nuevo `sync_circuit_breaker_states()` + llamado desde watchdog | `health_monitor.py`, `engine.py` |
+| **I2** | **Sin rate limiting** en notificaciones — posibles bans de Telegram | Mínimo 2s entre mensajes via `asyncio.sleep()` | `services/notifier.py` |
+| **I3** | **Entity cache no se invalidaba** si cambiaba chat_id | `_cached_chat_id` trackea el chat_id usado | `services/notifier.py` |
+| **I4** | **Health check** usaba símbolos hardcodeados | Primero prueba mercados reales del exchange, luego fallback | `core/engine.py` |
+
+#### 🆕 Tests nuevos (115)
+
+| Archivo | Tests | Cobertura |
+|---------|-------|-----------|
+| `tests/test_engine.py` | 31 | TradingEngine: watchdogs, DCA, trailing, SL, health, persistencia LIMIT |
+| `tests/test_exchange_service.py` | 44 | ExchangeService: CCXT clients, balance, leverage, market symbols, posiciones |
+| `tests/test_settings_manager.py` | 21 | Settings: load/save, autostart Windows, edge cases |
+| `tests/test_market_data.py` | 19 | CoinGecko: caché, 429, timeout, errores, valores nulos |
+
+#### 🐛 Fixes adicionales
+- `import asyncio` faltante en `notifier.py` (causaba crash en rate limiting)
+- `import os` muerto eliminado de `engine.py`
+- Event loop leaks en `refresh_dashboard()` corregidos
+
+**Total tests:** 197/197 pasando ✅
+
+**.exe compilado:** `dist/MiBotTrading.exe` — con todos los fixes + entity resolution + test feedback + 197 tests
 
 ---
 
@@ -277,10 +310,13 @@ Priorizados por impacto:
 9. ✅ ~~Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)~~ (completado)
 10. ✅ ~~MiBotTrading.spec con hiddenimports~~ (completado)
 11. ✅ ~~Bug fixes de producción (notifier, CoinGecko, event loop CCXT, reconexión Telegram)~~ (completado)
-12. **Tests para market_data.py** — El módulo de CoinGecko no tiene tests unitarios
-13. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
-14. **Tests de integración** con exchanges simulados (mock CCXT)
-15. **Commit y push** de los bug fixes de esta sesión
+12. ✅ ~~Tests para market_data.py (19 tests)~~ (completado)
+13. ✅ ~~Tests para engine.py (31 tests)~~ (completado)
+14. ✅ ~~Tests para exchange_service.py (44 tests)~~ (completado)
+15. ✅ ~~Tests para settings_manager.py (21 tests)~~ (completado)
+16. ✅ ~~Fixes estabilidad: watchdogs duplicados, persistencia LIMIT, rate limiting, entity cache, health sync~~ (completado)
+17. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
+18. **Tests de integración** con exchanges simulados (mock CCXT)
 
 ---
 

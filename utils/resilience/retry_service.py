@@ -58,8 +58,8 @@ class RetryService:
         self.backoff_factor = backoff_factor
         self.jitter = jitter
         self.retry_on = retry_on or (
-            ConnectionError, TimeoutError, ExchangeConnectionError,
-            RateLimitExceeded,
+            ConnectionError, TimeoutError, asyncio.TimeoutError,
+            ExchangeConnectionError, RateLimitExceeded,
         )
         # Excepciones que NUNCA se reintentan (fallo fatal)
         self._never_retry = (RuntimeError, asyncio.CancelledError)
