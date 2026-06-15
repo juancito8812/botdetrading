@@ -89,7 +89,7 @@ def test_load_settings_fills_missing_defaults(mock_settings_file):
         result = load_settings()
 
     assert result["language"] == "fr"
-    assert result["start_with_windows"] is False  # Default
+    assert result["start_with_windows"] is True  # Default
     assert "max_positions_per_exchange" in result
 
 

@@ -2,96 +2,96 @@
 
 ## Información General
 
-- **Propósito:** Bot de trading automatizado que recibe señales vía Telegram y ejecuta órdenes en exchanges de criptomonedas (Bitget, BingX).
-- **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexión exchanges), Telethon (Telegram), asyncio
-- **Últimas features:** ❔ Tooltips de ayuda en configuración + 🔔 Notificaciones seleccionables
-- **Última sesión: 14/06/2026 - Tooltips de ayuda (❔) + Notificaciones seleccionables
-- **Versión de memoria:** 8
+- **Proposito:** Bot de trading automatizado que recibe senales via Telegram y ejecuta ordenes en exchanges de criptomonedas (Bitget, BingX).
+- **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexion exchanges), Telethon (Telegram), asyncio
+- **Ultimas features:** Dashboard auto-refresh 60s + Auto-start Windows por defecto + Bot auto-inicia al abrir
+- **Ultima sesion:** 14/06/2026 - Dashboard auto-refresh + Auto-start Windows + Fix pack/grid
+- **Version de memoria:** 9
 
 ## Arquitectura
 
 ```
 MiBotTrading/
-├── main.py                    # Punto de entrada, TradingBotApp
-├── config.json                # Configuración de riesgo
-├── .env                       # Credenciales (API keys)
-├── core/
-│   ├── engine.py              # TradingEngine - ejecución de señales, SL/TP, DCA, trailing stop
-│   ├── manager.py             # PositionManager - gestión y persistencia de posiciones
-│   └── parser.py              # parse_trading_signal - parseo de mensajes Telegram
-├── services/
-│   ├── exchange_service.py    # ExchangeService - conexión CCXT con múltiples exchanges
-│   └── market_data.py         # fetch_top20, fetch_market_indices (CoinGecko)
-├── ui/
-│   └── main_window.py         # TradingBotGUI - interfaz Tkinter (9 pestañas)
-├── models/
-│   └── data_classes.py        # Dataclasses: Position, Signal
-├── utils/
-│   ├── config.py              # Carga/guardado de config, credenciales, canales
-│   ├── helpers.py             # Utilidades varias (atomic_write_json, patch_aiohttp_dns)
-│   ├── logger.py              # Configuración de logging
-│   ├── settings_manager.py    # Settings de UI + auto-inicio Windows
-│   ├── translations.py        # i18n español/inglés
-│   ├── config_backup.py       # Export/Import cifrado (cryptography.fernet + PBKDF2)
-│   └── resilience/            # Sistema de resiliencia (v2.0)
-│       ├── error_handler.py   # Taxonomía de errores personalizados
-│       ├── retry_service.py   # Reintentos con backoff exponencial + jitter
-│       ├── circuit_breaker.py # Estados closed/open/half-open por exchange
-│       ├── decorators.py      # @retry, @circuit_breaker, @timeout, @log_errors
-│       ├── health_monitor.py  # Health checks periódicos + historial
-│       ├── state_recovery.py  # Snapshots + restauración de operaciones
-│       └── backup_manager.py  # Backup automático rotativo con gzip
-├── tests/
-│   ├── test_parser.py         # Tests del parseador de señales
-│   ├── test_manager.py        # Tests del gestor de posiciones
-│   ├── test_error_handler.py  # Tests de taxonomía de errores
-│   ├── test_retry_service.py  # Tests de backoff y reintentos
-│   ├── test_circuit_breaker.py# Tests de estados del circuit breaker
-│   ├── test_decorators.py     # Tests de decoradores de resiliencia
-│   ├── test_health_monitor.py # Tests de health checks
-│   ├── test_state_recovery.py # Tests de checkpoints y restauración
-│   ├── test_backup_manager.py # Tests de backups rotativos
-│   └── test_notifier.py       # Tests del sistema de notificaciones Telegram
-├── dist/                      # Archivos para distribución EXE
-├── logs/                      # Logs de ejecución
-└── telegram_session/          # Sesión de Telegram guardada
++-- main.py                    # Punto de entrada, TradingBotApp
++-- config.json                # Configuracion de riesgo
++-- .env                       # Credenciales (API keys)
++-- core/
+|   +-- engine.py              # TradingEngine - ejecucion de senales, SL/TP, DCA, trailing stop
+|   +-- manager.py             # PositionManager - gestion y persistencia de posiciones
+|   +-- parser.py              # parse_trading_signal - parseo de mensajes Telegram
++-- services/
+|   +-- exchange_service.py    # ExchangeService - conexion CCXT con multiples exchanges
+|   +-- market_data.py         # fetch_top20, fetch_market_indices (CoinGecko)
++-- ui/
+|   +-- main_window.py         # TradingBotGUI - interfaz Tkinter (9 pestanas)
++-- models/
+|   +-- data_classes.py        # Dataclasses: Position, Signal
++-- utils/
+|   +-- config.py              # Carga/guardado de config, credenciales, canales
+|   +-- helpers.py             # Utilidades varias (atomic_write_json, patch_aiohttp_dns)
+|   +-- logger.py              # Configuracion de logging
+|   +-- settings_manager.py    # Settings de UI + auto-inicio Windows
+|   +-- translations.py        # i18n espanol/ingles
+|   +-- config_backup.py       # Export/Import cifrado (cryptography.fernet + PBKDF2)
+|   +-- resilience/            # Sistema de resiliencia (v2.0)
+|       +-- error_handler.py   # Taxonomia de errores personalizados
+|       +-- retry_service.py   # Reintentos con backoff exponencial + jitter
+|       +-- circuit_breaker.py # Estados closed/open/half-open por exchange
+|       +-- decorators.py      # @retry, @circuit_breaker, @timeout, @log_errors
+|       +-- health_monitor.py  # Health checks periodicos + historial
+|       +-- state_recovery.py  # Snapshots + restauracion de operaciones
+|       +-- backup_manager.py  # Backup automatico rotativo con gzip
++-- tests/
+|   +-- test_parser.py         # Tests del parseador de senales
+|   +-- test_manager.py        # Tests del gestor de posiciones
+|   +-- test_error_handler.py  # Tests de taxonomia de errores
+|   +-- test_retry_service.py  # Tests de backoff y reintentos
+|   +-- test_circuit_breaker.py# Tests de estados del circuit breaker
+|   +-- test_decorators.py     # Tests de decoradores de resiliencia
+|   +-- test_health_monitor.py # Tests de health checks
+|   +-- test_state_recovery.py # Tests de checkpoints y restauracion
+|   +-- test_backup_manager.py # Tests de backups rotativos
+|   +-- test_notifier.py       # Tests del sistema de notificaciones Telegram
++-- dist/                      # Archivos para distribucion EXE
++-- logs/                      # Logs de ejecucion
++-- telegram_session/          # Sesion de Telegram guardada
 ```
 
 ### Flujo de datos:
-1. Telegram envía mensaje → `handler()` en main.py
-2. `parse_trading_signal()` extrae símbolo, dirección, entradas, SL, targets
-3. `TradingEngine.execute_signal()` orquesta la ejecución en cada exchange
+1. Telegram envia mensaje -> `handler()` en main.py
+2. `parse_trading_signal()` extrae simbolo, direccion, entradas, SL, targets
+3. `TradingEngine.execute_signal()` orquesta la ejecucion en cada exchange
 4. Decide tipo de entrada (MARKET, LIMIT, DCA) basado en config y precio
-5. Coloca orden + Stop Loss + Take Profits (distribución personalizada)
+5. Coloca orden + Stop Loss + Take Profits (distribucion personalizada)
 6. `PositionManager` guarda/recupera posiciones en `posiciones.json`
-7. Watchdog cada 30s: monitorea órdenes LIMIT pendientes, trailing stop, breakeven, sincroniza estado
+7. Watchdog cada 30s: monitorea ordenes LIMIT pendientes, trailing stop, breakeven, sincroniza estado
 
 ### Notificaciones (Telegram):
 ```
 Trading:
-  execute_signal() → notify_trade_open(position)
-  watchdog/posición cerrada → notify_trade_closed(position)
-  watchdog/TP1 hit → notify_tp_hit(position, 1)
-  _check_trailing_stop(LONG+SHORT) → notify_trailing_activated(position)
-  _process_filled_limit_order(DCA) → notify_dca_executed(exchange, symbol, price)
+  execute_signal() -> notify_trade_open(position)
+  watchdog/posicion cerrada -> notify_trade_closed(position)
+  watchdog/TP1 hit -> notify_tp_hit(position, 1)
+  _check_trailing_stop(LONG+SHORT) -> notify_trailing_activated(position)
+  _process_filled_limit_order(DCA) -> notify_dca_executed(exchange, symbol, price)
 
 Sistema:
-  health_monitor.on_status_change → notify_health_change(exchange, status, failures, latency)
+  health_monitor.on_status_change -> notify_health_change(exchange, status, failures, latency)
 
 Reportes:
-  watchdog/cada 24h → send_daily_report(positions, balances)
+  watchdog/cada 24h -> send_daily_report(positions, balances)
 ```
 
 ### Capa de Resiliencia (v2.0):
 Cada llamada a exchange pasa por:
 ```
-@timeout → @retry (backoff exp.) → @circuit_breaker → @log_errors → CCXT
-                              │
-                        HealthMonitor ← cada 60s verifica conexiones
-                              │
-                        StateRecovery ← antes de cada mutación crítica
-                              │
-                        BackupManager ← cada ~15 saves
+@timeout -> @retry (backoff exp.) -> @circuit_breaker -> @log_errors -> CCXT
+                              |
+                        HealthMonitor <- cada 60s verifica conexiones
+                              |
+                        StateRecovery <- antes de cada mutacion critica
+                              |
+                        BackupManager <- cada ~15 saves
 ```
 
 ### Exchanges soportados:
@@ -100,171 +100,86 @@ Cada llamada a exchange pasa por:
 
 ## Decisiones Clave
 
-- **[11/06/2026]** — Refactorización de código legacy monolítico a arquitectura modular con separación clara (core/, services/, ui/, utils/).
-- **[11/06/2026]** — Implementación de entrada con modalidad auto/market/limit + DCA (órdenes escalonadas).
-- **[11/06/2026]** — Trailing stop automático con activación por % de ganancia y distancia configurable.
-- **[11/06/2026]** — Distribución personalizada de Take Profits (igual, progresivo con pesos configurables).
-- **[11/06/2026]** — Persistencia de posiciones en %APPDATA%/MiBotTrading/ para entorno EXE.
-- **[13/06/2026]** — Sistema de resiliencia completo (Enfoque A: Decoradores) usando metodología Superpowers:
-  - Reintentos con backoff exponencial + jitter (máx 3 intentos)
-  - Circuit breaker por exchange (5 fallos → OPEN 60s → HALF_OPEN)
+- **[11/06/2026]** -- Refactorizacion de codigo legacy monolitico a arquitectura modular con separacion clara (core/, services/, ui/, utils/).
+- **[11/06/2026]** -- Implementacion de entrada con modalidad auto/market/limit + DCA (ordenes escalonadas).
+- **[11/06/2026]** -- Trailing stop automatico con activacion por % de ganancia y distancia configurable.
+- **[11/06/2026]** -- Distribucion personalizada de Take Profits (igual, progresivo con pesos configurables).
+- **[11/06/2026]** -- Persistencia de posiciones en %APPDATA%/MiBotTrading/ para entorno EXE.
+- **[13/06/2026]** -- Sistema de resiliencia completo (Enfoque A: Decoradores) usando metodologia Superpowers:
+  - Reintentos con backoff exponencial + jitter (max 3 intentos)
+  - Circuit breaker por exchange (5 fallos -> OPEN 60s -> HALF_OPEN)
   - Timeouts configurables (15s ticker, 30s balance, 60s orders)
   - HealthMonitor integrado en watchdog (checks cada 60s)
-  - StateRecovery con checkpoints antes de operaciones críticas (máx 50)
-  - BackupManager con rotación automática (24 backups comprimidos)
+  - StateRecovery con checkpoints antes de operaciones criticas (max 50)
+  - BackupManager con rotacion automatica (24 backups comprimidos)
 
 ## Estado Actual
 
-- **Lo que se está trabajando:** Export/Import cifrado de configuración completado.
+- **Lo que se esta trabajando:** Dashboard UX + auto-start Windows + fix pack/grid
 - **Exchanges activos en config.json:** bitget, bingx
 - **Apalancamiento:** 5x
 - **Modo margen:** Cross
-- **Cantidad mínima:** 2.0 USDT
-- **Entrada:** Auto (con validación de desviación máx 3%)
+- **Cantidad minima:** 2.0 USDT
+- **Entrada:** Auto (con validacion de desviacion max 3%)
 - **DCA:** Habilitado (3 partes)
-- **Trailing stop:** Habilitado (activación 1.5%, distancia 0.8%)
+- **Trailing stop:** Habilitado (activacion 1.5%, distancia 0.8%)
 - **Resiliencia:** Completada
 - **Notificaciones:** Completadas
 - **Notificaciones seleccionables:** Completadas (8 checkboxes en UI)
-- **Tooltips de ayuda (❔):** Completados (18 campos en Riesgo, Ajustes, APIs)
+- **Tooltips de ayuda:** Completados (18 campos en Riesgo, Ajustes, APIs)
+- **Dashboard auto-refresh:** Completado (auto-carga + ciclo 60s)
+- **Auto-start Windows:** Completado (default ON + tarea automatica al iniciar)
+- **Bot auto-inicia:** Completado (al abrir la app ya escucha senales)
 - **Backup cifrado:** Completado (82 tests, todos pasando)
 
 ## Cambios Recientes
 
-- **[11/06/2026]** — Inicialización estructura modular completa y funcional.
-- **[11/06/2026]** — Subido a GitHub: https://github.com/juancito8812/botdetrading.git
-- **[13/06/2026]** — Implementación del sistema de resiliencia completo vía Superpowers:
-  - Brainstorming: diseño y aprobación del sistema
-  - writing-plans: plan detallado con 11 tareas TDD
-  - subagent-driven-development: ejecución con revisión en 2 etapas
-  - Módulos: error_handler, retry_service, circuit_breaker, decorators, health_monitor, state_recovery, backup_manager
-  - Integración: decoradores en ExchangeService, HealthMonitor en Watchdog, StateRecovery+Backup en PositionManager
-  - 49 tests nuevos (63 total), todos pasando
-  - Commit: `9e23c53`
-- **[13/06/2026]** — Implementación del sistema de notificaciones Telegram vía Superpowers:
-  - Brainstorming: diseño y aprobación del sistema (Enfoque A: TelegramNotifier simple)
-  - writing-plans: plan detallado con 5 tareas
-  - subagent-driven-development: ejecución con revisión
-  - Nuevo: services/notifier.py (10 métodos de notificación: trading, sistema, reportes)
-  - Integración: engine.py (trade open/close, TP1, trailing stop, DCA fill), main.py (inicialización), health_monitor.py (callback on_status_change)
-  - 9 tests nuevos (72 total), todos pasando
-  - Commits: `e063655`
-- **[14/06/2026]** — Pestaña Reportes con resumen, performance por exchange e historial de trades:
-  - 3 secciones: Resumen General, Performance por Exchange, Últimos Trades con filtro
-  - Commits: varias sesiones
-- **[14/06/2026]** — Pestaña Posiciones mejorada (solo activas, columnas completas, colores PnL):
-  - Doble clic → cerrar posición / modificar SL/TP
-  - Conexión real con exchange para SL/TP y cierre
-  - Export CSV en pestaña Reportes
-- **[14/06/2026]** — Export/Import cifrado de configuración:
-  - Nuevo: utils/config_backup.py (cryptography.fernet + PBKDF2)
-  - Tests: 10 tests nuevos para round-trip, contraseña incorrecta, archivo corrupto
-  - UI: Sección en Ajustes + indicador de último backup
-  - Dependencia: cryptography (ya instalada)
-  - Commit: `a9d7a05`
-- **[14/06/2026]** — Bug fixes críticos pre-operaciones reales:
-  - 🔴 HealthMonitor ahora se ejecuta cada 60s dentro del watchdog (antes solo una vez al inicio)
-  - 🔴 PnL calculado desde `unrealizedPnl` del exchange o fórmula manual LONG/SHORT
-  - 🟡 Event loop cerrado correctamente con `try/finally` en `_fetch_balances()`
-  - 🟢 `_on_language_change` ahora actualiza el label de último backup
-  - 🟢 Re-imports redundantes eliminados de `refresh_reports()`
-  - Commits: incluidos en bug fixes
-- **[14/06/2026]** — Compilación .exe con hiddenimports:
-  - Agregado `MiBotTrading.spec` al repositorio (estaba ignorado por `*.spec` en `.gitignore`)
-  - hiddenimports para todos los módulos del proyecto (ui, core, services, utils, models)
-  - Commit: `5450cf7`
-- **[14/06/2026]** — Bug fixes de producción:
-  - 🔴 **notifier.py**: `chat_id` convertido a `int` para Telethon (antes string, no encontraba entidad)
-  - 🟡 **market_data.py**: Caché de 60s para CoinGecko + manejo de 429 y timeouts
-  - 🔴 **exchange_service.py**: `_ensure_event_loop()` detecta loop cerrado y recrea client automáticamente
-  - 🔴 **retry_service.py**: `_never_retry` con `RuntimeError` — errores fatales no se reintentan
-  - 🔴 **main.py**: Refactor completo de reconexión Telegram — cliente se crea UNA vez, reconexiones reusan el mismo
-  - 🟡 **notifier.py**: Eliminado `disconnect()` del notifier (causaba crash del event loop en Windows)
-- **[14/06/2026]** — Chat ID configurable desde la UI:
-  - 🟢 **ui/main_window.py**: Nuevo campo Entry + botón Guardar en pestaña 📱 Telegram para `notification_chat_id`
-  - 🟢 **main.py**: `_init_notifier()` ahora lee `notification_chat_id` desde `settings.json` primero (prioridad máxima), luego `.env`, luego `get_me()` como fallback
-  - 🟢 **utils/translations.py**: Nuevas claves i18n para el campo de Chat ID
-- **[14/06/2026]** — Fixes masivos de estabilidad + tests:
-  - 🔴 Watchdogs duplicados eliminados en reconexión | `main.py`, `core/engine.py`
-  - 🔴 `asyncio.TimeoutError` ahora se reintenta en Python 3.10 | `utils/resilience/retry_service.py`
-  - 🔴 Órdenes LIMIT pendientes persistidas en disco | `core/engine.py`
-  - 🟡 Rate limiting en notificaciones (2s) | `services/notifier.py`
-  - 🟡 Entity cache invalidation al cambiar chat_id | `services/notifier.py`
-  - 🟡 Circuit breaker states sincronizados en health | `health_monitor.py`, `engine.py`
-  - 🟡 Health check usa mercados reales del exchange | `core/engine.py`
-  - 🟢 Event loop leaks en dashboard fix | `ui/main_window.py`
-  - 🆕 **31 tests** para `core/engine.py` — TradingEngine (watchdog, DCA, trailing, SL)
-  - 🆕 **44 tests** para `services/exchange_service.py` — ExchangeService (CCXT clients)
-  - 🆕 **21 tests** para `utils/settings_manager.py` — Settings (idioma, autostart)
-  - 🆕 **19 tests** para `services/market_data.py` — CoinGecko caché, 429, timeout
-- **[14/06/2026]** — Cobertura masiva 75% → 87% (86 tests nuevos):
-  - 🆕 **35 tests** nuevos para `core/engine.py` — _place_stop_loss (BingX/Bitget/other), _place_take_profits, _update_trailing_sl, _move_sl_to_breakeven, execute_signal MARKET path, SHORT trailing
-  - 🆕 **25 tests** nuevos para `utils/resilience/health_monitor.py` — sync_cb, on_status_change, _run_cycle, start/stop, persist, exception paths
-  - 🆕 **15 tests** nuevos para `services/notifier.py` — cache invalidation, rate limiting, error branches, tp_hit, notify_error
-  - 🆕 **8 tests** nuevos para `utils/resilience/state_recovery.py` — fail_cp, load errors, persist error, to_dict roundtrip
-  - 🆕 **8 tests** nuevos para `utils/config_backup.py` — export/import cifrado, version validation, corrupted data (100%)
-  - 🆕 **5 tests** nuevos para `utils/resilience/backup_manager.py` — source not exists, restore failure, mixed files
-  - 🆕 **2 tests** nuevos para `core/manager.py` — update_status not found, get_open_positions no filter
-  - 🆕 **2 tests** nuevos para `utils/helpers.py` — atomic_write_json error cleanup, patch_aiohttp_dns verify
-  - **Total: 348 tests · 87% cobertura**
-  - Commit: `b46ea2b`
-- **[14/06/2026]** — Tooltips de ayuda (❔) + Notificaciones seleccionables:
-  - 🆕 **18 tooltips ❔** en las pestañas Riesgo, Ajustes y APIs — cada campo de configuración tiene un botón ❔ que muestra descripción detallada emergente
-  - 🆕 **8 checkboxes de notificaciones** en pestaña 📱 Telegram — elige qué notificaciones recibir (trade open/closed, TP hit, trailing, health, errors, circuit breaker, daily report)
-  - Preferencias persistentes en `settings.json` y aplicación en tiempo real (sin reiniciar)
-  - Utils: `translations.py` con +27 claves help_* y notif_* en ES/EN
-  - Spec: `docs/superpowers/specs/2026-06-14-help-tooltips-and-notification-prefs-design.md`
-  - Commit: `364e9de`
+- **[11/06/2026]** -- Inicializacion estructura modular completa y funcional.
+- **[11/06/2026]** -- Subido a GitHub: https://github.com/juancito8812/botdetrading.git
+- **[13/06/2026]** -- Implementacion del sistema de resiliencia completo via Superpowers
+- **[13/06/2026]** -- Implementacion del sistema de notificaciones Telegram
+- **[14/06/2026]** -- Pestana Reportes, Posiciones, Export/Import cifrado, Bug fixes
+- **[14/06/2026]** -- Chat ID configurable desde la UI
+- **[14/06/2026]** -- Fixes estabilidad + 115 tests nuevos
+- **[14/06/2026]** -- Cobertura 75% -> 87% (86 tests nuevos)
+- **[14/06/2026]** -- Tooltips ayuda + Notificaciones seleccionables
+- **[14/06/2026]** -- Dashboard auto-refresh + Auto-start Windows + Fix pack/grid:
+  - **ui/main_window.py**: Dashboard ahora auto-carga al iniciar (1s) y auto-refresh cada 60s (sin boton). Fix pack/grid en maxpos_frame y ex_frame
+  - **utils/settings_manager.py**: start_with_windows = True por defecto
+  - **main.py**: Auto-configura tarea de Windows al arrancar, boton se actualiza inmediatamente (sin flash), fix desempaquetado tuple enable_autostart()
+  - **tests/test_settings_manager.py**: Test actualizado para nuevo default True
 
-## Próximos Pasos / TODOs
+## Proximos Pasos / TODOs
 
-- [ ] Activar más exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto
-- [x] Sistema de notificaciones Telegram para alertas de trading, health y reportes diarios
-- [x] Tests para market_data.py (19 tests)
-- [x] Tests para engine.py (31 + 35 = 66 tests)
-- [x] Tests para exchange_service.py (44 tests)
-- [x] Tests para settings_manager.py (21 tests)
-- [x] Pestaña Reportes con estadísticas de trading
-- [x] Mejora de pestaña Posiciones (solo activas, SL/TP real, export CSV)
-- [x] Backup/restore cifrado de configuración
-- [x] Bug fixes críticos (HealthMonitor periódico, PnL real, event loop)
-- [x] Bug fixes de producción (notifier, CoinGecko, event loop CCXT, reconexión Telegram)
+- [ ] Activar mas exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto
+- [x] Sistema de notificaciones Telegram
+- [x] Tests para market_data.py, engine.py, exchange_service.py, settings_manager.py
+- [x] Pestana Reportes, Posiciones, Backup cifrado
+- [x] Bug fixes criticos y de produccion
 - [x] Chat ID configurable desde la UI
-- [x] Fixes estabilidad: watchdogs duplicados, persistencia LIMIT, rate limiting, etc.
-- [x] Cobertura 75% → 87% (engine, health_monitor, notifier, state_recovery, config_backup, backup_manager, helpers, manager)
-- [x] Tooltips de ayuda ❔ en configuración (Riesgo, Ajustes, APIs)
-- [x] Notificaciones seleccionables (8 checkboxes en Telegram tab)
-- [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
-- [ ] Tests de integración con exchanges simulados
+- [x] Fixes estabilidad + cobertura 75% -> 87%
+- [x] Tooltips de ayuda + Notificaciones seleccionables
+- [x] Dashboard auto-refresh + Auto-start Windows + Bot auto-inicia
+- [ ] Graficos en pestana Reportes (matplotlib para PnL historico)
+- [ ] Tests de integracion con exchanges simulados
 - [ ] Cubrir watchdog loop de engine.py (de 69% a 85%)
 
 ## Notas / Problemas Conocidos
 
-- Archivos temporales/legacy excluidos vía `.gitignore`: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `backup_modulos/`, `legacy_code/` — no se subieron al repositorio.
-- Archivos legacy eliminados del repositorio: `bot_unificado v2.py`, `README_BACKUP.md`, `build_distribucion.bat`.
-- Repositorio GitHub inicializado: https://github.com/juancito8812/botdetrading.git (rama master).
-- Tests: 348 tests en total, todos pasando (87% cobertura).
-- Credenciales (.env, config.json, canales.json) excluidas del repositorio por seguridad.
-- Todo el desarrollo sigue la metodología Superpowers (brainstorming → writing-plans → subagent-driven-development).
-- Archivos de diseño y plan guardados en `docs/superpowers/specs/` y `docs/superpowers/plans/`.
-- Para activar las notificaciones: configurar `NOTIFICATION_CHAT_ID` en `.env`, o desde la UI en la pestaña 📱 Telegram > Chat ID para Notificaciones, o se usará el ID del usuario autenticado por defecto.
-- Orden de prioridad del `notification_chat_id`: 1) `settings.json` (UI) → 2) `.env` → 3) `get_me()` del usuario autenticado.
+- Archivos temporales/legacy excluidos via `.gitignore`
+- Repositorio GitHub: https://github.com/juancito8812/botdetrading.git (rama master)
+- Tests: 348 tests en total, todos pasando (87% cobertura)
+- Auto-start con Windows: habilitado por defecto, crea tarea Programador de Tareas al primer arranque
+- Bot auto-inicia si hay credenciales configuradas (no necesita clic en INICIAR)
+- Dashboard carga datos automaticamente al abrir y refresca cada 60s
 
 ---
 
-## 🦸 Superpowers Framework
+## Superpowers Framework
 
 **Repositorio:** https://github.com/obra/superpowers
-**Clonado en:**  (dentro del proyecto)
-**Skills instalados en:**  (14 skills copiados)
+**Skills instalados:** 14 skills en `.agents/skills/`
 
-### Skills disponibles:
-- brainstorming, dispatching-parallel-agents, executing-plans
-- finishing-a-development-branch, receiving-code-review, requesting-code-review
-- subagent-driven-development, systematic-debugging, test-driven-development
-- using-git-worktrees, using-superpowers, verification-before-completion
-- writing-plans, writing-skills
-
-**Metodología:** Especificación → Planificación → Subagentes → TDD
+**Metodologia:** Especificacion -> Planificacion -> Subagentes -> TDD
 
 **Instalado:** 13/06/2026

@@ -13,6 +13,7 @@ from services.exchange_service import exchange_service
 from core.engine import trading_engine, health_monitor
 from core.parser import parse_trading_signal
 from ui.main_window import TradingBotGUI
+from utils.settings_manager import load_settings, enable_autostart
 
 
 class TradingBotApp:
@@ -351,6 +352,13 @@ class TradingBotApp:
         self.root.destroy()
 
     def run(self):
+        # Auto-iniciar con Windows si está habilitado en settings
+        settings = load_settings()
+        if settings.get("start_with_windows", True):
+            success, _ = enable_autostart()
+            if not success:
+                logger.debug("Auto-start con Windows ya estaba configurado.")
+
         # Iniciar bot automáticamente si hay credenciales configuradas
         creds = load_api_creds()
         tg_ok = bool(
@@ -365,6 +373,8 @@ class TradingBotApp:
             logger.info(
                 "Credenciales detectadas. Iniciando bot automáticamente..."
             )
+            # Actualizar botón inmediatamente para evitar flash visual
+            self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
             self.root.after(500, self.start_bot)
         self.root.mainloop()
 

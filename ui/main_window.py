@@ -238,14 +238,16 @@ class TradingBotGUI:
         # Auto-refresh button
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill='x', pady=5)
-        self.dash_auto_btn = ttk.Button(btn_frame, text="▶ Auto-Refresh (60s)", command=self.toggle_dash_auto_refresh)
+        self.dash_auto_btn = ttk.Button(btn_frame, text="⏹ Auto-Refresh (60s)", command=self.toggle_dash_auto_refresh)
         self.dash_auto_btn.pack(side='left', padx=5)
 
-        self.dash_auto_active = False
+        self.dash_auto_active = True
         self.dash_auto_job = None
 
-        # Cargar health indicators al inicio
+        # Cargar dashboard y health al inicio, luego auto-refresh cada 60s
         self.root.after(500, self.refresh_health)
+        self.root.after(1000, self.refresh_dashboard)
+        self.root.after(60000, self._dash_auto_tick)
 
     def refresh_dashboard(self):
         self.dash_status.config(text=i18n.t("dash_loading"))
@@ -463,7 +465,7 @@ class TradingBotGUI:
             return
         self.refresh_dashboard()
         self.refresh_health()
-        self.dash_auto_job = self.root.after(30000, self._dash_auto_tick)
+        self.dash_auto_job = self.root.after(60000, self._dash_auto_tick)
 
     # ==================== TAB: TELEGRAM ====================
     def setup_telegram_tab(self):
@@ -1154,7 +1156,7 @@ class TradingBotGUI:
         maxpos_frame.pack(fill='x', padx=10, pady=10)
 
         maxpos_help_row = ttk.Frame(maxpos_frame)
-        maxpos_help_row.pack(fill='x')
+        maxpos_help_row.grid(row=0, column=0, columnspan=3, sticky='e')
         self._make_help_btn(maxpos_help_row, "help_max_positions").pack(side='right', padx=2)
 
         self.maxpos_widgets = {}
@@ -1172,7 +1174,7 @@ class TradingBotGUI:
         ex_frame.pack(fill='x', padx=10, pady=10)
 
         cap_help_row = ttk.Frame(ex_frame)
-        cap_help_row.pack(fill='x')
+        cap_help_row.grid(row=0, column=0, columnspan=4, sticky='e')
         self._make_help_btn(cap_help_row, "help_capital_pct").pack(side='right', padx=2)
 
         self.ex_pct_widgets = {}

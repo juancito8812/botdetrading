@@ -31,6 +31,7 @@ Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecu
 - **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor (cada 60s), retry con backoff, state recovery y backups automáticos
 - **🔔 Notificaciones seleccionables**: Elige qué alertas quieres recibir (apertura/cierre, TP, trailing, errores, etc.) desde la UI
 - **❔ Tooltips de ayuda**: Cada campo de configuración (Riesgo, Ajustes, APIs) tiene un botón ❔ con descripción detallada
+- **⚡ Inicio automático**: El bot arranca con Windows y se conecta automáticamente al abrir la app — sin necesidad del botón INICIAR
 - **🌐 Multi-idioma**: Español e Inglés
 
 ## 🚀 Instalación
@@ -84,11 +85,11 @@ python main.py
 ```
 
 La interfaz gráfica se abrirá con las siguientes pestañas:
-- **📈 Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges
+- **📈 Dashboard**: Top 20 criptomonedas, índices de mercado y salud de exchanges — auto-carga al iniciar + auto-refresh cada 60s
 - **📱 Telegram**: Estado de conexión, credenciales, canales, historial de notificaciones, **Chat ID** y **checkbox de notificaciones seleccionables** (elige qué alertas recibir)
 - **📊 Reportes**: Resumen general (win rate, PnL), performance por exchange e historial de trades + export CSV
 - **🔐 APIs**: Configuración de API keys de exchanges — todos con ❔ tooltip de ayuda
-- **⚖️ Riesgo**: Apalancamiento, márgenes, DCA, trailing stop, distribución de TPs — todos con ❔ tooltip de ayuda — todos con **❔ tooltip de ayuda**
+- **⚖️ Riesgo**: Apalancamiento, márgenes, DCA, trailing stop, distribución de TPs — todos con ❔ tooltip de ayuda
 - **🔌 Test**: Probar conexión con exchanges
 - **📊 Posiciones**: Posiciones activas con PnL, modificar SL/TP, cerrar posición, export CSV
 - **📟 Consola**: Logs en tiempo real y botón de iniciar/detener
