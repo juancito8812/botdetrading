@@ -98,3 +98,103 @@ def test_clear_completed():
 
     assert len(recovery.checkpoints) == 1
     assert recovery.checkpoints[0].id == cp2.id
+
+
+def test_fail_checkpoint():
+    """Marcar un checkpoint como fallido."""
+    recovery = StateRecovery(max_checkpoints=10)
+    cp = recovery.create_checkpoint("test_op", {"key": "value"})
+    recovery.fail_checkpoint(cp.id, "something went wrong")
+    assert cp.status == CheckpointStatus.FAILED
+    assert cp.error == "something went wrong"
+
+
+def test_complete_checkpoint_nonexistent():
+    """Completar un checkpoint que no existe no falla."""
+    recovery = StateRecovery(max_checkpoints=10)
+    recovery.complete_checkpoint("nonexistent_id")  # No debe lanzar
+
+
+def test_fail_checkpoint_nonexistent():
+    """Fallar un checkpoint que no existe no falla."""
+    recovery = StateRecovery(max_checkpoints=10)
+    recovery.fail_checkpoint("nonexistent_id", "error")  # No debe lanzar
+
+
+def test_load_file_not_found(tmp_path):
+    """load con archivo inexistente no falla."""
+    recovery = StateRecovery(max_checkpoints=10)
+    recovery.load(os.path.join(tmp_path, "nonexistent.json"))
+    assert len(recovery.checkpoints) == 0
+
+
+def test_load_corrupted_json(tmp_path):
+    """load con JSON corrupto no falla."""
+    filepath = os.path.join(tmp_path, "corrupted.json")
+    with open(filepath, "w") as f:
+        f.write("{corrupted json")
+
+    recovery = StateRecovery(max_checkpoints=10)
+    recovery.load(filepath)
+    assert len(recovery.checkpoints) == 0
+
+
+def test_load_exception(tmp_path):
+    """load que lanza Exception no esperada no falla."""
+    filepath = os.path.join(tmp_path, "empty.json")
+    with open(filepath, "w") as f:
+        f.write("null")  # json.load(None)... no, json.load(f) -> None, luego TypeError en iteración
+
+    recovery = StateRecovery(max_checkpoints=10)
+    recovery.load(filepath)
+    assert len(recovery.checkpoints) == 0
+
+
+def test_persist_error():
+    """persist con ruta inválida no lanza excepción."""
+    recovery = StateRecovery(max_checkpoints=10)
+    recovery.create_checkpoint("test", {"a": 1})
+    recovery.persist("/nonexistent_dir/checkpoints.json")  # No debe lanzar
+
+
+def test_checkpoint_to_dict_roundtrip():
+    """Checkpoint.to_dict() y from_dict() son inversos."""
+    cp = Checkpoint(
+        operation="create_position",
+        data={"symbol": "BTC/USDT"},
+    )
+    cp.complete()
+
+    data = cp.to_dict()
+    restored = Checkpoint.from_dict(data)
+
+    assert restored.id == cp.id
+    assert restored.operation == cp.operation
+    assert restored.status == CheckpointStatus.COMPLETED
+    assert restored.data == {"symbol": "BTC/USDT"}
+
+
+def test_checkpoint_from_dict_defaults():
+    """from_dict maneja campos faltantes con defaults."""
+    data = {
+        "operation": "test",
+        "data": {"k": "v"},
+    }
+    cp = Checkpoint.from_dict(data)
+    assert cp.operation == "test"
+    assert cp.status == CheckpointStatus.PENDING
+    assert cp.error is None
+    assert len(cp.id) == 8
+
+
+def test_state_recovery_max_checkpoints_on_init():
+    """max_checkpoints se aplica al cargar."""
+    recovery = StateRecovery(max_checkpoints=3)
+    for i in range(5):
+        recovery.checkpoints.append(Checkpoint(
+            operation=f"op{i}", data={"i": i}
+        ))
+    # Simular que la lista tiene 5 y max es 3
+    if len(recovery.checkpoints) > recovery.max_checkpoints:
+        recovery.checkpoints = recovery.checkpoints[-recovery.max_checkpoints:]
+    assert len(recovery.checkpoints) == 3

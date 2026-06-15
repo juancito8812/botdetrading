@@ -363,7 +363,7 @@ async def test_market_entry_order_no_id(mock_ex_svc, engine):
         "bitget", "BTC/USDT:USDT", signal, SAMPLE_CONFIG, 67000, 500.0, 10
     )
     assert ok is False
-    assert "sin ID" in result.lower() or "ID" in result
+    assert "sin" in result.lower() and "id" in result.lower() or "ID" in result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -507,3 +507,636 @@ async def test_health_check_all_fail(mock_ex_svc, engine):
 
     result = await engine._health_check_exchange("bitget")
     assert result is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _place_stop_loss
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_place_stop_loss_no_sl(engine):
+    """Sin stop_loss en signal, no coloca nada."""
+    from services.exchange_service import exchange_service
+
+    signal = _sig(stop_loss=None)
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    client = MagicMock()
+    await engine._place_stop_loss(client, "bitget", "BTC/USDT", signal, 0.01, "LONG", pos)
+    client.create_order.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_stop_loss_bingx(mock_ex_svc, engine):
+    """Stop Loss para BingX usa TRIGGER_MARKET con positionSide."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "sl_bingx"})
+
+    signal = _sig(stop_loss=65000)
+    pos = Position(exchange_id="bingx", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_stop_loss(mock_client, "bingx", "BTC/USDT", signal, 0.01, "LONG", pos)
+
+    mock_client.create_order.assert_called_once()
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "TRIGGER_MARKET"  # order_type
+    assert "positionSide" in args[5]  # params
+    assert pos.sl_order_id == "sl_bingx"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_stop_loss_bitget(mock_ex_svc, engine):
+    """Stop Loss para Bitget usa limit con planType='normal_plan'."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "sl_bitget"})
+
+    signal = _sig(stop_loss=65000)
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_stop_loss(mock_client, "bitget", "BTC/USDT", signal, 0.01, "LONG", pos)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "limit"
+    assert args[5].get("planType") == "normal_plan"
+    assert args[5].get("reduceOnly") is True
+    assert pos.sl_order_id == "sl_bitget"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_stop_loss_other(mock_ex_svc, engine):
+    """Stop Loss para exchange genérico usa market con reduceOnly."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "sl_other"})
+
+    signal = _sig(stop_loss=65000)
+    pos = Position(exchange_id="bybit", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_stop_loss(mock_client, "bybit", "BTC/USDT", signal, 0.01, "LONG", pos)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "market"
+    assert args[5].get("reduceOnly") is True
+    assert pos.sl_order_id == "sl_other"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_stop_loss_error(mock_ex_svc, engine):
+    """Error colocando SL no lanza excepción."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(side_effect=Exception("API error"))
+
+    signal = _sig(stop_loss=65000)
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_stop_loss(mock_client, "bitget", "BTC/USDT", signal, 0.01, "LONG", pos)
+    # Error capturado, no se lanza
+    assert pos.sl_order_id is None  # Sin SL asignado
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _place_take_profits
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_place_take_profits_no_targets(engine):
+    """Sin targets, no coloca TPs."""
+    client = _mock_client()
+    signal = _sig(targets=[])
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_take_profits(client, "bitget", "BTC/USDT", signal, [], "LONG", pos)
+    client.create_order.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_take_profits_bingx(mock_ex_svc, engine):
+    """TP para BingX usa TRIGGER_LIMIT con positionSide."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "tp_bingx"})
+
+    signal = _sig(targets=[69000])
+    pos = Position(exchange_id="bingx", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_take_profits(mock_client, "bingx", "BTC/USDT", signal, [0.01], "LONG", pos)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "TRIGGER_LIMIT"
+    assert "positionSide" in args[5]
+    assert "tp_bingx" in pos.tp_order_ids
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_take_profits_bitget(mock_ex_svc, engine):
+    """TP para Bitget usa limit con planType='normal_plan'."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "tp_bitget"})
+
+    signal = _sig(targets=[69000])
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_take_profits(mock_client, "bitget", "BTC/USDT", signal, [0.01], "LONG", pos)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[5].get("planType") == "normal_plan"
+    assert args[5].get("reduceOnly") is True
+    assert "tp_bitget" in pos.tp_order_ids
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_take_profits_other(mock_ex_svc, engine):
+    """TP para exchange genérico usa limit con reduceOnly."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "tp_other"})
+
+    signal = _sig(targets=[69000])
+    pos = Position(exchange_id="bybit", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_take_profits(mock_client, "bybit", "BTC/USDT", signal, [0.01], "LONG", pos)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "limit"
+    assert args[5].get("reduceOnly") is True
+    assert "tp_other" in pos.tp_order_ids
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_take_profits_zero_amount_skipped(mock_ex_svc, engine):
+    """TP con amount 0 es saltado."""
+    mock_client = _mock_client()
+    # Devolver "0.0" para el primer TP (cantidad inexacta), "0.01" para el segundo
+    mock_client.amount_to_precision = MagicMock(side_effect=["0.0", "0.01"])
+
+    signal = _sig(targets=[69000, 70000])
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_take_profits(mock_client, "bitget", "BTC/USDT", signal, [0.0, 0.01], "LONG", pos)
+
+    # Solo debe crear 1 TP (el segundo con amount 0.01)
+    assert mock_client.create_order.call_count == 1
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_take_profits_error(mock_ex_svc, engine):
+    """Error en TP no lanza excepción, continúa con los siguientes."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(side_effect=[
+        Exception("API error"),
+        {"id": "tp2"},
+    ])
+
+    signal = _sig(targets=[69000, 70000])
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_take_profits(mock_client, "bitget", "BTC/USDT", signal, [0.005, 0.005], "LONG", pos)
+
+    # Debe haber intentado 2 y creado 1
+    assert mock_client.create_order.call_count == 2
+    assert len(pos.tp_order_ids) == 1
+    assert pos.tp_order_ids[0] == "tp2"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _place_limit_entry
+# ═════════════════════════════════════════════════───────���────────────────══════
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_limit_entry_success(mock_ex_svc, engine):
+    """Colocar orden LIMIT exitosamente."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "limit_entry_1"})
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_ticker_price = AsyncMock(return_value=67000.0)
+
+    signal = _sig()
+    ok, result = await engine._place_limit_entry(
+        "bitget", "BTC/USDT:USDT", signal, SAMPLE_CONFIG, 500.0, 10, 67000
+    )
+    assert ok is True
+    assert result == "limit_placed"
+    assert "limit_entry_1" in engine._pending_limit_orders
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_limit_entry_error(mock_ex_svc, engine):
+    """Error colocando orden LIMIT retorna False."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(side_effect=Exception("API error"))
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_ticker_price = AsyncMock(return_value=67000.0)
+
+    signal = _sig()
+    ok, result = await engine._place_limit_entry(
+        "bitget", "BTC/USDT:USDT", signal, SAMPLE_CONFIG, 500.0, 10, 67000
+    )
+    assert ok is False
+    assert "Error LIMIT" in result
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_limit_entry_no_id(mock_ex_svc, engine):
+    """Orden LIMIT sin ID retorna False."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": None})
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_ticker_price = AsyncMock(return_value=67000.0)
+
+    signal = _sig()
+    ok, result = await engine._place_limit_entry(
+        "bitget", "BTC/USDT:USDT", signal, SAMPLE_CONFIG, 500.0, 10, 67000
+    )
+    assert ok is False
+    assert "sin" in result.lower() and "id" in result.lower()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _process_filled_limit_order
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_process_filled_limit_order(mock_ex_svc, mock_pm, engine):
+    """Procesa orden LIMIT llenada y crea posición."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "sl_123"})
+    mock_ex_svc.clients = {"bitget": mock_client}
+
+    signal = Signal(simbolo="BTC/USDT", direccion="Buy", entry_min=67000, entry_max=68000,
+                    stop_loss=66000, targets=[69000])
+    pending = {
+        "side": "buy",
+        "side_upper": "LONG",
+        "signal": signal,
+        "config": SAMPLE_CONFIG,
+        "leverage": 10,
+        "amount": 0.01,
+        "limit_price": 67000.0,
+    }
+    order = {"id": "filled_order", "status": "closed", "filled": 0.01, "average": 67100.0}
+
+    await engine._process_filled_limit_order("bitget", "BTC/USDT:USDT", order, pending)
+    mock_pm.add_position.assert_called_once()
+    pos = mock_pm.add_position.call_args[0][0]
+    assert pos.exchange_id == "bitget"
+    assert pos.entry_price == 67100.0
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_process_filled_limit_order_partial_fill(mock_ex_svc, mock_pm, engine):
+    """Procesa llenado parcial de orden LIMIT."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "sl_123"})
+    mock_ex_svc.clients = {"bitget": mock_client}
+
+    signal = Signal(simbolo="BTC/USDT", direccion="Buy", entry_min=67000, entry_max=68000,
+                    stop_loss=66000, targets=[69000])
+    pending = {
+        "side": "buy",
+        "side_upper": "LONG",
+        "signal": signal,
+        "config": SAMPLE_CONFIG,
+        "leverage": 10,
+        "amount": 0.01,
+        "limit_price": 67000.0,
+        "is_dca": True,
+    }
+    order = {"id": "filled_order", "status": "closed", "filled": 0.005, "average": 67100.0}
+
+    await engine._process_filled_limit_order("bitget", "BTC/USDT:USDT", order, pending)
+    mock_pm.add_position.assert_called_once()
+    pos = mock_pm.add_position.call_args[0][0]
+    assert pos.entry_filled_amount == 0.005  # Llenado parcial
+
+
+# ═══════════════════════════════════════════════════════════════���═══════════════
+# Tests: _check_trailing_stop - SHORT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_trailing_activates_short(engine):
+    """Trailing se activa para SHORT cuando el precio baja lo suficiente."""
+    config = {**SAMPLE_CONFIG, "trailing_activacion_porcentaje": 1.0}
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Sell", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="sl123", lowest_price=65000)  # -2.99%
+    await engine._check_trailing_stop(pos, config, MagicMock())
+    assert pos.trailing_activated is True
+
+
+@pytest.mark.asyncio
+async def test_trailing_not_activate_short_below_threshold(engine):
+    """Trailing NO se activa en SHORT si la baja es insuficiente."""
+    config = {**SAMPLE_CONFIG, "trailing_activacion_porcentaje": 5.0}  # 5% requerido
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Sell", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="sl123", lowest_price=66500)  # -0.75%
+    await engine._check_trailing_stop(pos, config, MagicMock())
+    assert pos.trailing_activated is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _update_trailing_sl
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_update_trailing_sl_bingx(mock_pm, mock_ex_svc, engine):
+    """Actualizar trailing SL en BingX."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "new_sl"})
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(exchange_id="bingx", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="old_sl")
+    await engine._update_trailing_sl(pos, 68000.0, mock_client)
+
+    mock_ex_svc.cancel_order.assert_called_once_with("bingx", "BTC/USDT", "old_sl")
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "TRIGGER_MARKET"
+    assert "positionSide" in args[5]
+    assert pos.sl_order_id == "new_sl"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_update_trailing_sl_bitget(mock_pm, mock_ex_svc, engine):
+    """Actualizar trailing SL en Bitget."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "new_sl_bitget"})
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="old_sl")
+    await engine._update_trailing_sl(pos, 68000.0, mock_client)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "limit"
+    assert args[5].get("planType") == "normal_plan"
+    assert pos.sl_order_id == "new_sl_bitget"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_update_trailing_sl_other(mock_pm, mock_ex_svc, engine):
+    """Actualizar trailing SL en exchange genérico."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "new_sl_other"})
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(exchange_id="bybit", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="old_sl")
+    await engine._update_trailing_sl(pos, 68000.0, mock_client)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "market"
+    assert args[5].get("reduceOnly") is True
+    assert pos.sl_order_id == "new_sl_other"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_update_trailing_sl_error(mock_pm, mock_ex_svc, engine):
+    """Error actualizando trailing SL no lanza excepción."""
+    mock_client = _mock_client()
+    mock_ex_svc.cancel_order = AsyncMock(side_effect=Exception("API error"))
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="old_sl")
+    await engine._update_trailing_sl(pos, 68000.0, mock_client)
+    # Error capturado, no se lanza
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _move_sl_to_breakeven
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_move_sl_to_breakeven_bingx(mock_pm, mock_ex_svc, engine):
+    """Mover SL a break-even en BingX."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "be_sl"})
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(exchange_id="bingx", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="old_sl")
+    await engine._move_sl_to_breakeven(pos, mock_client)
+
+    mock_ex_svc.cancel_order.assert_called_once_with("bingx", "BTC/USDT", "old_sl")
+    args, kwargs = mock_client.create_order.call_args
+    assert args[1] == "TRIGGER_MARKET"
+    # El stopPrice está dentro de params (args[5]), no como arg posicional
+    assert args[5]["stopPrice"] == 67000.0  # stopPrice = entry_price
+    assert pos.sl_order_id == "be_sl"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_move_sl_to_breakeven_bitget(mock_pm, mock_ex_svc, engine):
+    """Mover SL a break-even en Bitget."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "be_sl_bitget"})
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="old_sl")
+    await engine._move_sl_to_breakeven(pos, mock_client)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[5].get("planType") == "normal_plan"
+    assert pos.sl_order_id == "be_sl_bitget"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_move_sl_to_breakeven_no_previous_sl(mock_pm, mock_ex_svc, engine):
+    """Mover SL a break-even sin SL previo (no cancela nada)."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "be_sl"})
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id=None)
+    await engine._move_sl_to_breakeven(pos, mock_client)
+
+    mock_ex_svc.cancel_order.assert_not_called()
+    mock_client.create_order.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+@patch("core.engine.pos_manager")
+async def test_move_sl_to_breakeven_error(mock_pm, mock_ex_svc, engine):
+    """Error moviendo SL a break-even no lanza excepción."""
+    mock_client = _mock_client()
+    mock_ex_svc.cancel_order = AsyncMock(side_effect=Exception("API error"))
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5,
+                   sl_order_id="old_sl")
+    await engine._move_sl_to_breakeven(pos, mock_client)
+    # Error capturado, no se lanza
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _load_pending_limits with errors
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_load_pending_limits_corrupted(engine_with_temp_file):
+    """Cargar JSON corrupto no lanza excepción."""
+    import json
+
+    from core import engine as engine_module
+    # Escribir JSON inválido
+    with open(engine_module._PENDING_LIMITS_FILE, "w") as f:
+        f.write("{corrupted json")
+
+    # Recargar no debe lanzar
+    engine_module.TradingEngine()
+
+
+def test_save_pending_limits_permission_error(engine_with_temp_file):
+    """Error al guardar no lanza excepción."""
+    eng = engine_with_temp_file
+    eng._pending_limit_orders = {"test": {"data": "value"}}
+    # Simular error en atomic_write_json no debería propagarse
+    # No podemos simular fácilmente un error de permisos aquí,
+    # pero el except captura cualquier Exception
+    eng._save_pending_limits()  # No debe lanzar
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: execute_signal (ruta completa MARKET)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_execute_signal_market_path(mock_ex_svc, mock_pm, engine):
+    """execute_signal completa ruta MARKET exitosamente."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={
+        "id": "entry_1", "average": 67050.0
+    })
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_market_symbol = AsyncMock(return_value="BTC/USDT")
+    mock_ex_svc.get_ticker_price = AsyncMock(return_value=67000.0)
+    mock_ex_svc.get_balance = AsyncMock(return_value=500.0)
+    mock_ex_svc.set_leverage = AsyncMock()
+
+    # Signal sin rango de entrada → MARKET
+    signal = _sig(entry_min=None, entry_max=None)
+
+    await engine.execute_signal(signal, SAMPLE_CONFIG, "bitget")
+
+    # Verificar que se creó la posición
+    assert mock_pm.add_position.called
+    pos = mock_pm.add_position.call_args[0][0]
+    assert pos.symbol == "BTCUSDT"
+    assert pos.entry_price == 67050.0
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_execute_signal_duplicate(mock_ex_svc, engine):
+    """Señal duplicada no ejecuta nada."""
+    signal = _sig()
+    engine.processed_signals[("BTCUSDT", "Buy", "bitget")] = time.time()
+
+    await engine.execute_signal(signal, SAMPLE_CONFIG, "bitget")
+    # No debe llamar a market_symbol si es duplicado
+    mock_ex_svc.get_market_symbol.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_execute_signal_no_client(mock_ex_svc, engine):
+    """Sin cliente para exchange, no ejecuta."""
+    mock_ex_svc.clients = {}
+    signal = _sig()
+    await engine.execute_signal(signal, SAMPLE_CONFIG, "nonexistent")
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_execute_signal_no_market_symbol(mock_ex_svc, engine):
+    """Sin market_symbol, no ejecuta."""
+    mock_client = _mock_client()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_market_symbol = AsyncMock(return_value=None)  # No encontrado
+
+    signal = _sig()
+    await engine.execute_signal(signal, SAMPLE_CONFIG, "bitget")
+    mock_ex_svc.get_market_symbol.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_execute_signal_zero_balance(mock_ex_svc, engine):
+    """Balance 0.0 no ejecuta."""
+    mock_client = _mock_client()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_market_symbol = AsyncMock(return_value="BTC/USDT")
+    mock_ex_svc.get_ticker_price = AsyncMock(return_value=67000.0)
+    mock_ex_svc.get_balance = AsyncMock(return_value=0.0)  # Saldo 0
+
+    signal = _sig()
+    await engine.execute_signal(signal, SAMPLE_CONFIG, "bitget")
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_decide_price_out_of_range_for_short(mock_ex_svc, engine):
+    """SHORT: precio fuera de desviación máxima → rechazado."""
+    signal = _sig(direction="Sell", entry_min=67000, entry_max=68000)
+    # Precio demasiado alto para SHORT
+    ok, result = await engine._decide_entry_type(
+        "bitget", "BTC/USDT:USDT", signal, SAMPLE_CONFIG, 72000, 500.0, 10
+    )
+    assert ok is False
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_decide_market_when_price_in_range(mock_ex_svc, engine):
+    """Precio dentro del rango de entrada → MARKET aunque modalidad sea auto."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={
+        "id": "market_inrange", "average": 67500.0
+    })
+    mock_ex_svc.clients = {"bitget": mock_client}
+
+    signal = _sig(entry_min=67000, entry_max=68000)
+    # Precio 67500 está DENTRO del rango
+    ok, result = await engine._decide_entry_type(
+        "bitget", "BTC/USDT:USDT", signal, SAMPLE_CONFIG, 67500, 500.0, 10
+    )
+    assert ok is True
+    assert isinstance(result, dict)  # MARKET

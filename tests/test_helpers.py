@@ -119,3 +119,41 @@ def test_base_dir_contains_project():
     """BASE_DIR contiene el nombre del proyecto."""
     from utils.helpers import BASE_DIR
     assert "botdetrading" in str(BASE_DIR).lower() or "MiBotTrading" in str(BASE_DIR) or BASE_DIR.exists()
+
+
+@pytest.mark.asyncio
+async def test_atomic_write_json_raises_and_cleans_up():
+    """atomic_write_json limpia el temporal si falla la escritura."""
+    from utils.helpers import atomic_write_json
+    import tempfile
+    import os
+
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        # Forzar error: pasar objeto no serializable
+        class Unserializable:
+            pass
+        with pytest.raises(Exception):
+            atomic_write_json(tmp_path, {"bad": Unserializable()})
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+def test_patch_aiohttp_dns_sets_init():
+    """patch_aiohttp_dns reemplaza TCPConnector.__init__."""
+    import aiohttp
+    original_init = aiohttp.TCPConnector.__init__
+
+    from utils.helpers import patch_aiohttp_dns
+    patch_aiohttp_dns()
+
+    # Verificar que cambió
+    assert aiohttp.TCPConnector.__init__ is not original_init
+
+    # Restaurar original
+    aiohttp.TCPConnector.__init__ = original_init

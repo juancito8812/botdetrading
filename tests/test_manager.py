@@ -82,6 +82,28 @@ def test_get_pending_positions():
     assert len(pending) == 1
 
 
+def test_get_open_positions_no_filter():
+    """get_open_positions sin exchange_id retorna todas las abiertas."""
+    pos_manager.positions = []
+    pos_manager.save()
+
+    pos1 = Position(exchange_id="bitget", symbol="BTC", market_symbol="BTC/USDT", side="Buy", entry_price=65000, amount=0.01, leverage=5, status="open")
+    pos2 = Position(exchange_id="bingx", symbol="ETH", market_symbol="ETH/USDT", side="Sell", entry_price=3500, amount=0.1, leverage=10, status="open")
+    pos3 = Position(exchange_id="bitget", symbol="SOL", market_symbol="SOL/USDT", side="Buy", entry_price=100, amount=1, leverage=3, status="closed")
+
+    for p in [pos1, pos2, pos3]:
+        pos_manager.add_position(p)
+
+    open_all = pos_manager.get_open_positions()
+    assert len(open_all) == 2
+
+
+def test_update_status_not_found():
+    """update_status retorna False si no encuentra la posición."""
+    result = pos_manager.update_status("nonexistent", "NONEXISTENT", "closed")
+    assert result is False
+
+
 def test_persistence():
     """Test que las posiciones persisten en disco."""
     pos_manager.positions = []

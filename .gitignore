@@ -50,3 +50,7 @@ htmlcov/
 # Directorios legacy
 backup_modulos/
 legacy_code/
+
+# Generados por tests
+settings.json
+recovery/

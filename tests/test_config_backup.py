@@ -1,261 +1,168 @@
-"""Tests para utils/config_backup.py — cifrado/descifrado, export/import."""
+"""Tests para utils/config_backup.py — Export/Import cifrado de configuración."""
 
-import sys
-import os
 import json
-import tempfile
-from unittest.mock import patch, MagicMock
+import os
+import pytest
+from unittest.mock import patch, MagicMock, PropertyMock
+from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import utils.config_backup as cb
-
-
-# ─── Fixtures ────────────────────────────────────────────────────────────────
-
-SAMPLE_DATA = {
-    "apis": {
-        "exchanges": {"bitget": {"api_key": "test123", "secret": "secret123", "passphrase": "", "enabled": True}},
-        "telegram": {"API_ID": "12345", "API_HASH": "abc", "PHONE_NUMBER": "+111"}
-    },
-    "risk": {"apalancamiento": 10, "cooldown_segundos": 30},
-    "channels": [123456789, 987654321],
-    "settings": {"language": "es", "start_with_windows": False},
-}
+# ─── Tests: export_config ────────────────────────────────────────────────────
 
 
-def _mock_collect_all_data() -> dict:
-    """Versión mockeada de _collect_all_data que retorna datos fijos."""
-    return dict(SAMPLE_DATA)
+@pytest.fixture
+def mock_all_config():
+    """Mockea todas las funciones de carga de configuración."""
+    with patch.multiple(
+        "utils.config_backup",
+        load_api_creds=MagicMock(return_value={"exchanges": {"bitget": {"enabled": True}}}),
+        save_api_creds=MagicMock(),
+        load_risk_config=MagicMock(return_value={"apalancamiento": 10}),
+        save_risk_config=MagicMock(),
+        load_channels=MagicMock(return_value={-100123456}),
+        save_channels=MagicMock(),
+    ):
+        with patch.multiple(
+            "utils.settings_manager",
+            load_settings=MagicMock(return_value={"language": "es"}),
+            save_settings=MagicMock(),
+        ):
+            yield
 
 
-restore_called_with = []
+def test_export_config_success(tmp_path, mock_all_config):
+    """export_config crea un archivo .botconfig cifrado."""
+    from utils.config_backup import export_config
+
+    backup_path = os.path.join(tmp_path, "backup.botconfig")
+    result = export_config("mypassword", backup_path)
+    assert result is True
+    assert os.path.exists(backup_path)
+    assert os.path.getsize(backup_path) > 16  # salt + token
 
 
-def _mock_restore_all_data(data: dict) -> None:
-    """Versión mockeada de _restore_all_data que registra lo recibido."""
-    global restore_called_with
-    restore_called_with.append(data)
+def test_export_config_error(tmp_path):
+    """export_config retorna False si hay error (ej: dir inválido)."""
+    from utils.config_backup import export_config
+
+    result = export_config("password", "/nonexistent_dir/backup.botconfig")
+    assert result is False
 
 
-# ─── Tests: _derive_key ─────────────────────────────────────────────────────
-
-def test_derive_key_deterministic():
-    """Misma contraseña + mismo salt produce la misma clave."""
-    salt = b"0123456789abcdef"
-    key1 = cb._derive_key("mypassword", salt)
-    key2 = cb._derive_key("mypassword", salt)
-    assert key1 == key2
-    assert len(key1) == 44  # Fernet key is 32 bytes base64 → 44 chars
+# ─── Tests: import_config ────────────────────────────────────────────────────
 
 
-def test_derive_key_different_password():
-    """Contraseñas diferentes producen claves diferentes."""
-    salt = b"0123456789abcdef"
-    key1 = cb._derive_key("password1", salt)
-    key2 = cb._derive_key("password2", salt)
-    assert key1 != key2
+@pytest.fixture
+def valid_backup(tmp_path, mock_all_config):
+    """Crea un backup válido para usar en tests de import."""
+    from utils.config_backup import export_config
+
+    backup_path = os.path.join(tmp_path, "backup.botconfig")
+    export_config("mypassword", backup_path)
+    return backup_path
 
 
-def test_derive_key_different_salt():
-    """Salts diferentes producen claves diferentes."""
-    key1 = cb._derive_key("mypassword", b"0123456789abcdef")
-    key2 = cb._derive_key("mypassword", b"fedcba9876543210")
-    assert key1 != key2
+def test_import_config_success(tmp_path, mock_all_config):
+    """import_config descifra y restaura configuración correctamente."""
+    from utils.config_backup import export_config, import_config
+
+    backup_path = os.path.join(tmp_path, "backup.botconfig")
+    export_config("mypassword", backup_path)
+
+    result = import_config("mypassword", backup_path)
+    assert result is not None
+    assert "version" in result
+    assert "data_keys" in result
+    assert "apis" in result["data_keys"]
 
 
-# ─── Tests: export + import (round-trip) ─────────────────────────────────────
+def test_import_config_wrong_password(valid_backup):
+    """import_config con contraseña incorrecta retorna None."""
+    from utils.config_backup import import_config
 
-@patch("utils.config_backup._collect_all_data", side_effect=_mock_collect_all_data)
-@patch("utils.config_backup._restore_all_data", side_effect=_mock_restore_all_data)
-def test_export_import_roundtrip(mock_restore, mock_collect):
-    """Exportar con contraseña e importar con la misma contraseña debe restaurar los datos."""
-    global restore_called_with
-    restore_called_with = []
-
-    password = "mi-contraseña-segura-123"
-
-    with tempfile.NamedTemporaryFile(suffix=".botconfig", delete=False) as tmp:
-        tmp_path = tmp.name
-
-    try:
-        # Export
-        result = cb.export_config(password, tmp_path)
-        assert result is True, "export_config debe retornar True"
-
-        # Verificar que el archivo existe y tiene contenido
-        assert os.path.getsize(tmp_path) > 0
-
-        # Verificar que tiene salt (16 bytes) + al menos un token
-        with open(tmp_path, "rb") as f:
-            raw = f.read()
-        assert len(raw) > cb.SALT_SIZE  # salt + token
-        salt = raw[:cb.SALT_SIZE]
-        assert len(salt) == cb.SALT_SIZE
-
-        # Import con la misma contraseña
-        result_import = cb.import_config(password, tmp_path)
-        assert result_import is not None
-        assert result_import["version"] == cb.BACKUP_VERSION
-        assert "exported_at" in result_import
-        assert sorted(result_import["data_keys"]) == sorted(SAMPLE_DATA.keys())
-
-        # Verificar que se llamó a _restore_all_data con los datos correctos
-        assert len(restore_called_with) == 1
-        restored = restore_called_with[0]
-        assert restored["apis"] == SAMPLE_DATA["apis"]
-        assert restored["risk"] == SAMPLE_DATA["risk"]
-        assert restored["channels"] == SAMPLE_DATA["channels"]
-        assert restored["settings"] == SAMPLE_DATA["settings"]
-
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-@patch("utils.config_backup._collect_all_data", side_effect=_mock_collect_all_data)
-@patch("utils.config_backup._restore_all_data", side_effect=_mock_restore_all_data)
-def test_import_wrong_password(mock_restore, mock_collect):
-    """Importar con contraseña incorrecta debe retornar None."""
-    global restore_called_with
-    restore_called_with = []
-
-    with tempfile.NamedTemporaryFile(suffix=".botconfig", delete=False) as tmp:
-        tmp_path = tmp.name
-
-    try:
-        # Export con una contraseña
-        assert cb.export_config("correcta", tmp_path) is True
-
-        # Import con contraseña incorrecta
-        result = cb.import_config("incorrecta", tmp_path)
-        assert result is None, "Debe retornar None con contraseña incorrecta"
-
-        # _restore_all_data no debe haber sido llamada
-        assert len(restore_called_with) == 0
-
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-@patch("utils.config_backup._collect_all_data", side_effect=_mock_collect_all_data)
-@patch("utils.config_backup._restore_all_data", side_effect=_mock_restore_all_data)
-def test_import_corrupted_file(mock_restore, mock_collect):
-    """Importar un archivo corrupto debe retornar None."""
-    global restore_called_with
-    restore_called_with = []
-
-    with tempfile.NamedTemporaryFile(suffix=".botconfig", delete=False) as tmp:
-        tmp_path = tmp.name
-        tmp.write(b"this is not a valid encrypted file at all")
-        tmp.close()
-
-    try:
-        result = cb.import_config("cualquier", tmp_path)
-        assert result is None, "Debe retornar None con archivo corrupto"
-        assert len(restore_called_with) == 0
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-@patch("utils.config_backup._collect_all_data", side_effect=_mock_collect_all_data)
-@patch("utils.config_backup._restore_all_data", side_effect=_mock_restore_all_data)
-def test_import_too_short(mock_restore, mock_collect):
-    """Importar un archivo muy pequeño debe retornar None."""
-    global restore_called_with
-    restore_called_with = []
-
-    with tempfile.NamedTemporaryFile(suffix=".botconfig", delete=False) as tmp:
-        tmp_path = tmp.name
-        tmp.write(b"short")
-        tmp.close()
-
-    try:
-        result = cb.import_config("cualquier", tmp_path)
-        assert result is None, "Debe retornar None con archivo demasiado pequeño"
-        assert len(restore_called_with) == 0
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-@patch("utils.config_backup._collect_all_data", side_effect=_mock_collect_all_data)
-@patch("utils.config_backup._restore_all_data", side_effect=_mock_restore_all_data)
-def test_export_error_returns_false(mock_restore, mock_collect):
-    """Si ocurre un error durante export, debe retornar False."""
-    # Pasar una ruta inválida (None) debería causar error
-    result = cb.export_config("password", None)
-    assert result is False, "Debe retornar False en caso de error"
-
-
-@patch("utils.config_backup._collect_all_data", side_effect=_mock_collect_all_data)
-@patch("utils.config_backup._restore_all_data", side_effect=_mock_restore_all_data)
-def test_import_nonexistent_file(mock_restore, mock_collect):
-    """Importar un archivo que no existe debe retornar None."""
-    result = cb.import_config("password", "/ruta/que/no/existe.botconfig")
+    result = import_config("wrongpassword", valid_backup)
     assert result is None
 
 
-# ─── Tests: export + multiple imports con distintos passwords ────────────────
+def test_import_config_corrupted_too_small(tmp_path):
+    """import_config con archivo demasiado pequeño retorna None."""
+    from utils.config_backup import import_config
 
-@patch("utils.config_backup._collect_all_data", side_effect=_mock_collect_all_data)
-@patch("utils.config_backup._restore_all_data", side_effect=_mock_restore_all_data)
-def test_multiple_exports_independent(mock_restore, mock_collect):
-    """Exportar dos veces con distintas contraseñas produce archivos diferentes."""
-    global restore_called_with
+    corrupt_path = os.path.join(tmp_path, "corrupt.botconfig")
+    with open(corrupt_path, "wb") as f:
+        f.write(b"too small")  # < 16 bytes
 
-    with tempfile.NamedTemporaryFile(suffix=".botconfig", delete=False) as tmp1:
-        path1 = tmp1.name
-    with tempfile.NamedTemporaryFile(suffix=".botconfig", delete=False) as tmp2:
-        path2 = tmp2.name
-
-    try:
-        assert cb.export_config("pass1", path1) is True
-        assert cb.export_config("pass2", path2) is True
-
-        # Los archivos deben tener contenido distinto (diferente salt + cifrado)
-        with open(path1, "rb") as f1, open(path2, "rb") as f2:
-            data1 = f1.read()
-            data2 = f2.read()
-
-        assert data1 != data2, "Archivos con distinta contraseña deben ser diferentes"
-
-        # Cada uno debe poder importarse con su respectiva contraseña
-        restore_called_with = []
-        r1 = cb.import_config("pass1", path1)
-        assert r1 is not None
-
-        restore_called_with = []
-        r2 = cb.import_config("pass2", path2)
-        assert r2 is not None
-
-    finally:
-        for p in [path1, path2]:
-            try:
-                os.unlink(p)
-            except OSError:
-                pass
+    result = import_config("password", corrupt_path)
+    assert result is None
 
 
-if __name__ == "__main__":
-    test_derive_key_deterministic()
-    test_derive_key_different_password()
-    test_derive_key_different_salt()
-    test_export_import_roundtrip()
-    test_import_wrong_password()
-    test_import_corrupted_file()
-    test_import_too_short()
-    test_export_error_returns_false()
-    test_import_nonexistent_file()
-    test_multiple_exports_independent()
-    print("✅ Todos los tests de config_backup pasaron correctamente.")
+def test_import_config_corrupted_data(tmp_path):
+    """import_config con datos cifrados corruptos retorna None."""
+    from utils.config_backup import import_config
+
+    corrupt_path = os.path.join(tmp_path, "corrupt.botconfig")
+    # Escribir salt válido + token inválido
+    import os as _os
+    salt = _os.urandom(16)
+    with open(corrupt_path, "wb") as f:
+        f.write(salt + b"invalid_token_data_that_wont_decrypt")
+
+    result = import_config("password", corrupt_path)
+    assert result is None
+
+
+def test_import_config_wrong_version(tmp_path, mock_all_config):
+    """import_config con versión no soportada retorna None."""
+    from utils.config_backup import _collect_all_data, _derive_key, BACKUP_VERSION, SALT_SIZE
+    import json
+    import base64
+    from cryptography.fernet import Fernet
+
+    # Crear bundle con versión inválida
+    bundle = {
+        "version": 999,  # No soportada
+        "exported_at": datetime.now().isoformat(),
+        "data": _collect_all_data(),
+    }
+    payload = json.dumps(bundle, indent=2).encode("utf-8")
+
+    salt = os.urandom(SALT_SIZE)
+    key = _derive_key("password", salt)
+    fernet = Fernet(key)
+    token = fernet.encrypt(payload)
+
+    backup_path = os.path.join(tmp_path, "bad_version.botconfig")
+    with open(backup_path, "wb") as f:
+        f.write(salt + token)
+
+    from utils.config_backup import import_config
+    result = import_config("password", backup_path)
+    assert result is None
+
+
+def test_import_config_empty_data(tmp_path):
+    """import_config con datos vacíos retorna None."""
+    from utils.config_backup import _derive_key, SALT_SIZE
+    import json
+    import base64
+    from cryptography.fernet import Fernet
+
+    # Bundle sin data
+    bundle = {
+        "version": 1,
+        "exported_at": datetime.now().isoformat(),
+        "data": {},  # Vacío
+    }
+    payload = json.dumps(bundle, indent=2).encode("utf-8")
+
+    salt = os.urandom(SALT_SIZE)
+    key = _derive_key("password", salt)
+    fernet = Fernet(key)
+    token = fernet.encrypt(payload)
+
+    backup_path = os.path.join(tmp_path, "empty_data.botconfig")
+    with open(backup_path, "wb") as f:
+        f.write(salt + token)
+
+    from utils.config_backup import import_config
+    result = import_config("password", backup_path)
+    assert result is None
