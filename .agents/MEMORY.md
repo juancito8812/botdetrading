@@ -194,13 +194,24 @@ Cada llamada a exchange pasa por:
   - 🆕 **44 tests** para `services/exchange_service.py` — ExchangeService (CCXT clients)
   - 🆕 **21 tests** para `utils/settings_manager.py` — Settings (idioma, autostart)
   - 🆕 **19 tests** para `services/market_data.py` — CoinGecko caché, 429, timeout
+- **[14/06/2026]** — Cobertura masiva 75% → 87% (86 tests nuevos):
+  - 🆕 **35 tests** nuevos para `core/engine.py` — _place_stop_loss (BingX/Bitget/other), _place_take_profits, _update_trailing_sl, _move_sl_to_breakeven, execute_signal MARKET path, SHORT trailing
+  - 🆕 **25 tests** nuevos para `utils/resilience/health_monitor.py` — sync_cb, on_status_change, _run_cycle, start/stop, persist, exception paths
+  - 🆕 **15 tests** nuevos para `services/notifier.py` — cache invalidation, rate limiting, error branches, tp_hit, notify_error
+  - 🆕 **8 tests** nuevos para `utils/resilience/state_recovery.py` — fail_cp, load errors, persist error, to_dict roundtrip
+  - 🆕 **8 tests** nuevos para `utils/config_backup.py` — export/import cifrado, version validation, corrupted data (100%)
+  - 🆕 **5 tests** nuevos para `utils/resilience/backup_manager.py` — source not exists, restore failure, mixed files
+  - 🆕 **2 tests** nuevos para `core/manager.py` — update_status not found, get_open_positions no filter
+  - 🆕 **2 tests** nuevos para `utils/helpers.py` — atomic_write_json error cleanup, patch_aiohttp_dns verify
+  - **Total: 348 tests · 87% cobertura**
+  - Commit: `b46ea2b`
 
 ## Próximos Pasos / TODOs
 
 - [ ] Activar más exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto
 - [x] Sistema de notificaciones Telegram para alertas de trading, health y reportes diarios
 - [x] Tests para market_data.py (19 tests)
-- [x] Tests para engine.py (31 tests)
+- [x] Tests para engine.py (31 + 35 = 66 tests)
 - [x] Tests para exchange_service.py (44 tests)
 - [x] Tests para settings_manager.py (21 tests)
 - [x] Pestaña Reportes con estadísticas de trading
@@ -210,15 +221,17 @@ Cada llamada a exchange pasa por:
 - [x] Bug fixes de producción (notifier, CoinGecko, event loop CCXT, reconexión Telegram)
 - [x] Chat ID configurable desde la UI
 - [x] Fixes estabilidad: watchdogs duplicados, persistencia LIMIT, rate limiting, etc.
+- [x] Cobertura 75% → 87% (engine, health_monitor, notifier, state_recovery, config_backup, backup_manager, helpers, manager)
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
 - [ ] Tests de integración con exchanges simulados
+- [ ] Cubrir watchdog loop de engine.py (de 69% a 85%)
 
 ## Notas / Problemas Conocidos
 
 - Archivos temporales/legacy excluidos vía `.gitignore`: `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `backup_modulos/`, `legacy_code/` — no se subieron al repositorio.
 - Archivos legacy eliminados del repositorio: `bot_unificado v2.py`, `README_BACKUP.md`, `build_distribucion.bat`.
 - Repositorio GitHub inicializado: https://github.com/juancito8812/botdetrading.git (rama master).
-- Tests: 197 tests en total, todos pasando.
+- Tests: 348 tests en total, todos pasando (87% cobertura).
 - Credenciales (.env, config.json, canales.json) excluidas del repositorio por seguridad.
 - Todo el desarrollo sigue la metodología Superpowers (brainstorming → writing-plans → subagent-driven-development).
 - Archivos de diseño y plan guardados en `docs/superpowers/specs/` y `docs/superpowers/plans/`.

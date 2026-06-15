@@ -145,16 +145,20 @@ MiBotTrading/
 ├── utils/
 │   ├── config_backup.py        # Export/Import cifrado con AES (cryptography.fernet)
 ├── MiBotTrading.spec           # Spec de PyInstaller para compilar .exe
-├── tests/                      # ★ TESTS (197 tests)
-│   ├── test_parser.py
-│   ├── test_config_backup.py   # Cifrado/descifrado, round-trip, errores
-│   ├── test_manager.py
-│   ├── test_notifier.py
-│   ├── test_engine.py          # 31 tests: TradingEngine (watchdog, DCA, trailing, etc.)
-│   ├── test_exchange_service.py # 44 tests: ExchangeService (CCXT clients)
-│   ├── test_settings_manager.py # 21 tests: Settings (idioma, autostart Windows)
-│   ├── test_market_data.py     # 19 tests: CoinGecko caché, 429, timeout
-│   └── ... (resiliencia, decoradores, etc.)
+├── tests/                      # ★ TESTS (348 tests · 87% cobertura)
+│   ├── test_parser.py          # Parseo de señales
+│   ├── test_config_backup.py   # Cifrado/descifrado, round-trip, errores (100%)
+│   ├── test_manager.py         # PositionManager — persistencia, estados
+│   ├── test_notifier.py        # TelegramNotifier (99%)
+│   ├── test_engine.py          # TradingEngine — SL, TP, DCA, trailing, breakeven, limits
+│   ├── test_exchange_service.py# ExchangeService — CCXT clients (97%)
+│   ├── test_settings_manager.py# Settings — idioma, autostart Windows (100%)
+│   ├── test_market_data.py     # CoinGecko caché, 429, timeout (94%)
+│   ├── test_health_monitor.py  # HealthMonitor — sync CB, persist, start/stop (91%)
+│   ├── test_helpers.py         # atomic_write_json, patch_aiohttp_dns (95%)
+│   ├── test_state_recovery.py  # Checkpoints, load, persist (99%)
+│   ├── test_backup_manager.py  # Backups rotativos gzip (95%)
+│   └── ... (resiliencia, decoradores, data_classes, translations, logger, config)
 ├── docs/superpowers/           # ★ DOCUMENTACIÓN DE DISEÑO
 │   ├── specs/                  # Especificaciones de features
 │   └── plans/                  # Planes de implementación
@@ -189,8 +193,11 @@ El instalador para Windows se genera con Inno Setup usando `Installer_Script.iss
 ## 🧪 Tests
 
 ```bash
-# Todos los tests (197)
+# Todos los tests (348)
 python -m pytest tests/ -v
+
+# Cobertura local
+python -m pytest tests/ --cov=core --cov=models --cov=services --cov=utils --cov-report=term
 
 # Tests específicos
 python -m pytest tests/test_parser.py -v
@@ -198,6 +205,26 @@ python -m pytest tests/test_notifier.py -v
 python -m pytest tests/test_engine.py -v
 python -m pytest tests/test_exchange_service.py -v
 ```
+
+### 📊 Cobertura actual (87%)
+
+| Módulo | Cobertura |
+|--------|-----------|
+| `models/data_classes.py` | 100% |
+| `utils/config_backup.py` | 100% |
+| `utils/config.py` | 100% |
+| `utils/logger.py` | 100% |
+| `utils/settings_manager.py` | 100% |
+| `core/parser.py` | 100% |
+| `utils/resilience/error_handler.py` | 100% |
+| `services/notifier.py` | 99% |
+| `utils/resilience/state_recovery.py` | 99% |
+| `services/exchange_service.py` | 97% |
+| `utils/helpers.py` | 95% |
+| `services/market_data.py` | 94% |
+| `utils/resilience/health_monitor.py` | 91% |
+| `utils/resilience/circuit_breaker.py` | 90% |
+| **TOTAL** | **87%** |
 
 ## 🤖 GitHub Actions
 
@@ -216,11 +243,6 @@ El workflow **tests.yml** genera automáticamente un reporte de cobertura con `p
 2. Agrega el repositorio `juancito8812/botdetrading`
 3. Copia el token de Codecov y agrégalo como `CODECOV_TOKEN` en los secrets del repositorio (Settings → Secrets and variables → Actions)
 4. El badge se actualizará automáticamente en el próximo push a master
-
-```bash
-# Ver cobertura localmente
-python -m pytest tests/ --cov=. --cov-report=term
-```
 
 ## 🔧 Bug Fixes (14/06/2026 — Sesión de estabilización pre-operaciones reales)
 
@@ -246,17 +268,6 @@ python -m pytest tests/ --cov=. --cov-report=term
 | 🔴 | **Event loop must not change (Telegram)** — Telethon detectaba cambio de loop al reconectar | Cliente Telegram se crea UNA vez, reconexiones usan `connect()` + `start()` en el mismo cliente | `main.py` (refactor completo) |
 | 🟡 | **Notifier crash en Windows** — `disconnect()` rompía IOCP de Windows | Solo loguea warning sin manipular conexión | `services/notifier.py` |
 | 🟢 | **Nuevo: Chat ID configurable desde UI** — Antes solo se podía cambiar en `.env` | Campo Entry + botón Guardar en pestaña 📱 Telegram, guarda en `settings.json` | `ui/main_window.py`, `main.py`, `utils/translations.py` |
-
-```bash
-# Todos los tests (197)
-python -m pytest tests/ -v
-
-# Tests específicos
-python -m pytest tests/test_parser.py -v
-python -m pytest tests/test_notifier.py -v
-python -m pytest tests/test_engine.py -v
-python -m pytest tests/test_exchange_service.py -v
-```
 
 ## 📄 Licencia
 

@@ -1,7 +1,7 @@
 # 🪪 Session Handoff — MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Última actualización:** 14/06/2026 (v5 - Fixes estabilidad + 115 tests nuevos)
+> **Última actualización:** 14/06/2026 (v6 - Cobertura 75% → 87% · 348 tests)
 > **Propósito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESIÓN.**
 
 ---
@@ -33,20 +33,20 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
-**Última release:** `v1.1.0` — Chat ID UI, entity resolution, 19 tests market_data, test feedback
-**Tests:** 197/197 pasando ✅
+**Última release:** `v1.1.0` — Chat ID UI, entity resolution, tests market_data
+**Tests:** 348/348 pasando ✅ (87% cobertura)
+**Coverage:** 75% → 87% (+86 tests)
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
 
-**Commits (ya en origin/master):**
+**Commits recientes (origin/master):**
 | Commit | Descripción |
 |--------|-------------|
-| `6f39977` | fix: entity resolution en notifier + test notification con feedback real |
-| `6bc4f0f` | feat: Chat ID configurable desde UI + 19 tests market_data + docs |
-
-**Próximos commits (fixes estabilidad + 115 tests nuevos):**
-- Fix: watchdogs duplicados, persistencia LIMIT, rate limiting, etc.
-- Tests: engine.py (31), exchange_service.py (44), settings_manager.py (21)
+| `b46ea2b` | test: mejorar cobertura de 75% a 87% (86 tests nuevos, 348 total) |
+| `96aacfe` | ci: agregar cobertura con pytest-cov + Codecov badge en README |
+| `39f8b1a` | test: 54 tests nuevos (data_classes, translations, helpers, config, logger) |
+| `09ea0f1` | feat: 115 tests nuevos (engine, exchange, settings) + fixes estabilidad + docs v5 |
+| `99e5879` | test: 54 tests nuevos (data_classes, translations, helpers, config, logger) + fixes |
 
 ---
 
@@ -211,7 +211,7 @@
 
 **Total tests:** 197/197 pasando ✅
 
-**.exe compilado:** `dist/MiBotTrading.exe` — con todos los fixes + entity resolution + test feedback + 197 tests
+**.exe compilado:** `dist/MiBotTrading.exe` — con todos los fixes + entity resolution + 348 tests + 87% cobertura
 
 ---
 
@@ -278,12 +278,15 @@ Se activan automáticamente en push/PR a master:
 ## 🧪 Cómo verificar el estado
 
 ```bash
-# Tests completos (82 tests)
+# Tests completos (348 tests · 87% cobertura)
 python -m pytest tests/ -v
+
+# Cobertura local
+python -m pytest tests/ --cov=core --cov=models --cov=services --cov=utils --cov-report=term
 
 # Tests de un módulo específico
 python -m pytest tests/test_notifier.py -v
-python -m pytest tests/test_config_backup.py -v
+python -m pytest tests/test_engine.py -v
 
 # Estado de git
 git status
@@ -315,8 +318,10 @@ Priorizados por impacto:
 14. ✅ ~~Tests para exchange_service.py (44 tests)~~ (completado)
 15. ✅ ~~Tests para settings_manager.py (21 tests)~~ (completado)
 16. ✅ ~~Fixes estabilidad: watchdogs duplicados, persistencia LIMIT, rate limiting, entity cache, health sync~~ (completado)
-17. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
-18. **Tests de integración** con exchanges simulados (mock CCXT)
+17. ✅ ~~Cobertura 75% → 87% (86 tests nuevos en 8 archivos)~~ (completado)
+18. **Gráficos en pestaña Reportes** — Agregar matplotlib para visualizar PnL histórico
+19. **Tests de integración** con exchanges simulados (mock CCXT)
+20. **Cubrir watchdog loop de engine.py** — subir de 69% a 85%
 
 ---
 
