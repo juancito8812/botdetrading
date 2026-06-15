@@ -11,6 +11,19 @@ from models.data_classes import Position
 logger = logging.getLogger("TradingBot")
 
 
+# Preferencias por defecto de notificaciones
+DEFAULT_NOTIFICATION_PREFS = {
+    "trade_open": True,
+    "trade_closed": True,
+    "tp_hit": True,
+    "trailing_activated": True,
+    "health_change": True,
+    "circuit_breaker": True,
+    "system_error": True,
+    "daily_report": True,
+}
+
+
 class TelegramNotifier:
     """
     Envía notificaciones formateadas a Telegram.
@@ -33,14 +46,30 @@ class TelegramNotifier:
         telegram_client: Any,
         chat_id: str,
         enabled: bool = True,
+        notification_prefs: Optional[Dict[str, bool]] = None,
     ):
         self.client = telegram_client
         self.chat_id = chat_id
         self.enabled = enabled
+        self._enabled_notifications: Dict[str, bool] = (
+            notification_prefs if notification_prefs else dict(DEFAULT_NOTIFICATION_PREFS)
+        )
         self.history: List[str] = []
         self._resolved_entity = None  # Cache de entidad resuelta
         self._last_send_time = 0.0  # Para rate limiting
         self._cached_chat_id: Optional[str] = None  # chat_id con el que se resolvió la entidad
+
+    def is_notification_enabled(self, notif_type: str) -> bool:
+        """Verifica si un tipo de notificación está habilitado."""
+        return self._enabled_notifications.get(notif_type, True)
+
+    def set_notification_prefs(self, prefs: Dict[str, bool]):
+        """Actualiza las preferencias de notificaciones."""
+        self._enabled_notifications.update(prefs)
+
+    def get_notification_prefs(self) -> Dict[str, bool]:
+        """Retorna copia de las preferencias actuales."""
+        return dict(self._enabled_notifications)
 
     def _add_to_history(self, text: str):
         """Agrega una entrada al historial (max 20)."""
@@ -136,6 +165,8 @@ class TelegramNotifier:
 
     async def notify_trade_open(self, position: Position):
         """Notifica apertura de una posición."""
+        if not self.is_notification_enabled("trade_open"):
+            return
         side_emoji = "🚀" if position.side.lower() == "buy" else "🔻"
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
         sl_text = f"${position.entry_price}" if position.sl_order_id else "Sin SL"
@@ -156,6 +187,8 @@ class TelegramNotifier:
 
     async def notify_trade_closed(self, position: Position):
         """Notifica cierre de una posición."""
+        if not self.is_notification_enabled("trade_closed"):
+            return
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
         pnl_str = f"{position.pnl:+.2f}" if position.pnl else "0.00"
         emoji = "✅" if position.pnl and position.pnl >= 0 else "❌"
@@ -174,6 +207,8 @@ class TelegramNotifier:
 
     async def notify_tp_hit(self, position: Position, tp_number: int):
         """Notifica que se alcanzó un Take Profit."""
+        if not self.is_notification_enabled("tp_hit"):
+            return
         msg = (
             f"🎯 TP{tp_number} alcanzado\n"
             f"Símbolo: {position.symbol}\n"
@@ -185,6 +220,8 @@ class TelegramNotifier:
 
     async def notify_trailing_activated(self, position: Position):
         """Notifica que el trailing stop se activó."""
+        if not self.is_notification_enabled("trailing_activated"):
+            return
         msg = (
             f"🔝 Trailing Stop activado\n"
             f"Símbolo: {position.symbol}\n"
@@ -199,6 +236,8 @@ class TelegramNotifier:
         consecutive_failures: int = 0, avg_latency_ms: float = 0.0,
     ):
         """Notifica cambio en el estado de salud de un exchange."""
+        if not self.is_notification_enabled("health_change"):
+            return
         emoji = "✅" if status == "healthy" else ("⚠️" if status == "degraded" else "🔴")
         msg = (
             f"{emoji} Health Monitor - {exchange}\n"
@@ -214,6 +253,8 @@ class TelegramNotifier:
         self, exchange: str, state: str, retry_after: float = 0.0,
     ):
         """Notifica cambio de estado en el circuit breaker."""
+        if not self.is_notification_enabled("circuit_breaker"):
+            return
         msg = (
             f"🔴 Circuit Breaker - {exchange}\n"
             f"Estado: {state.upper()}\n"
@@ -224,6 +265,8 @@ class TelegramNotifier:
 
     async def notify_error(self, module: str, error_message: str):
         """Notifica un error crítico del sistema."""
+        if not self.is_notification_enabled("system_error"):
+            return
         msg = (
             f"❌ Error en {module}\n"
             f"{error_message[:200]}"
@@ -235,6 +278,8 @@ class TelegramNotifier:
         self, positions: List[Position], balances: Dict[str, float],
     ):
         """Envía un reporte diario con posiciones abiertas y balances."""
+        if not self.is_notification_enabled("daily_report"):
+            return
         today = datetime.now().strftime("%d/%m/%Y")
         lines = [f"📊 Reporte Diario — {today}", "━" * 25]
 

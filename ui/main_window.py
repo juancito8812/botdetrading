@@ -21,7 +21,7 @@ from core.manager import pos_manager
 from core.engine import health_monitor
 from utils.logger import logger
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 
 class GuiHandler(logging.Handler):
@@ -104,6 +104,44 @@ class TradingBotGUI:
             self.consola_text.insert(tk.END, msg + "\n")
             self.consola_text.see(tk.END)
             self.consola_text.config(state=tk.DISABLED)
+
+    def _show_help_popup(self, title: str, description: str):
+        """Muestra un popup con ayuda descriptiva para un campo de configuración."""
+        popup = tk.Toplevel(self.root)
+        popup.title(f"❔ {title}")
+        popup.geometry("450x250")
+        popup.transient(self.root)
+        popup.grab_set()
+        popup.resizable(False, False)
+
+        # Centrar sobre la ventana principal
+        x = self.root.winfo_x() + self.root.winfo_width() // 2 - 225
+        y = self.root.winfo_y() + self.root.winfo_height() // 2 - 125
+        popup.geometry(f"+{x}+{y}")
+
+        frame = ttk.Frame(popup, padding=20)
+        frame.pack(fill='both', expand=True)
+
+        ttk.Label(frame, text=f"❔ {title}", font=("", 12, "bold")).pack(anchor='w', pady=(0, 10))
+
+        text_widget = tk.Text(frame, wrap='word', height=6, font=("", 10),
+                              relief='flat', bg=popup.cget('bg'), bd=0,
+                              padx=5, pady=5)
+        text_widget.insert('1.0', description)
+        text_widget.config(state=tk.DISABLED)
+        text_widget.pack(fill='both', expand=True, pady=(0, 10))
+
+        ttk.Button(frame, text=i18n.t("cancel"), command=popup.destroy).pack()
+
+    def _make_help_btn(self, parent, help_key: str) -> ttk.Button:
+        """Crea un botón ❔ que muestra ayuda para una clave de traducción help_."""
+        title = help_key.replace("help_", "").replace("_", " ").title()
+        desc = i18n.t(help_key)
+        # Si la clave no tiene traducción, no devolver el key sino ignorar
+        if desc == help_key:
+            desc = f"No hay descripción disponible para '{help_key}'"
+        btn = ttk.Button(parent, text="❔", width=2, command=lambda: self._show_help_popup(title, desc))
+        return btn
 
     def _on_language_change(self):
         """Actualiza la UI cuando cambia el idioma."""
@@ -529,6 +567,35 @@ class TradingBotGUI:
         self.tg_list_channels.pack(fill='x', pady=5)
         ttk.Button(ch_frame, text=i18n.t("channels_remove"), command=self.remove_telegram_channel).pack(pady=2)
 
+        # ─── Notificaciones Seleccionables ──
+        notif_sel_frame = ttk.LabelFrame(scrollable, text=i18n.t("notif_title"), padding=10)
+        notif_sel_frame.pack(fill='x', padx=10, pady=5)
+
+        ttk.Label(notif_sel_frame, text=i18n.t("notif_desc"), wraplength=700, foreground="gray", font=("", 8)).pack(anchor='w', pady=2)
+
+        self._notif_vars = {}
+        notif_types = [
+            ("trade_open", i18n.t("notif_trade_open")),
+            ("trade_closed", i18n.t("notif_trade_closed")),
+            ("tp_hit", i18n.t("notif_tp_hit")),
+            ("trailing_activated", i18n.t("notif_trailing_activated")),
+            ("health_change", i18n.t("notif_health_change")),
+            ("circuit_breaker", i18n.t("notif_circuit_breaker")),
+            ("system_error", i18n.t("notif_system_error")),
+            ("daily_report", i18n.t("notif_daily_report")),
+        ]
+
+        # Cargar preferencias guardadas
+        saved_prefs = self.settings.get("notification_preferences", {})
+
+        for key, label in notif_types:
+            var = tk.BooleanVar(value=saved_prefs.get(key, True))
+            cb = ttk.Checkbutton(notif_sel_frame, text=label, variable=var)
+            cb.pack(anchor='w', padx=10, pady=1)
+            self._notif_vars[key] = var
+
+        ttk.Button(notif_sel_frame, text=i18n.t("save"), command=self._save_notification_prefs).pack(anchor='w', pady=5, padx=10)
+
         # ─── Últimas Notificaciones ──────
         notif_frame = ttk.LabelFrame(scrollable, text=i18n.t("tg_recent_notifications"), padding=10)
         notif_frame.pack(fill='both', expand=True, padx=10, pady=5)
@@ -572,6 +639,21 @@ class TradingBotGUI:
         channels.discard(cid)
         save_channels(channels)
         self.refresh_telegram_channels()
+
+    def _save_notification_prefs(self):
+        """Guarda las preferencias de notificaciones en settings.json."""
+        prefs = {}
+        for key, var in self._notif_vars.items():
+            prefs[key] = var.get()
+        self.settings["notification_preferences"] = prefs
+        save_settings(self.settings)
+
+        # Actualizar en el notifier si está disponible
+        from core.engine import trading_engine
+        if trading_engine.notifier:
+            trading_engine.notifier.set_notification_prefs(prefs)
+
+        messagebox.showinfo(i18n.t("save"), i18n.t("notif_saved"))
 
     def refresh_telegram_channels(self):
         self.tg_list_channels.delete(0, tk.END)
@@ -660,20 +742,24 @@ class TradingBotGUI:
         lang_combo = ttk.Combobox(lang_frame, textvariable=self.lang_var, values=["es", "en"], state="readonly", width=10)
         lang_combo.grid(row=0, column=1, padx=5, pady=5, sticky='w')
         lang_combo.bind('<<ComboboxSelected>>', self._on_lang_selected)
+        self._make_help_btn(lang_frame, "help_language").grid(row=0, column=2, padx=2)
 
-        ttk.Label(lang_frame, text=i18n.t("settings_restart_hint"), foreground="gray").grid(row=1, column=0, columnspan=2, pady=5)
+        ttk.Label(lang_frame, text=i18n.t("settings_restart_hint"), foreground="gray").grid(row=1, column=0, columnspan=3, pady=5)
 
         # --- Auto-start ---
         autostart_frame = ttk.LabelFrame(frame, text=i18n.t("settings_autostart"), padding=10)
         autostart_frame.pack(fill='x', padx=10, pady=10)
 
+        autostart_inner = ttk.Frame(autostart_frame)
+        autostart_inner.pack(fill='x')
         self.autostart_var = tk.BooleanVar(value=self.settings.get("start_with_windows", False))
         ttk.Checkbutton(
-            autostart_frame,
+            autostart_inner,
             text=i18n.t("settings_autostart_desc"),
             variable=self.autostart_var,
             command=self._on_autostart_toggle
-        ).pack(anchor='w', pady=5)
+        ).pack(side='left', pady=5)
+        self._make_help_btn(autostart_inner, "help_autostart").pack(side='left', padx=2)
 
         ttk.Label(autostart_frame, text=i18n.t("settings_autostart_info"), wraplength=700, foreground="gray").pack(anchor='w', pady=5)
 
@@ -880,18 +966,21 @@ class TradingBotGUI:
             widgets = {}
             enabled_var = tk.BooleanVar(value=creds["exchanges"].get(ex_id, {}).get("enabled", False))
             ttk.Checkbutton(frame, text=i18n.t("apis_enabled"), variable=enabled_var).grid(row=0, column=1, sticky='w')
+            self._make_help_btn(frame, "help_api_enabled").grid(row=0, column=2, padx=2)
             widgets["enabled"] = enabled_var
 
             ttk.Label(frame, text=i18n.t("apis_api_key")).grid(row=1, column=0, sticky='e')
             key_entry = ttk.Entry(frame, width=50, show="*")
             key_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("api_key", ""))
             key_entry.grid(row=1, column=1, padx=5, pady=2)
+            self._make_help_btn(frame, "help_api_key").grid(row=1, column=2, padx=2)
             widgets["api_key"] = key_entry
 
             ttk.Label(frame, text=i18n.t("apis_secret")).grid(row=2, column=0, sticky='e')
             sec_entry = ttk.Entry(frame, width=50, show="*")
             sec_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("secret", ""))
             sec_entry.grid(row=2, column=1, padx=5, pady=2)
+            self._make_help_btn(frame, "help_api_secret").grid(row=2, column=2, padx=2)
             widgets["secret"] = sec_entry
 
             if info["needs_passphrase"]:
@@ -899,6 +988,7 @@ class TradingBotGUI:
                 pass_entry = ttk.Entry(frame, width=50, show="*")
                 pass_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("passphrase", ""))
                 pass_entry.grid(row=3, column=1, padx=5, pady=2)
+                self._make_help_btn(frame, "help_api_passphrase").grid(row=3, column=2, padx=2)
                 widgets["passphrase"] = pass_entry
 
             self.exchange_widgets[ex_id] = widgets
@@ -942,28 +1032,35 @@ class TradingBotGUI:
         self.spin_lev = ttk.Spinbox(gen_frame, from_=1, to=100, width=10)
         self.spin_lev.set(config.get("apalancamiento", 10))
         self.spin_lev.grid(row=row, column=1, sticky='w')
+        self._make_help_btn(gen_frame, "help_leverage").grid(row=row, column=2, padx=2)
         row += 1
 
         ttk.Label(gen_frame, text=i18n.t("risk_min_usdt")).grid(row=row, column=0, padx=5, pady=5, sticky='e')
         self.entry_min_usdt = ttk.Entry(gen_frame, width=12)
         self.entry_min_usdt.insert(0, str(config.get("cantidad_minima_usdt", 10.0)))
         self.entry_min_usdt.grid(row=row, column=1, sticky='w')
+        self._make_help_btn(gen_frame, "help_min_usdt").grid(row=row, column=2, padx=2)
         row += 1
 
         ttk.Label(gen_frame, text=i18n.t("risk_margin")).grid(row=row, column=0, padx=5, pady=5, sticky='e')
         self.margin_var = tk.StringVar(value=config.get("modo_margen", "cross"))
         ttk.Radiobutton(gen_frame, text=i18n.t("risk_margin_cross"), variable=self.margin_var, value="cross").grid(row=row, column=1, sticky='w')
         ttk.Radiobutton(gen_frame, text=i18n.t("risk_margin_isolated"), variable=self.margin_var, value="isolated").grid(row=row, column=2, sticky='w')
+        self._make_help_btn(gen_frame, "help_margin").grid(row=row, column=3, padx=2)
         row += 1
 
         ttk.Label(gen_frame, text=i18n.t("risk_tp_count")).grid(row=row, column=0, padx=5, pady=5, sticky='e')
         self.spin_tp_count = ttk.Spinbox(gen_frame, from_=1, to=10, width=10)
         self.spin_tp_count.set(config.get("tp_count", 5))
         self.spin_tp_count.grid(row=row, column=1, sticky='w')
+        self._make_help_btn(gen_frame, "help_tp_count").grid(row=row, column=2, padx=2)
         row += 1
 
         self.be_var = tk.BooleanVar(value=config.get("auto_breakeven", True))
-        ttk.Checkbutton(gen_frame, text=i18n.t("risk_breakeven"), variable=self.be_var).grid(row=row, column=0, columnspan=3, pady=5, sticky='w')
+        be_frame = ttk.Frame(gen_frame)
+        be_frame.grid(row=row, column=0, columnspan=3, pady=5, sticky='w')
+        ttk.Checkbutton(be_frame, text=i18n.t("risk_breakeven"), variable=self.be_var).pack(side='left')
+        self._make_help_btn(be_frame, "help_breakeven").pack(side='left', padx=2)
         row += 1
 
         # --- Modo de Entrada ---
@@ -981,6 +1078,7 @@ class TradingBotGUI:
         self.entry_max_dev = ttk.Entry(param_frame, width=6)
         self.entry_max_dev.insert(0, str(config.get("desviacion_maxima_porcentaje", 3.0)))
         self.entry_max_dev.pack(side='left', padx=5)
+        self._make_help_btn(param_frame, "help_max_deviation").pack(side='left', padx=2)
 
         param_frame2 = ttk.Frame(entrada_frame)
         param_frame2.pack(fill='x', pady=5)
@@ -988,13 +1086,17 @@ class TradingBotGUI:
         self.entry_timeout_limit = ttk.Entry(param_frame2, width=6)
         self.entry_timeout_limit.insert(0, str(config.get("timeout_orden_limit_minutos", 10)))
         self.entry_timeout_limit.pack(side='left', padx=5)
+        self._make_help_btn(param_frame2, "help_timeout_limit").pack(side='left', padx=2)
 
         # --- DCA ---
         dca_frame = ttk.LabelFrame(scrollable, text=i18n.t("risk_dca"), padding=10)
         dca_frame.pack(fill='x', padx=10, pady=5)
 
+        dca_inner = ttk.Frame(dca_frame)
+        dca_inner.pack(fill='x')
         self.dca_var = tk.BooleanVar(value=config.get("dca_habilitado", True))
-        ttk.Checkbutton(dca_frame, text=i18n.t("risk_dca"), variable=self.dca_var).pack(anchor='w', pady=2)
+        ttk.Checkbutton(dca_inner, text=i18n.t("risk_dca"), variable=self.dca_var).pack(side='left', pady=2)
+        self._make_help_btn(dca_inner, "help_dca").pack(side='left', padx=2)
 
         dca_row = ttk.Frame(dca_frame)
         dca_row.pack(fill='x', pady=2)
@@ -1002,6 +1104,7 @@ class TradingBotGUI:
         self.spin_dca_parts = ttk.Spinbox(dca_row, from_=2, to=10, width=5)
         self.spin_dca_parts.set(config.get("dca_partes", 3))
         self.spin_dca_parts.pack(side='left', padx=5)
+        self._make_help_btn(dca_row, "help_dca_parts").pack(side='left', padx=2)
 
         # --- Distribución de TPs ---
         tp_frame = ttk.LabelFrame(scrollable, text=i18n.t("risk_tp_distribution"), padding=10)
@@ -1018,13 +1121,17 @@ class TradingBotGUI:
         self.entry_tp_pesos = ttk.Entry(tp_row, width=20)
         self.entry_tp_pesos.insert(0, pesos_default)
         self.entry_tp_pesos.pack(side='left', padx=5)
+        self._make_help_btn(tp_row, "help_tp_pesos").pack(side='left', padx=2)
 
         # --- Trailing Stop ---
         trail_frame = ttk.LabelFrame(scrollable, text=i18n.t("risk_trailing"), padding=10)
         trail_frame.pack(fill='x', padx=10, pady=5)
 
+        trail_inner = ttk.Frame(trail_frame)
+        trail_inner.pack(fill='x')
         self.trail_var = tk.BooleanVar(value=config.get("trailing_stop_habilitado", True))
-        ttk.Checkbutton(trail_frame, text=i18n.t("risk_trailing"), variable=self.trail_var).pack(anchor='w', pady=2)
+        ttk.Checkbutton(trail_inner, text=i18n.t("risk_trailing"), variable=self.trail_var).pack(side='left', pady=2)
+        self._make_help_btn(trail_inner, "help_trailing").pack(side='left', padx=2)
 
         trail_row1 = ttk.Frame(trail_frame)
         trail_row1.pack(fill='x', pady=2)
@@ -1032,6 +1139,7 @@ class TradingBotGUI:
         self.entry_trail_activation = ttk.Entry(trail_row1, width=6)
         self.entry_trail_activation.insert(0, str(config.get("trailing_activacion_porcentaje", 1.5)))
         self.entry_trail_activation.pack(side='left', padx=5)
+        self._make_help_btn(trail_row1, "help_trailing_activation").pack(side='left', padx=2)
 
         trail_row2 = ttk.Frame(trail_frame)
         trail_row2.pack(fill='x', pady=2)
@@ -1039,35 +1147,44 @@ class TradingBotGUI:
         self.entry_trail_distance = ttk.Entry(trail_row2, width=6)
         self.entry_trail_distance.insert(0, str(config.get("trailing_distancia_porcentaje", 0.8)))
         self.entry_trail_distance.pack(side='left', padx=5)
+        self._make_help_btn(trail_row2, "help_trailing_distance").pack(side='left', padx=2)
 
         # --- Máximo posiciones por exchange ---
         maxpos_frame = ttk.LabelFrame(scrollable, text=i18n.t("risk_max_positions"), padding=10)
         maxpos_frame.pack(fill='x', padx=10, pady=10)
 
+        maxpos_help_row = ttk.Frame(maxpos_frame)
+        maxpos_help_row.pack(fill='x')
+        self._make_help_btn(maxpos_help_row, "help_max_positions").pack(side='right', padx=2)
+
         self.maxpos_widgets = {}
         maxpos_config = self.settings.get("max_positions_per_exchange", {})
         for i, (ex_id, info) in enumerate(EXCHANGES_DEFAULTS.items()):
-            ttk.Label(maxpos_frame, text=f"{info['name']}:").grid(row=i, column=0, padx=5, pady=2, sticky='e')
+            ttk.Label(maxpos_frame, text=f"{info['name']}:").grid(row=i+1, column=0, padx=5, pady=2, sticky='e')
             spin = ttk.Spinbox(maxpos_frame, from_=0, to=50, increment=1, width=5)
             val = maxpos_config.get(ex_id, 3)
             spin.set(val)
-            spin.grid(row=i, column=1, padx=5, pady=2, sticky='w')
+            spin.grid(row=i+1, column=1, padx=5, pady=2, sticky='w')
             self.maxpos_widgets[ex_id] = spin
 
         # --- % Capital por Exchange ---
         ex_frame = ttk.LabelFrame(scrollable, text=i18n.t("risk_capital_pct"), padding=10)
         ex_frame.pack(fill='x', padx=10, pady=10)
 
+        cap_help_row = ttk.Frame(ex_frame)
+        cap_help_row.pack(fill='x')
+        self._make_help_btn(cap_help_row, "help_capital_pct").pack(side='right', padx=2)
+
         self.ex_pct_widgets = {}
         pct_config = config.get("porcentaje_capital", {})
 
         for i, (ex_id, info) in enumerate(EXCHANGES_DEFAULTS.items()):
-            ttk.Label(ex_frame, text=f"{info['name']}:").grid(row=i, column=0, padx=5, pady=2, sticky='e')
+            ttk.Label(ex_frame, text=f"{info['name']}:").grid(row=i+1, column=0, padx=5, pady=2, sticky='e')
             spin = ttk.Spinbox(ex_frame, from_=0.1, to=100.0, increment=0.1, width=8)
             val = pct_config.get(ex_id, 5.0)
             spin.set(val)
-            spin.grid(row=i, column=1, padx=5, pady=2, sticky='w')
-            ttk.Label(ex_frame, text="%").grid(row=i, column=2, sticky='w')
+            spin.grid(row=i+1, column=1, padx=5, pady=2, sticky='w')
+            ttk.Label(ex_frame, text="%").grid(row=i+1, column=2, sticky='w')
             self.ex_pct_widgets[ex_id] = spin
 
         ttk.Button(scrollable, text=i18n.t("btn_save_all"), command=self.save_risk).pack(pady=20, padx=10, fill='x')

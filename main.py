@@ -221,10 +221,13 @@ class TradingBotApp:
         if not notification_chat_id:
             return None
 
+        from services.notifier import DEFAULT_NOTIFICATION_PREFS
+
         notifier = TelegramNotifier(
             telegram_client=self.telegram_client,
             chat_id=notification_chat_id,
             enabled=True,
+            notification_prefs=settings.get("notification_preferences", dict(DEFAULT_NOTIFICATION_PREFS)),
         )
         logger.info(f"🔔 Notificador inicializado (chat_id: {notification_chat_id})")
 
