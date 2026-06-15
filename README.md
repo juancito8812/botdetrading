@@ -5,6 +5,7 @@
 ![Tests](https://github.com/juancito8812/botdetrading/actions/workflows/tests.yml/badge.svg?branch=master)
 ![Lint](https://github.com/juancito8812/botdetrading/actions/workflows/lint.yml/badge.svg?branch=master)
 ![Build](https://github.com/juancito8812/botdetrading/actions/workflows/build.yml/badge.svg)
+[![Coverage](https://codecov.io/gh/juancito8812/botdetrading/branch/master/graph/badge.svg)](https://codecov.io/gh/juancito8812/botdetrading)
 ![Python](https://img.shields.io/badge/Python-3.10%20|%203.11%20|%203.12-blue)
 ![License](https://img.shields.io/badge/Licencia-Privado-red)
 ![Last Commit](https://img.shields.io/github/last-commit/juancito8812/botdetrading)
@@ -202,9 +203,24 @@ python -m pytest tests/test_exchange_service.py -v
 
 | Workflow | Trigger | Descripción |
 |----------|---------|-------------|
-| **tests.yml** | push/PR a master | Tests en Python 3.10, 3.11, 3.12 |
+| **tests.yml** | push/PR a master | Tests en Python 3.10, 3.11, 3.12 + cobertura con Codecov |
 | **lint.yml** | push/PR a master | Flake8 + Mypy |
 | **build.yml** | tag v* o manual | Compila .exe con PyInstaller |
+
+### 📊 Cobertura de código
+
+El workflow **tests.yml** genera automáticamente un reporte de cobertura con `pytest-cov` y lo sube a [Codecov](https://codecov.io).
+
+**Para activar el badge de cobertura:**
+1. Ve a [codecov.io](https://codecov.io) e inicia sesión con tu cuenta de GitHub
+2. Agrega el repositorio `juancito8812/botdetrading`
+3. Copia el token de Codecov y agrégalo como `CODECOV_TOKEN` en los secrets del repositorio (Settings → Secrets and variables → Actions)
+4. El badge se actualizará automáticamente en el próximo push a master
+
+```bash
+# Ver cobertura localmente
+python -m pytest tests/ --cov=. --cov-report=term
+```
 
 ## 🔧 Bug Fixes (14/06/2026 — Sesión de estabilización pre-operaciones reales)
 

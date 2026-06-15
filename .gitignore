@@ -42,6 +42,11 @@ nul
 bot_unificado_backup.zip
 "bot de trading ultima version.rar"
 
+# Coverage
+coverage.xml
+htmlcov/
+.coverage
+
 # Directorios legacy
 backup_modulos/
 legacy_code/
