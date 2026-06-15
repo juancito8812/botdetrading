@@ -4,8 +4,9 @@
 
 - **Propósito:** Bot de trading automatizado que recibe señales vía Telegram y ejecuta órdenes en exchanges de criptomonedas (Bitget, BingX).
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexión exchanges), Telethon (Telegram), asyncio
-- **Última sesión:** 14/06/2026 - Chat ID configurable desde la UI para notificaciones Telegram
-- **Versión de memoria:** 7
+- **Últimas features:** ❔ Tooltips de ayuda en configuración + 🔔 Notificaciones seleccionables
+- **Última sesión: 14/06/2026 - Tooltips de ayuda (❔) + Notificaciones seleccionables
+- **Versión de memoria:** 8
 
 ## Arquitectura
 
@@ -124,6 +125,8 @@ Cada llamada a exchange pasa por:
 - **Trailing stop:** Habilitado (activación 1.5%, distancia 0.8%)
 - **Resiliencia:** Completada
 - **Notificaciones:** Completadas
+- **Notificaciones seleccionables:** Completadas (8 checkboxes en UI)
+- **Tooltips de ayuda (❔):** Completados (18 campos en Riesgo, Ajustes, APIs)
 - **Backup cifrado:** Completado (82 tests, todos pasando)
 
 ## Cambios Recientes
@@ -205,6 +208,13 @@ Cada llamada a exchange pasa por:
   - 🆕 **2 tests** nuevos para `utils/helpers.py` — atomic_write_json error cleanup, patch_aiohttp_dns verify
   - **Total: 348 tests · 87% cobertura**
   - Commit: `b46ea2b`
+- **[14/06/2026]** — Tooltips de ayuda (❔) + Notificaciones seleccionables:
+  - 🆕 **18 tooltips ❔** en las pestañas Riesgo, Ajustes y APIs — cada campo de configuración tiene un botón ❔ que muestra descripción detallada emergente
+  - 🆕 **8 checkboxes de notificaciones** en pestaña 📱 Telegram — elige qué notificaciones recibir (trade open/closed, TP hit, trailing, health, errors, circuit breaker, daily report)
+  - Preferencias persistentes en `settings.json` y aplicación en tiempo real (sin reiniciar)
+  - Utils: `translations.py` con +27 claves help_* y notif_* en ES/EN
+  - Spec: `docs/superpowers/specs/2026-06-14-help-tooltips-and-notification-prefs-design.md`
+  - Commit: `364e9de`
 
 ## Próximos Pasos / TODOs
 
@@ -222,6 +232,8 @@ Cada llamada a exchange pasa por:
 - [x] Chat ID configurable desde la UI
 - [x] Fixes estabilidad: watchdogs duplicados, persistencia LIMIT, rate limiting, etc.
 - [x] Cobertura 75% → 87% (engine, health_monitor, notifier, state_recovery, config_backup, backup_manager, helpers, manager)
+- [x] Tooltips de ayuda ❔ en configuración (Riesgo, Ajustes, APIs)
+- [x] Notificaciones seleccionables (8 checkboxes en Telegram tab)
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
 - [ ] Tests de integración con exchanges simulados
 - [ ] Cubrir watchdog loop de engine.py (de 69% a 85%)

@@ -1,7 +1,7 @@
 # 🪪 Session Handoff — MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Última actualización:** 14/06/2026 (v6 - Cobertura 75% → 87% · 348 tests)
+> **Última actualización:** 14/06/2026 (v7 - Tooltips ❔ + Notificaciones seleccionables)
 > **Propósito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESIÓN.**
 
 ---
@@ -36,17 +36,18 @@
 **Última release:** `v1.1.0` — Chat ID UI, entity resolution, tests market_data
 **Tests:** 348/348 pasando ✅ (87% cobertura)
 **Coverage:** 75% → 87% (+86 tests)
+**Últimas features:** ❔ Tooltips de ayuda + 🔔 Notificaciones seleccionables
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
 
 **Commits recientes (origin/master):**
 | Commit | Descripción |
 |--------|-------------|
+| `364e9de` | feat: tooltips ayuda (?) + notificaciones seleccionables |
 | `b46ea2b` | test: mejorar cobertura de 75% a 87% (86 tests nuevos, 348 total) |
 | `96aacfe` | ci: agregar cobertura con pytest-cov + Codecov badge en README |
 | `39f8b1a` | test: 54 tests nuevos (data_classes, translations, helpers, config, logger) |
 | `09ea0f1` | feat: 115 tests nuevos (engine, exchange, settings) + fixes estabilidad + docs v5 |
-| `99e5879` | test: 54 tests nuevos (data_classes, translations, helpers, config, logger) + fixes |
 
 ---
 
@@ -211,7 +212,39 @@
 
 **Total tests:** 197/197 pasando ✅
 
-**.exe compilado:** `dist/MiBotTrading.exe` — con todos los fixes + entity resolution + 348 tests + 87% cobertura
+**.exe compilado:** `dist/MiBotTrading.exe` — con todos los fixes + tooltips ❔ + notificaciones seleccionables + 348 tests + 87% cobertura
+
+### 14. Tooltips de ayuda (❔) + Notificaciones seleccionables (14/06/2026)
+
+**Qué se hizo:** Dos features de UX:
+
+#### ❔ Tooltips de ayuda en configuración
+- Cada campo de configuración en **⚖️ Riesgo** (15 campos), **⚙️ Ajustes** (2 campos) y **🔐 APIs** (4 por exchange) tiene un botón ❔
+- Al hacer clic, se abre un popup (Toplevel) con la descripción detallada de ese parámetro
+- Helper `_show_help_popup()` reutilizable con título + descripción centrada en la ventana principal
+- 18 nuevas claves `help_*` en `translations.py` (ES/EN) con descripciones técnicas completas
+
+#### 🔔 Notificaciones seleccionables
+- Nueva sección con **8 checkboxes** en la pestaña 📱 Telegram
+  - ✅ Posición Abierta, ✅ Posición Cerrada, ✅ TP Alcanzado, ✅ Trailing Activado
+  - ✅ Error del Sistema, ✅ Health Change, ✅ Circuit Breaker, ✅ Reporte Diario
+- Cada método `notify_*` en `TelegramNotifier` verifica si el tipo está habilitado antes de enviar
+- Preferencias persistentes en `settings.json` como `notification_prefs`
+- Se aplican en tiempo real al guardar (sin reiniciar el bot)
+- 9 nuevas claves `notif_*` en `translations.py` (ES/EN)
+
+**Archivos modificados (5):**
+| Archivo | Cambio |
+|---------|--------|
+| `utils/translations.py` | +27 claves ES/EN (18 help + 9 notif) |
+| `services/notifier.py` | `DEFAULT_NOTIFICATION_PREFS`, checks en 8 métodos `is_notification_enabled()` |
+| `ui/main_window.py` | `_show_help_popup()`, `_make_help_btn()`, ❔ en 3 tabs, checkboxes notif, `_save_notification_prefs()` |
+| `main.py` | `notification_prefs` pasado al `TelegramNotifier` desde settings |
+| `docs/superpowers/specs/` | `2026-06-14-help-tooltips-and-notification-prefs-design.md` |
+
+**Spec:** `docs/superpowers/specs/2026-06-14-help-tooltips-and-notification-prefs-design.md`
+**Tests:** 348/348 pasando ✅ (sin cambios en count)
+**Commit:** `364e9de`
 
 ---
 
