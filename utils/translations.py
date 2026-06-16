@@ -105,8 +105,6 @@ TRANSLATIONS = {
         "settings_autostart_desc": "Ejecuta el bot automáticamente al iniciar el sistema (incluso sin inicio de sesión)",
         "settings_autostart_info": "Se creará una tarea en el Programador de Tareas de Windows para iniciar el bot al encender el equipo.",
         "settings_restart_hint": "Reinicia la aplicación para aplicar el cambio de idioma.",
-        "settings_tg_scraping_toggle": "📡 Activar pestaña TG Scraping",
-        "settings_tg_scraping_desc": "Muestra la pestaña de Scraping de Telegram para analizar señales de canales y hacer backtesting.",
         "settings_save_success": "Ajustes guardados correctamente.",
         "settings_autostart_enabled": "Inicio automático activado",
         "settings_autostart_disabled": "Inicio automático desactivado",
@@ -182,29 +180,6 @@ TRANSLATIONS = {
         
 
         
-        # TG Scraping
-        "tab_scraping": "📡 TG Scraping",
-        "scraping_start": "🚀 Iniciar Scraping",
-        "scraping_channels": "Canales de Señales",
-        "scraping_copy_id": "📋 Copiar ID del Canal",
-        "scraping_refresh_channels": "🔄 Refrescar",
-        "scraping_stats": "Estadísticas",
-        "scraping_no_data": "📭 Sin datos. Ejecuta Scraping para analizar los canales.",
-        "scraping_error_load": "Error cargando datos guardados.",
-        "scraping_results": "Resultados del Backtesting",
-        "scraping_col_date": "Fecha",
-        "scraping_col_channel": "Canal",
-        "scraping_col_symbol": "Símbolo",
-        "scraping_col_direction": "Dirección",
-        "scraping_col_entry": "Entrada",
-        "scraping_col_sl": "SL",
-        "scraping_col_tps": "TPs",
-        "scraping_col_result": "Resultado",
-        "scraping_select_channel_first": "Selecciona un canal de la lista primero.",
-        "scraping_need_telegram": "El bot debe estar conectado a Telegram para hacer scraping.\n\nInicia el bot primero.",
-        "scraping_no_channels": "No hay canales configurados.\nAgrega canales en la pestaña 📱 Telegram.",
-        "scraping_in_progress": "⏳ Scrapeando canales y ejecutando backtesting...",
-        
         # Consola
         "console_clear": "🗑️ Limpiar Consola",
         "console_bot_start": "🚀 INICIAR BOT",
@@ -258,7 +233,6 @@ TRANSLATIONS = {
         "help_api_secret": "Tu Secret Key del exchange. Nunca compartas esta clave con nadie.",
         "help_api_passphrase": "Frase de seguridad adicional requerida por algunos exchanges (Bitget, OKX, KuCoin).",
         "help_require_sl": "Cuando está activado, las señales que no tengan Stop Loss serán rechazadas automáticamente. Útil para evitar que mensajes de TP realizados se interpreten como nuevas señales.",
-        "help_tg_scraping": "Activa la pestaña TG Scraping para analizar el historial de canales de señales. Requiere reconexión del bot para aplicar.",
 
         # ─── Notification Preferences ──────────
         "notif_title": "Notificaciones Seleccionables",
@@ -400,8 +374,6 @@ TRANSLATIONS = {
         "settings_autostart_desc": "Run the bot automatically on system startup (even without login)",
         "settings_autostart_info": "A task will be created in Windows Task Scheduler to start the bot on boot.",
         "settings_restart_hint": "Restart the application to apply the language change.",
-        "settings_tg_scraping_toggle": "📡 Enable TG Scraping tab",
-        "settings_tg_scraping_desc": "Shows the Telegram Scraping tab to analyze channel signals and run backtesting.",
         "settings_save_success": "Settings saved successfully.",
         "settings_autostart_enabled": "Auto-start enabled",
         "settings_autostart_disabled": "Auto-start disabled",
@@ -477,29 +449,6 @@ TRANSLATIONS = {
         
 
         
-        # TG Scraping
-        "tab_scraping": "📡 TG Scraping",
-        "scraping_start": "🚀 Start Scraping",
-        "scraping_channels": "Signal Channels",
-        "scraping_copy_id": "📋 Copy Channel ID",
-        "scraping_refresh_channels": "🔄 Refresh",
-        "scraping_stats": "Statistics",
-        "scraping_no_data": "📭 No data. Run Scraping to analyze channels.",
-        "scraping_error_load": "Error loading saved data.",
-        "scraping_results": "Backtest Results",
-        "scraping_col_date": "Date",
-        "scraping_col_channel": "Channel",
-        "scraping_col_symbol": "Symbol",
-        "scraping_col_direction": "Direction",
-        "scraping_col_entry": "Entry",
-        "scraping_col_sl": "SL",
-        "scraping_col_tps": "TPs",
-        "scraping_col_result": "Result",
-        "scraping_select_channel_first": "Select a channel from the list first.",
-        "scraping_need_telegram": "The bot must be connected to Telegram to scrape.\n\nStart the bot first.",
-        "scraping_no_channels": "No channels configured.\nAdd channels in the 📱 Telegram tab.",
-        "scraping_in_progress": "⏳ Scraping channels and running backtesting...",
-        
         # Consola
         "console_clear": "🗑️ Clear Console",
         "console_bot_start": "🚀 START BOT",
@@ -553,7 +502,6 @@ TRANSLATIONS = {
         "help_api_secret": "Your exchange Secret Key. Never share this key with anyone.",
         "help_api_passphrase": "Additional security phrase required by some exchanges (Bitget, OKX, KuCoin).",
         "help_require_sl": "When enabled, signals without a Stop Loss will be automatically rejected. Useful to prevent completed TP messages from being interpreted as new signals.",
-        "help_tg_scraping": "Enables the TG Scraping tab to analyze signal channel history. Requires bot reconnection to apply.",
 
         # ─── Notification Preferences ──────────
         "notif_title": "Selectable Notifications",

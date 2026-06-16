@@ -56,13 +56,11 @@ class TradingBotGUI:
         self.tab_posiciones = ttk.Frame(self.notebook)
         self.tab_consola = ttk.Frame(self.notebook)
         self.tab_telegram = ttk.Frame(self.notebook)
-        self.tab_scraping = ttk.Frame(self.notebook)
         self.tab_reportes = ttk.Frame(self.notebook)
         self.tab_settings = ttk.Frame(self.notebook)
 
         self.notebook.add(self.tab_dashboard, text=i18n.t("tab_dashboard"))
         self.notebook.add(self.tab_telegram, text=i18n.t("tab_telegram"))
-        # tab_scraping se agrega condicionalmente segun settings (desactivado por defecto)
         self.notebook.add(self.tab_reportes, text=i18n.t("tab_reportes"))
         self.notebook.add(self.tab_apis, text=i18n.t("tab_apis"))
         self.notebook.add(self.tab_riesgo, text=i18n.t("tab_riesgo"))
@@ -77,7 +75,6 @@ class TradingBotGUI:
         # Inicializar UI de pestañas
         self.setup_dashboard_tab()
         self.setup_telegram_tab()
-        self.setup_tg_scraping_tab()
         self.setup_reports_tab()
         self.setup_apis_tab()
         self.setup_risk_tab()
@@ -88,9 +85,6 @@ class TradingBotGUI:
 
         # Cargar notificaciones recientes al inicio
         self.root.after(1000, self.refresh_telegram_notifications)
-
-        # Aplicar visibilidad de pestanas segun settings
-        self.root.after(100, self._update_tg_scraping_tab_visibility)
 
         # Configurar Logs
         self.setup_logging_bridge()
@@ -159,7 +153,6 @@ class TradingBotGUI:
         self.notebook.tab(self.tab_posiciones, text=i18n.t("tab_posiciones"))
         self.notebook.tab(self.tab_consola, text=i18n.t("tab_consola"))
         self.notebook.tab(self.tab_telegram, text=i18n.t("tab_telegram"))
-        if str(self.tab_scraping) in self.notebook.tabs():            self.notebook.tab(self.tab_scraping, text=i18n.t("tab_scraping"))
         self.notebook.tab(self.tab_reportes, text=i18n.t("tab_reportes"))
         self.notebook.tab(self.tab_settings, text=i18n.t("tab_settings"))
         # Actualizar label de último backup al cambiar idioma
@@ -738,250 +731,6 @@ class TradingBotGUI:
             self.tg_user_label.config(text="")
             self.tg_chatid_label.config(text="")
 
-    # ==================== TAB: TG SCRAPING ====================
-    def setup_tg_scraping_tab(self):
-        frame = self.tab_scraping
-
-        # ─── Top controls ───────────────────
-        top_frame = ttk.Frame(frame)
-        top_frame.pack(fill='x', padx=10, pady=5)
-
-        self.scraping_btn = ttk.Button(
-            top_frame, text=i18n.t("scraping_start"),
-            command=self._run_scraping
-        )
-        self.scraping_btn.pack(side='left', padx=5)
-
-        self.scraping_status = ttk.Label(top_frame, text="")
-        self.scraping_status.pack(side='left', padx=10)
-
-        # ─── Canales ────────────────────────
-        ch_frame = ttk.LabelFrame(frame, text=i18n.t("scraping_channels"), padding=10)
-        ch_frame.pack(fill='x', padx=10, pady=5)
-
-        self.scrape_channels_list = tk.Listbox(ch_frame, height=5)
-        self.scrape_channels_list.pack(fill='x', pady=2)
-
-        btn_row = ttk.Frame(ch_frame)
-        btn_row.pack(fill='x', pady=2)
-        ttk.Button(
-            btn_row, text=i18n.t("scraping_copy_id"),
-            command=self._copy_channel_id
-        ).pack(side='left', padx=2)
-        ttk.Button(
-            btn_row, text=i18n.t("scraping_refresh_channels"),
-            command=self._refresh_scrape_channels
-        ).pack(side='left', padx=2)
-
-        # ─── Estadísticas por canal ─────────
-        stats_frame = ttk.LabelFrame(frame, text=i18n.t("scraping_stats"), padding=5)
-        stats_frame.pack(fill='x', padx=10, pady=2)
-        self.scrape_stats_label = ttk.Label(stats_frame, text=i18n.t("scraping_no_data"))
-        self.scrape_stats_label.pack(anchor='w', padx=5, pady=2)
-
-        # ─── Resultados ─────────────────────
-        res_frame = ttk.LabelFrame(frame, text=i18n.t("scraping_results"), padding=5)
-        res_frame.pack(fill='both', expand=True, padx=10, pady=5)
-
-        columns = ("date", "channel", "symbol", "direction", "entry", "sl", "tps", "result")
-        self.scrape_tree = ttk.Treeview(res_frame, columns=columns, show='headings', height=14)
-
-        col_texts = [
-            i18n.t("scraping_col_date"),
-            i18n.t("scraping_col_channel"),
-            i18n.t("scraping_col_symbol"),
-            i18n.t("scraping_col_direction"),
-            i18n.t("scraping_col_entry"),
-            i18n.t("scraping_col_sl"),
-            i18n.t("scraping_col_tps"),
-            i18n.t("scraping_col_result"),
-        ]
-        widths = {"date": 130, "channel": 120, "symbol": 80, "direction": 70,
-                  "entry": 120, "sl": 80, "tps": 120, "result": 80}
-        for col, text in zip(columns, col_texts):
-            self.scrape_tree.heading(col, text=text)
-            self.scrape_tree.column(col, width=widths.get(col, 100), anchor='center')
-
-        vsb = ttk.Scrollbar(res_frame, orient="vertical", command=self.scrape_tree.yview)
-        self.scrape_tree.configure(yscrollcommand=vsb.set)
-        self.scrape_tree.pack(side='left', fill='both', expand=True)
-        vsb.pack(side='right', fill='y')
-
-        self.scrape_tree.tag_configure("win", foreground="#00cc00")
-        self.scrape_tree.tag_configure("loss", foreground="#ff4444")
-        self.scrape_tree.tag_configure("pending", foreground="#cccccc")
-        self.scrape_tree.tag_configure("error", foreground="#ff8800")
-
-        # Cargar datos guardados al inicio
-        self._load_scrape_data()
-        self._refresh_scrape_channels()
-
-    def _refresh_scrape_channels(self):
-        """Actualiza la lista de canales en la pestaña scraping."""
-        from utils.config import load_channels
-        self.scrape_channels_list.delete(0, tk.END)
-        for cid in load_channels():
-            self.scrape_channels_list.insert(tk.END, str(cid))
-
-    def _copy_channel_id(self):
-        """Copia el ID del canal seleccionado al portapapeles."""
-        sel = self.scrape_channels_list.curselection()
-        if not sel:
-            messagebox.showwarning(
-                i18n.t("scraping_copy_id"),
-                i18n.t("scraping_select_channel_first")
-            )
-            return
-        cid = self.scrape_channels_list.get(sel[0])
-        self.root.clipboard_clear()
-        self.root.clipboard_append(cid)
-        self.scraping_status.config(
-            text=f"✅ ID {cid} copiado al portapapeles", foreground="#00cc00"
-        )
-
-    def _load_scrape_data(self):
-        """Carga datos guardados de scraping y actualiza la UI."""
-        try:
-            from services.tg_scraper import load_saved_signals, get_channel_stats
-            signals, results = load_saved_signals()
-            if not signals:
-                self.scrape_stats_label.config(text=i18n.t("scraping_no_data"))
-                return
-
-            # Actualizar estadísticas
-            channels = get_channel_stats(signals, results)
-            total = len(signals)
-            wins = sum(c.win_count for c in channels.values())
-            losses = sum(c.loss_count for c in channels.values())
-            stats_text = f"📊 {total} señales | ✅ {wins} wins | ❌ {losses} losses"
-            if total > 0:
-                winrate = (wins / total) * 100
-                stats_text += f" | 📈 Win rate: {winrate:.1f}%"
-            self.scrape_stats_label.config(text=stats_text)
-
-            # Poblar treeview (últimas 200 señales)
-            for item in self.scrape_tree.get_children():
-                self.scrape_tree.delete(item)
-
-            sorted_signals = sorted(signals, key=lambda s: s.get("timestamp", 0), reverse=True)[:200]
-            for s in sorted_signals:
-                sid = s.get("id", "")
-                bt = results.get(sid, {})
-                status = bt.get("status", "") if isinstance(bt, dict) else ""
-
-                entry_str = f"${s.get('entry_min', 0):,.2f}"
-                if s.get('entry_max') and s.get('entry_max') != s.get('entry_min'):
-                    entry_str += f" - ${s.get('entry_max', 0):,.2f}"
-                sl_str = f"${s.get('stop_loss', 0):,.2f}" if s.get('stop_loss') else "-"
-                targets = s.get('targets', [])
-                tp_str = ", ".join(f"${t:,.0f}" for t in targets[:3]) if targets else "-"
-
-                # Emoji y tag según estado
-                if status == "win":
-                    result_text = "✅ WIN"
-                    tags = ("win",)
-                elif status == "loss":
-                    result_text = "❌ LOSS"
-                    tags = ("loss",)
-                elif status == "error":
-                    result_text = "⚠️ ERR"
-                    tags = ("error",)
-                else:
-                    result_text = "⏳ PEND"
-                    tags = ("pending",)
-
-                direction = s.get("direction", "?")
-                dir_emoji = "🚀" if direction.lower() == "buy" else "🔻"
-                dir_text = "LONG" if direction.lower() == "buy" else "SHORT"
-
-                self.scrape_tree.insert("", tk.END, values=(
-                    s.get("date_str", ""),
-                    s.get("channel_name", ""),
-                    s.get("symbol", ""),
-                    f"{dir_emoji} {dir_text}",
-                    entry_str,
-                    sl_str,
-                    tp_str,
-                    result_text,
-                ), tags=tags)
-
-        except ImportError:
-            self.scrape_stats_label.config(text=i18n.t("scraping_no_data"))
-        except Exception as e:
-            logger.warning(f"Error cargando datos de scraping: {e}")
-            self.scrape_stats_label.config(text=i18n.t("scraping_error_load"))
-
-    def _run_scraping(self):
-        """Ejecuta el scraping de todos los canales configurados."""
-        from core.engine import trading_engine
-        from utils.config import load_channels
-
-        # Obtener cliente Telegram desde el notifier del engine
-        client = None
-        if hasattr(trading_engine, 'notifier') and trading_engine.notifier:
-            client = trading_engine.notifier.client
-
-        if not client:
-            messagebox.showwarning(
-                i18n.t("scraping_start"),
-                i18n.t("scraping_need_telegram")
-            )
-            return
-
-        channels = load_channels()
-        if not channels:
-            messagebox.showwarning(
-                i18n.t("scraping_start"),
-                i18n.t("scraping_no_channels")
-            )
-            return
-
-        self.scraping_btn.config(state='disabled')
-        self.scraping_status.config(
-            text=i18n.t("scraping_in_progress"),
-            foreground="#ccaa00"
-        )
-
-        def _do_scrape():
-            loop = None
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                from services.tg_scraper import scrape_all_channels
-
-                signals, results = loop.run_until_complete(
-                    scrape_all_channels(client, channels, limit=500)
-                )
-
-                self.root.after(0, lambda: (
-                    self._load_scrape_data(),
-                    self.scraping_status.config(
-                        text=f"✅ Scraping completado: {len(signals)} señales",
-                        foreground="#00cc00"
-                    ),
-                    self.scraping_btn.config(state='normal')
-                ))
-
-            except Exception as e:
-                logger.error(f"Error en scraping: {e}", exc_info=True)
-                self.root.after(0, lambda: (
-                    self.scraping_status.config(
-                        text=f"❌ Error: {str(e)[:60]}",
-                        foreground="#ff4444"
-                    ),
-                    self.scraping_btn.config(state='normal')
-                ))
-            finally:
-                if loop:
-                    try:
-                        if not loop.is_closed():
-                            loop.close()
-                    except Exception:
-                        pass
-
-        threading.Thread(target=_do_scrape, daemon=True).start()
-
     # ==================== TAB: SETTINGS ====================
     def setup_settings_tab(self):
         frame = self.tab_settings
@@ -1033,27 +782,6 @@ class TradingBotGUI:
         self.btn_remove_task.pack(side='left', padx=5)
 
         self._update_autostart_status()
-
-        # --- TG Scraping ---
-        scraping_frame = ttk.LabelFrame(frame, text="📡 TG Scraping", padding=10)
-        scraping_frame.pack(fill='x', padx=10, pady=10)
-
-        scraping_inner = ttk.Frame(scraping_frame)
-        scraping_inner.pack(fill='x')
-        self.tg_scraping_var = tk.BooleanVar(value=self.settings.get("tg_scraping_enabled", False))
-        ttk.Checkbutton(
-            scraping_inner,
-            text=i18n.t("settings_tg_scraping_desc"),
-            variable=self.tg_scraping_var,
-            command=self._on_tg_scraping_toggle
-        ).pack(side='left', pady=5)
-        self._make_help_btn(scraping_inner, "help_tg_scraping").pack(side='left', padx=2)
-
-        ttk.Label(
-            scraping_frame,
-            text=i18n.t("settings_tg_scraping_toggle"),
-            wraplength=700, foreground="gray", font=("", 9, "bold")
-        ).pack(anchor='w', pady=(0, 2), padx=5)
 
         # --- Config Backup ---
         backup_frame = ttk.LabelFrame(frame, text=i18n.t("backup_title"), padding=10)
@@ -1177,24 +905,6 @@ class TradingBotGUI:
                 self.backup_status_label.config(text=f"⚪ {i18n.t('backup_last')}: {i18n.t('backup_never')}", foreground="gray")
         else:
             self.backup_status_label.config(text=f"⚪ {i18n.t('backup_last')}: {i18n.t('backup_never')}", foreground="gray")
-
-    def _update_tg_scraping_tab_visibility(self):
-        """Muestra u oculta la pestana TG Scraping segun settings."""
-        enabled = self.settings.get("tg_scraping_enabled", False)
-        tab_in_notebook = str(self.tab_scraping) in self.notebook.tabs()
-
-        if enabled and not tab_in_notebook:
-            # Insertar despues de Telegram (indice 1), Reportes esta en 2
-            self.notebook.insert(2, self.tab_scraping, text=i18n.t("tab_scraping"))
-        elif not enabled and tab_in_notebook:
-            self.notebook.forget(self.tab_scraping)
-
-    def _on_tg_scraping_toggle(self):
-        """Maneja el toggle de TG Scraping en settings."""
-        enabled = self.tg_scraping_var.get()
-        self.settings["tg_scraping_enabled"] = enabled
-        save_settings(self.settings)
-        self._update_tg_scraping_tab_visibility()
 
     def _on_lang_selected(self, event=None):
         lang = self.lang_var.get()
