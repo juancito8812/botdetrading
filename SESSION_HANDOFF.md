@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 16/06/2026 (v16 - Auditoria masiva: 57 bugs/malos-practicas encontrados)
+> **Ultima actualizacion:** 16/06/2026 (v17 - Release v1.3.0: bugs 19-21 + .exe)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -430,6 +430,28 @@ Ver sesion #14 en version v7 del documento.
 
 ---
 
+### 25. Release v1.3.0 - Fix bugs 19-21 + .exe compilado + GitHub Release (16/06/2026)
+
+**Que se hizo:** Corrección de los 3 bugs restantes de la auditoría, compilación y release.
+
+**Bugs corregidos:**
+| # | Bug | Archivo | Fix |
+|---|-----|---------|-----|
+| 19 | `int | str` syntax (solo Python 3.10+) | `services/notifier.py:93` | Cambiado a `Union[int, str]` con import |
+| 20 | shell=True + lista = doble cmd.exe | `services/updater.py:200` | `shell=True` → `shell=False` |
+| 21 | apply_update no cierra la app | `ui/main_window.py:943` | `root.after(1000, quit)` → `root.after(0, destroy)` |
+
+**Release:**
+- VERSION: `v1.2.0` → `v1.3.0`
+- `.exe` compilado: `dist/MiBotTrading.exe`
+- Tag: `v1.3.0`
+- Release en GitHub con changelog
+
+**Tests:** 341/342 pasando (1 pre-existing Windows PermissionError)
+**Estado:** ✅ Todos los bugs de la auditoría corregidos (25/25)
+
+---
+
 ## Como verificar el estado
 
 ```bash
@@ -446,9 +468,9 @@ git log --oneline -5
 ## Proximos Pasos / TODOs
 
 ### Pendientes
-- [ ] Compilar nuevo .exe con bugfixes
-- [ ] Corregir bugs 19-21 de la auditoría (notifier type syntax, shell=True, apply_update)
-- [ ] Release v1.3.0 con todos los fixes
+- [x] ~~Compilar nuevo .exe con bugfixes~~
+- [x] ~~Corregir bugs 19-21 de la auditoría (notifier type syntax, shell=True, apply_update)~~
+- [x] ~~Release v1.3.0 con todos los fixes~~
 
 ---
 

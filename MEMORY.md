@@ -1,6 +1,6 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
-*Última actualización: 16/06/2026 (America/Caracas) — Fix masivo 22/22 bugs críticos*
+*Última actualización: 16/06/2026 (America/Caracas) — Release v1.3.0: bugs 19-21 + .exe*
 
 ---
 
@@ -217,7 +217,7 @@ TradingEngine.watchdog()
 | Métrica | Valor |
 |---------|-------|
 | Tests totales | **342** (sin test_notifier) |
-| Bugs críticos corregidos | **22/22** |
+| Bugs críticos corregidos | **25/25** (22 originales + 19-21) |
 | Pre-commit hook | ✅ `.githooks/pre-commit` |
 | Telegram reconexión | ✅ StringSession + lock threading + cleanup loop |
 | Bugfixes engine.py | ✅ pos.amount TP parcial, SL stop, PnL contractSize, TP1 fetch |
@@ -330,9 +330,9 @@ Se corrigieron **22 bugs críticos** (más ~15 de prioridad menor) en una sesió
 ## 📌 Próximos Pasos (Sugerencias)
 
 ### 🟢 Pendientes
-- [ ] Compilar nuevo .exe con bugfixes
-- [ ] Corregir bugs 19-21 de la auditoría (notifier, updater)
-- [ ] Release v1.3.0 con todos los fixes
+- [x] ~~Compilar nuevo .exe con bugfixes~~
+- [x] ~~Corregir bugs 19-21 de la auditoría (notifier, updater)~~
+- [x] ~~Release v1.3.0 con todos los fixes~~
 
 ---
 
