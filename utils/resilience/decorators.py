@@ -46,6 +46,26 @@ def timeout_decorator(
 
 # ─── RETRY DECORATOR ─────────────────────────────────────────────────
 
+def _extract_exchange_id(args: tuple, kwargs: dict) -> str:
+    """
+    Extrae el exchange_id de los argumentos de la función decorada.
+
+    Para métodos bound de ExchangeService: args=(self, exchange_id, ...)
+    Para funciones sueltas: args=(exchange_id, ...)
+    Para execute_signal: args=(self, signal, config, exchange_id)
+    """
+    if "exchange_id" in kwargs:
+        return kwargs["exchange_id"]
+    if not args:
+        return "unknown"
+    # args[0] suele ser self para métodos bound, args[1] suele ser exchange_id
+    # Pero también podría ser otro tipo (Signal, dict, etc.)
+    for arg in args:
+        if isinstance(arg, str):
+            return arg
+    return "unknown"
+
+
 def retry_decorator(
     max_retries: int = 3,
     base_delay: float = 1.0,
@@ -57,7 +77,7 @@ def retry_decorator(
     """
     Decorador que reintenta una función async con backoff exponencial.
 
-    El exchange_id se extrae del primer argumento de la función.
+    El exchange_id se extrae de los argumentos de la función decorada.
 
     Uso:
         @retry_decorator(max_retries=3, base_delay=1.0)
@@ -76,7 +96,7 @@ def retry_decorator(
     def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+            exchange_id = _extract_exchange_id(args, kwargs)
             return await retry_service.execute(
                 lambda: func(*args, **kwargs),
                 exchange_id=exchange_id,
@@ -104,7 +124,7 @@ def circuit_breaker_decorator(
     def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+            exchange_id = _extract_exchange_id(args, kwargs)
 
             circuit_breaker.call(exchange_id)
 
@@ -127,8 +147,6 @@ def circuit_breaker_decorator_dynamic(
     """
     Decorador que resuelve el circuit breaker dinámicamente por exchange_id.
 
-    El exchange_id debe ser el primer argumento de la función decorada.
-
     Uso:
         def get_cb(exchange_id):
             return _circuit_breakers[exchange_id]
@@ -140,7 +158,7 @@ def circuit_breaker_decorator_dynamic(
     def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+            exchange_id = _extract_exchange_id(args, kwargs)
             cb = resolver(exchange_id)
             cb.call(exchange_id)
             try:
@@ -177,7 +195,7 @@ def log_errors_decorator(
                 return await func(*args, **kwargs)
             except Exception as e:
                 duration_ms = (time.time() - start) * 1000
-                exchange_id = args[0] if args else kwargs.get("exchange_id", "unknown")
+                exchange_id = _extract_exchange_id(args, kwargs)
 
                 logger.error(
                     f"❌ Error en {func.__name__}: {e} "

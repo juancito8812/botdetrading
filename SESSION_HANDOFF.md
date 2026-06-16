@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 15/06/2026 (v12 - StringSession + revert TG Scraping + fix await)
+> **Ultima actualizacion:** 15/06/2026 (v14 - Bugfixes C1/C2: Signal serialization + decorators exchange_id)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -39,10 +39,14 @@
 
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
-**Ultima release:** `v1.1.0` -- Chat ID UI, entity resolution, tests market_data
+**Ultima release:** `v1.2.0` -- StringSession + revert TG Scraping
+**Ultimo .exe:** `dist/MiBotTrading.exe` (61 MB, con auto-updater + bugfixes C1/C2)
 **Tests:** 365/365 pasando (92% cobertura real)
 **Sesion Telegram:** StringSession (sin SQLite, sin file locking)
-**Coverage:** 87% -> 97% (artificial con duplicados) -> 92% real tras cleanup
+**Auto-Updater:** check + download + apply via GitHub Releases + UI en Settings
+**Bugfix C1:** Signal dataclass serialization (pending_limits.json ya no crashea)
+**Bugfix C2:** Decoradores exchange_id (args[0]=self corregido)
+**Superpower docs:** `docs/superpowers/specs/2026-06-15-auto-updater.md`
 **Pre-commit hook:** `.githooks/pre-commit` valida MEMORY.md + SESSION_HANDOFF.md
 **.exe:** Compilado con `--noconsole` (sin ventana negra)
 **GitHub:** https://github.com/juancito8812/botdetrading.git
@@ -51,11 +55,11 @@
 **Commits recientes (origin/master):**
 | Commit | Descripcion |
 |--------|-------------|
-| (pendiente) | fix: StringSession para Telegram + revert TG Scraping + fix await |
+| (pendiente) | feat: auto-updater + fix C1/C2: Signal serialization + decorators exchange_id |
+| `e6d693e` | fix: StringSession para Telegram + revert TG Scraping + fix await |
 | `a1194df` | Revert 'feat: TG Scraping toggleable en settings' |
 | `d28386f` | fix: log rotation 1 mes + bugs corregidos (engine.py, notifier.py) |
 | `19cd294` | build: actualizar MiBotTrading.spec con --noconsole |
-| `dba82a7` | docs: Superpowers obligatorio + pre-commit hook |
 
 ---
 
@@ -170,6 +174,90 @@ Ver sesion #14 en version v7 del documento.
 
 ---
 
+### 20. Auto-Updater via GitHub Releases + UI en Settings (15/06/2026)
+
+**Superpower docs creados:**
+- `docs/superpowers/specs/2026-06-15-auto-updater.md`
+- `docs/superpowers/plans/2026-06-15-auto-updater.md`
+
+**Arquitectura:**
+```
+1. CHECK  → GET api.github.com/.../releases/latest, compara tag con version local
+2. DOWNLOAD → Descarga .exe del release a updates/
+3. APPLY → Crea .bat que espera 3s, reemplaza .exe, inicia nuevo, se autoelimina
+```
+
+**Archivos creados:**
+| Archivo | Descripcion |
+|---------|-------------|
+| `VERSION` | Version actual (`v1.2.0`) |
+| `services/updater.py` | Servicio completo: check, download, .bat apply |
+
+**Archivos modificados:**
+| Archivo | Cambio |
+|---------|--------|
+| `utils/translations.py` | Claves `upd_*` en ES y EN (13 claves) |
+| `utils/settings_manager.py` | `auto_check_updates: True` en defaults |
+| `ui/main_window.py` | Seccion Updates en Settings (version, check, download, release notes) |
+| `main.py` | Auto-check 3s despues del inicio en background thread |
+
+**Funcionalidad:**
+| Feature | Detalle |
+|---------|--------|
+| Check manual | Boton en Settings > Actualizaciones, corre en hilo separado |
+| Auto-check startup | 3s despues de cargar GUI, configurable via checkbox |
+| Release notes | Widget de texto con notes de la version (oculto hasta que hay disponible) |
+| Download | Streaming 8KB chunks, log cada 10%, timeout 120s |
+| Apply .bat | Crea script que espera 3s, copia .exe, inicia nuevo, se autoelimina |
+| Soporte .zip | Extrae con PowerShell Expand-Archive si el asset es .zip |
+| Solo .exe mode | No funciona en modo desarrollo (script Python) — require sys.frozen |
+
+**Tests:** 365/365 pasando
+**.exe compilado:** `dist/MiBotTrading.exe` (61 MB) con `--hidden-import=services.updater`
+
+**Comportamiento en UI:**
+- Label con version actual al abrir Settings
+- Check "Buscar actualizaciones al iniciar" (persiste en settings.json)
+- Boton "🔄 Buscar actualizaciones" (deshabilitado durante la busqueda)
+- Boton "📥 DESCARGAR" (habilitado solo cuando hay nueva version)
+- Status: checking / up-to-date / nueva version disponible / error
+- Release notes en widget de texto (aparece solo cuando hay nueva version)
+- Al hacer clic en DESCARGAR: download → .bat → root.quit() → .bat reemplaza y reinicia
+
+---
+
+### 21. Bugfixes: Signal serialization (C1) + Decorators exchange_id (C2) (15/06/2026)
+
+**C1 — Signal dataclass → JSON serialization crash** (`core/engine.py`)
+- `_pending_limit_orders` guardaba objeto `Signal` directamente, `json.dump()` crasheaba
+- Fix: `_signal_to_dict()` y `_signal_from_dict()` para serialización/reconstrucción
+- `_save_pending_limits()` convierte Signal→dict antes de guardar, con `default=str`
+- `_load_pending_limits()` reconvierte dict→Signal al cargar desde disco
+- `_place_limit_entry()` y `_place_dca_orders()` guardan signal_dict
+- `_process_filled_limit_order()` detecta si signal es dict y lo reconvierte
+
+**C2 — args[0] = self en decoradores** (`utils/resilience/decorators.py`)
+- Los 4 decoradores (retry, circuit_breaker, circuit_breaker_dynamic, log_errors) usaban `args[0]` como exchange_id
+- En métodos bound de ExchangeService, `args[0]` es `self` (la instancia), no el exchange_id
+- Fix: nueva función helper `_extract_exchange_id(args, kwargs)` que busca kwargs primero, luego recorre args para el primer string
+- Ahora `get_balance(self, "bingx")` extrae "bingx" correctamente
+
+**Test fix:**
+- El fixture `engine` ahora limpia `_PENDING_LIMITS_FILE` en disco entre tests
+- Antes los tests dejaban datos persistentes que el siguiente test cargaba (porque C1 ahora sí serializa correctamente)
+
+**Archivos modificados:**
+| Archivo | Cambio |
+|---------|--------|
+| `core/engine.py` | C1: _signal_to_dict, _signal_from_dict, save/load fixes |
+| `utils/resilience/decorators.py` | C2: _extract_exchange_id en 4 decoradores |
+| `tests/test_engine.py` | Fixture engine limpia pending_limits entre tests |
+
+**Tests:** 365/365 pasando
+**.exe compilado:** `dist/MiBotTrading.exe` (61 MB)
+
+---
+
 ## GitHub Actions -- Workflows
 
 | Workflow | Trigger | Stack | Que hace |
@@ -210,8 +298,8 @@ Priorizados por impacto:
 
 1. **Activar mas exchanges** -- Binance, Bybit, OKX (ya configurados, solo falta habilitar en `.env` y probar)
 2. **Llegar a 100% cobertura real** -- Actualmente 92%, engine.py es el mayor reto (~55 lineas en guard clauses)
-3. **Graficos en pestana Reportes** -- Agregar matplotlib para visualizar PnL historico
-4. **Tests de integracion** con exchanges simulados (mock CCXT)
+3. **Tests unitarios del updater** -- services/updater.py no tiene tests dedicados
+4. **Graficos en pestana Reportes** -- Agregar matplotlib para visualizar PnL historico
 
 ---
 
@@ -229,6 +317,7 @@ Priorizados por impacto:
 | Auto-start Windows | Activado por defecto |
 | Dashboard auto-refresh | 60s (activado por defecto) |
 | Notificaciones | Seleccionables desde UI (8 tipos) |
+| Auto-Updater | Check startup + manual, download, apply .bat |
 | Check interval health | 60s |
 | Retry intentos | 3 (backoff exp. 1s->2s->4s) |
 | Circuit breaker | 5 fallos -> OPEN 60s -> HALF_OPEN |

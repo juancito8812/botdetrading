@@ -799,6 +799,186 @@ class TradingBotGUI:
         self.backup_status_label.pack(anchor='w', padx=5, pady=5)
         self._update_backup_status()
 
+        # --- Updates ---
+        upd_frame = ttk.LabelFrame(frame, text=i18n.t("upd_title"), padding=10)
+        upd_frame.pack(fill='x', padx=10, pady=10)
+
+        # Current version
+        version_row = ttk.Frame(upd_frame)
+        version_row.pack(fill='x', pady=5)
+        ttk.Label(version_row, text=i18n.t("upd_current_version"), font=("", 9, "bold")).pack(side='left')
+        self.upd_version_label = ttk.Label(version_row, text="--", font=("", 9))
+        self.upd_version_label.pack(side='left', padx=5)
+
+        # Auto-check checkbox
+        self.upd_auto_var = tk.BooleanVar(value=self.settings.get("auto_check_updates", True))
+        def _on_upd_auto_toggle():
+            self.settings["auto_check_updates"] = self.upd_auto_var.get()
+            save_settings(self.settings)
+        ttk.Checkbutton(
+            upd_frame,
+            text=i18n.t("upd_auto_check"),
+            variable=self.upd_auto_var,
+            command=_on_upd_auto_toggle
+        ).pack(anchor='w', pady=2)
+
+        # Buttons row
+        upd_btn_row = ttk.Frame(upd_frame)
+        upd_btn_row.pack(fill='x', pady=5)
+
+        self.upd_check_btn = ttk.Button(
+            upd_btn_row,
+            text=i18n.t("upd_check"),
+            command=self._check_for_updates
+        )
+        self.upd_check_btn.pack(side='left', padx=2)
+
+        self.upd_download_btn = ttk.Button(
+            upd_btn_row,
+            text=i18n.t("upd_download"),
+            command=self._download_update,
+            state='disabled'
+        )
+        self.upd_download_btn.pack(side='left', padx=2)
+
+        # Status / progress label
+        self.upd_status_label = ttk.Label(upd_frame, text="", foreground="gray")
+        self.upd_status_label.pack(anchor='w', padx=5, pady=5)
+
+        # Release notes (scrollable text, hidden initially)
+        self.upd_notes_text = tk.Text(upd_frame, height=5, wrap='word',
+                                       font=("Consolas", 8),
+                                       state=tk.DISABLED, foreground="gray")
+
+        # Internal state for update flow
+        self._upd_latest_info = None  # dict with tag_name, download_url, body
+
+        # Cargar version inicial y hacer auto-check
+        self._load_current_version()
+
+    def _load_current_version(self):
+        """Carga y muestra la versión actual desde VERSION file."""
+        from services.updater import get_current_version
+        ver = get_current_version()
+        self.upd_version_label.config(text=ver)
+
+    def _check_for_updates(self):
+        """Busca actualizaciones en segundo plano y actualiza la UI."""
+        self.upd_check_btn.config(state='disabled', text=i18n.t("upd_checking"))
+        self.upd_status_label.config(text=i18n.t("upd_checking"), foreground="gray")
+        self.upd_download_btn.config(state='disabled')
+        self.upd_notes_text.pack_forget()
+
+        def _do_check():
+            from services.updater import check_latest_version, is_newer_version, get_current_version
+            try:
+                info = check_latest_version()
+                if info is None:
+                    self.root.after(0, lambda: (
+                        self.upd_status_label.config(text=i18n.t("upd_error"), foreground="#ff4444"),
+                        self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
+                    ))
+                    return
+
+                current = get_current_version()
+                latest = info["tag_name"]
+
+                if is_newer_version(latest, current):
+                    body = info.get("body", "")
+                    self._upd_latest_info = info
+                    self.root.after(0, lambda: (
+                        self.upd_status_label.config(
+                            text=f"{i18n.t('upd_available')} {latest}",
+                            foreground="#00cc00"
+                        ),
+                        self.upd_download_btn.config(state='normal'),
+                        self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
+                        self._show_release_notes(body),
+                    ))
+                else:
+                    self.root.after(0, lambda: (
+                        self.upd_status_label.config(text=i18n.t("upd_uptodate"), foreground="#00cc00"),
+                        self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
+                    ))
+            except Exception as e:
+                self.root.after(0, lambda: (
+                    self.upd_status_label.config(text=f"{i18n.t('upd_error')}: {str(e)[:60]}", foreground="#ff4444"),
+                    self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
+                ))
+
+        import threading
+        threading.Thread(target=_do_check, daemon=True).start()
+
+    def _show_release_notes(self, body: str):
+        """Muestra las notas de la versión en el widget de texto."""
+        if not body:
+            return
+        self.upd_notes_text.config(state=tk.NORMAL)
+        self.upd_notes_text.delete(1.0, tk.END)
+        self.upd_notes_text.insert(tk.END, f"{i18n.t('upd_release_notes')}\n{body}")
+        self.upd_notes_text.config(state=tk.DISABLED)
+        # Pack before the button row if visible
+        if hasattr(self, 'upd_check_btn') and self.upd_check_btn.winfo_exists():
+            self.upd_notes_text.pack(fill='x', padx=5, pady=5, before=self.upd_check_btn.master)
+        else:
+            self.upd_notes_text.pack(fill='x', padx=5, pady=5)
+
+    def _download_update(self):
+        """Descarga la actualización y la aplica."""
+        if not self._upd_latest_info or not self._upd_latest_info.get("download_url"):
+            return
+
+        self.upd_download_btn.config(state='disabled', text=i18n.t("upd_downloading"))
+        self.upd_status_label.config(text=i18n.t("upd_downloading"), foreground="gray")
+
+        def _do_download():
+            from services.updater import download_update, apply_update
+            from pathlib import Path
+
+            try:
+                url = self._upd_latest_info["download_url"]
+                dest = download_update(url)
+                if dest:
+                    self.root.after(0, lambda: (
+                        self.upd_status_label.config(text=i18n.t("upd_downloaded"), foreground="#00cc00"),
+                    ))
+                    # Apply update: esto lanza el .bat y luego debemos cerrar la app
+                    success = apply_update(dest)
+                    if success:
+                        self.root.after(1000, lambda: self.root.quit())
+                    else:
+                        self.root.after(0, lambda: (
+                            self.upd_status_label.config(
+                                text="Error al aplicar la actualización",
+                                foreground="#ff4444"
+                            ),
+                            self.upd_download_btn.config(
+                                state='normal', text=i18n.t("upd_download")
+                            ),
+                        ))
+                else:
+                    self.root.after(0, lambda: (
+                        self.upd_status_label.config(
+                            text="Error al descargar la actualización",
+                            foreground="#ff4444"
+                        ),
+                        self.upd_download_btn.config(
+                            state='normal', text=i18n.t("upd_download")
+                        ),
+                    ))
+            except Exception as e:
+                self.root.after(0, lambda: (
+                    self.upd_status_label.config(
+                        text=f"Error: {str(e)[:60]}", foreground="#ff4444"
+                    ),
+                    self.upd_download_btn.config(
+                        state='normal', text=i18n.t("upd_download")
+                    ),
+                ))
+
+        import threading
+        threading.Thread(target=_do_download, daemon=True).start()
+
     def _export_config(self):
         """Exporta toda la configuración a un archivo .botconfig cifrado."""
         from tkinter import filedialog

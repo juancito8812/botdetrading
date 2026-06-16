@@ -30,6 +30,7 @@
 - [x] GitHub Actions (tests, lint, build)
 - [x] Pre-commit hook Superpowers (valida MEMORY.md + SESSION_HANDOFF.md)
 - [x] Repositorio en GitHub
+- [x] Auto-Updater (check/download/apply via GitHub Releases + UI en Settings)
 
 ---
 
@@ -72,7 +73,8 @@ MiBotTrading/
 │
 ├── services/                   # ★ SERVICIOS EXTERNOS ★
 │   ├── exchange_service.py     # ExchangeService — conexión con exchanges vía CCXT
-│   └── market_data.py          # Datos de CoinGecko (top 20 + índices)
+│   ├── market_data.py          # Datos de CoinGecko (top 20 + índices)
+│   └── updater.py              # Auto-Updater via GitHub Releases
 │
 ├── ui/                         # ★ INTERFAZ DE USUARIO ★
 │   └── main_window.py          # TradingBotGUI — Tkinter (9 pestañas)
@@ -214,8 +216,11 @@ TradingEngine.watchdog()
 | Módulos al 100% | 11 |
 | Archivos de test | 20 |
 | Pre-commit hook | ✅ `.githooks/pre-commit` |
-| .exe | ✅ `dist/MiBotTrading.exe` (sin consola, StringSession) |
+| .exe | ✅ `dist/MiBotTrading.exe` (sin consola, StringSession, bugfixes C1/C2) |
 | Telegram reconexión | ✅ StringSession + lock threading + cleanup loop |
+| Auto-Updater | ✅ check/download/apply via GitHub Releases + UI |
+| Signal serialization | ✅ _signal_to_dict / _signal_from_dict + default=str |
+| Decoradores exchange_id | ✅ _extract_exchange_id (kwargs/args scan) |
 
 ---
 
@@ -278,16 +283,22 @@ TARGETS: 120, 130
 
 4. **Dependencia de CoinGecko** — El dashboard usa la API gratuita de CoinGecko, tiene límite de 10-30 llamadas/minuto.
 
+### Bugs corregidos en última sesión
+
+| Bug | Archivo | Síntoma | Solución |
+|-----|---------|---------|----------|
+| **C1** | `core/engine.py` | `json.dump` crashea con `Signal` dataclass en `_pending_limit_orders` | `_signal_to_dict()`/`_signal_from_dict()` + `default=str` |
+| **C2** | `utils/resilience/decorators.py` | Todos los exchanges compartían un solo circuit breaker porque `args[0]` era `self` no `exchange_id` | `_extract_exchange_id()` helper que busca kwargs + args scan |
+
 ---
 
 ## 📌 Próximos Pasos (Sugerencias)
 
 - [ ] **Subir cobertura a 100%** — Actualmente 92%, engine.py tiene ~55 líneas no cubiertas
-- [ ] Notificaciones por Telegram cuando se abra/cierre una posición
 - [ ] Soporte para más exchanges (Binance, Bybit, etc.)
 - [ ] Backtesting con señales históricas
 - [ ] Dashboard con P&L en tiempo real y gráficos
-- [ ] Logs rotativos (actualmente crecen sin límite)
+- [ ] Tests unitarios del updater
 
 ---
 

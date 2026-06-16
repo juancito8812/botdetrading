@@ -34,6 +34,31 @@ class TradingEngine:
         # Cargar órdenes LIMIT pendientes desde disco
         self._load_pending_limits()
 
+    def _signal_to_dict(self, signal: 'Signal') -> dict:
+        """Convierte un objeto Signal a dict para serialización JSON."""
+        return {
+            "simbolo": signal.simbolo,
+            "direccion": signal.direccion,
+            "entry_min": signal.entry_min,
+            "entry_max": signal.entry_max,
+            "stop_loss": signal.stop_loss,
+            "targets": list(signal.targets) if signal.targets else [],
+            "raw_text": signal.raw_text,
+        }
+
+    def _signal_from_dict(self, data: dict) -> 'Signal':
+        """Reconstruye un objeto Signal desde un dict."""
+        from models.data_classes import Signal
+        return Signal(
+            simbolo=data.get("simbolo", ""),
+            direccion=data.get("direccion", ""),
+            entry_min=data.get("entry_min"),
+            entry_max=data.get("entry_max"),
+            stop_loss=data.get("stop_loss"),
+            targets=data.get("targets", []),
+            raw_text=data.get("raw_text", ""),
+        )
+
     def _load_pending_limits(self):
         """Carga órdenes LIMIT pendientes desde archivo (persistencia entre reinicios)."""
         try:
@@ -41,6 +66,10 @@ class TradingEngine:
                 with open(_PENDING_LIMITS_FILE, "r") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
+                    # Convertir señales de dict a Signal si es necesario
+                    for order_id, pending in data.items():
+                        if isinstance(pending.get("signal"), dict):
+                            pending["signal"] = self._signal_from_dict(pending["signal"])
                     self._pending_limit_orders = data
                     logger.info(f"📂 Cargadas {len(data)} órdenes LIMIT pendientes desde disco")
         except Exception as e:
@@ -49,7 +78,14 @@ class TradingEngine:
     def _save_pending_limits(self):
         """Persiste órdenes LIMIT pendientes a disco."""
         try:
-            atomic_write_json(_PENDING_LIMITS_FILE, self._pending_limit_orders, indent=2)
+            # Convertir signals a dict antes de serializar
+            serializable = {}
+            for oid, pending in self._pending_limit_orders.items():
+                entry = dict(pending)
+                if isinstance(entry.get("signal"), Signal):
+                    entry["signal"] = self._signal_to_dict(entry["signal"])
+                serializable[oid] = entry
+            atomic_write_json(_PENDING_LIMITS_FILE, serializable, indent=2, default=str)
         except Exception as e:
             logger.warning(f"⚠️ No se pudieron persistir órdenes LIMIT: {e}")
 
@@ -362,7 +398,7 @@ class TradingEngine:
             self._pending_limit_orders[order_id] = {
                 "exchange_id": exchange_id,
                 "market_symbol": market_symbol,
-                "signal": signal,
+                "signal": self._signal_to_dict(signal),
                 "config": config,
                 "amount": amount,
                 "limit_price": limit_price,
@@ -432,7 +468,7 @@ class TradingEngine:
                     self._pending_limit_orders[order_id] = {
                         "exchange_id": exchange_id,
                         "market_symbol": market_symbol,
-                        "signal": signal,
+                        "signal": self._signal_to_dict(signal),
                         "config": config,
                         "amount": base_amount,
                         "limit_price": limit_price_prec,
@@ -574,7 +610,12 @@ class TradingEngine:
 
         side = pending["side"]
         side_upper = pending["side_upper"]
-        signal: Signal = pending["signal"]
+        # Reconstruir Signal si vino como dict desde disco
+        raw_signal = pending["signal"]
+        if isinstance(raw_signal, dict):
+            signal: Signal = self._signal_from_dict(raw_signal)
+        else:
+            signal: Signal = raw_signal
         config = pending["config"]
         leverage = pending["leverage"]
         amount = pending["amount"]

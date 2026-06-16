@@ -234,6 +234,21 @@ TRANSLATIONS = {
         "help_api_passphrase": "Frase de seguridad adicional requerida por algunos exchanges (Bitget, OKX, KuCoin).",
         "help_require_sl": "Cuando está activado, las señales que no tengan Stop Loss serán rechazadas automáticamente. Útil para evitar que mensajes de TP realizados se interpreten como nuevas señales.",
 
+        # ─── Updater ────────────────────────────
+        "upd_title": "🔄 Actualizaciones",
+        "upd_current_version": "Versión actual:",
+        "upd_check": "🔄 Buscar actualizaciones",
+        "upd_checking": "Buscando actualizaciones...",
+        "upd_uptodate": "✅ Ya tienes la última versión",
+        "upd_available": "📥 Nueva versión disponible:",
+        "upd_download": "📥 DESCARGAR",
+        "upd_downloading": "Descargando actualización...",
+        "upd_downloaded": "✅ Descarga completada. Aplicando...",
+        "upd_error": "Error al buscar actualizaciones",
+        "upd_auto_check": "Buscar actualizaciones al iniciar",
+        "upd_restart": "Descargado. La app se cerrará para aplicar la actualización.",
+        "upd_release_notes": "Notas de la versión:",
+
         # ─── Notification Preferences ──────────
         "notif_title": "Notificaciones Seleccionables",
         "notif_desc": "Selecciona qué notificaciones quieres recibir por Telegram:",
@@ -502,6 +517,21 @@ TRANSLATIONS = {
         "help_api_secret": "Your exchange Secret Key. Never share this key with anyone.",
         "help_api_passphrase": "Additional security phrase required by some exchanges (Bitget, OKX, KuCoin).",
         "help_require_sl": "When enabled, signals without a Stop Loss will be automatically rejected. Useful to prevent completed TP messages from being interpreted as new signals.",
+
+        # ─── Updater ────────────────────────────
+        "upd_title": "🔄 Updates",
+        "upd_current_version": "Current version:",
+        "upd_check": "🔄 Check for updates",
+        "upd_checking": "Checking for updates...",
+        "upd_uptodate": "✅ You have the latest version",
+        "upd_available": "📥 New version available:",
+        "upd_download": "📥 DOWNLOAD",
+        "upd_downloading": "Downloading update...",
+        "upd_downloaded": "✅ Download complete. Applying...",
+        "upd_error": "Error checking for updates",
+        "upd_auto_check": "Check for updates on startup",
+        "upd_restart": "Downloaded. The app will close to apply the update.",
+        "upd_release_notes": "Release notes:",
 
         # ─── Notification Preferences ──────────
         "notif_title": "Selectable Notifications",

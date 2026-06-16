@@ -64,7 +64,13 @@ def _mock_client():
 
 @pytest.fixture
 def engine():
-    from core.engine import TradingEngine
+    from core.engine import TradingEngine, _PENDING_LIMITS_FILE
+    # Limpiar archivo de persistencia para que tests no hereden datos entre sí
+    try:
+        if _PENDING_LIMITS_FILE.exists():
+            _PENDING_LIMITS_FILE.unlink()
+    except Exception:
+        pass
     eng = TradingEngine()
     eng.processed_signals = {}
     eng._last_health_check_time = 0.0  # Inicializar para watchdog

@@ -226,6 +226,7 @@ python -m pytest tests/test_exchange_service.py -v
 | `utils/settings_manager.py` | 100% |
 | `core/parser.py` | 100% |
 | `utils/resilience/error_handler.py` | 100% |
+| `services/updater.py` | 100% |
 | `services/notifier.py` | 99% |
 | `utils/resilience/state_recovery.py` | 99% |
 | `services/exchange_service.py` | 97% |
@@ -233,7 +234,8 @@ python -m pytest tests/test_exchange_service.py -v
 | `services/market_data.py` | 94% |
 | `utils/resilience/health_monitor.py` | 91% |
 | `utils/resilience/circuit_breaker.py` | 90% |
-| **TOTAL** | **87%** |
+| `utils/resilience/decorators.py` | 87% |
+| **TOTAL** | **92%** |
 
 ## 🤖 GitHub Actions
 
@@ -277,6 +279,13 @@ El workflow **tests.yml** genera automáticamente un reporte de cobertura con `p
 | 🔴 | **Event loop must not change (Telegram)** — Telethon detectaba cambio de loop al reconectar | Cliente Telegram se crea UNA vez, reconexiones usan `connect()` + `start()` en el mismo cliente | `main.py` (refactor completo) |
 | 🟡 | **Notifier crash en Windows** — `disconnect()` rompía IOCP de Windows | Solo loguea warning sin manipular conexión | `services/notifier.py` |
 | 🟢 | **Nuevo: Chat ID configurable desde UI** — Antes solo se podía cambiar en `.env` | Campo Entry + botón Guardar en pestaña 📱 Telegram, guarda en `settings.json` | `ui/main_window.py`, `main.py`, `utils/translations.py` |
+
+### Bugs corregidos (15/06/2026 — Señal + Decoradores)
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| 🔴 | **C1: Signal dataclass → JSON crash** — `_pending_limit_orders` guardaba `Signal` object, `json.dump` crasheaba | `_signal_to_dict()`/`_signal_from_dict()` + `default=str` | `core/engine.py` |
+| 🔴 | **C2: args[0]=self en decoradores** — Todos los exchanges compartían el mismo circuit breaker | `_extract_exchange_id()` helper busca kwargs + args scan | `utils/resilience/decorators.py` |
 
 ## 📄 Licencia
 
