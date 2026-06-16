@@ -39,11 +39,16 @@ def get_current_version() -> str:
 
 
 def parse_version(version_str: str) -> tuple:
-    """Convierte 'v1.2.3' a tupla (1, 2, 3) para comparar."""
+    """Convierte 'v1.2.3' a tupla (1, 2, 3) para comparar.
+    Siempre retorna una tupla de 3 elementos para evitar TypeError
+    al comparar versiones de distinta longitud."""
     v = version_str.lstrip("vV")
     parts = v.split(".")
     try:
-        return tuple(int(p) for p in parts)
+        parts_int = [int(p) for p in parts]
+        while len(parts_int) < 3:
+            parts_int.append(0)
+        return tuple(parts_int[:3])
     except ValueError:
         return (0, 0, 0)
 

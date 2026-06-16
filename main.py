@@ -1,6 +1,7 @@
 import asyncio
 import os
 import threading
+import time
 import tkinter as tk
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -29,6 +30,10 @@ class TradingBotApp:
         self._loop_lock = threading.Lock()
         self._loop_stopped = threading.Event()
         self._loop_stopped.set()  # Inicialmente detenido
+
+        # Cache de config para evitar IO en cada mensaje
+        self._cached_config = {}
+        self._last_config_refresh = 0.0
 
         # Configurar parche DNS
         patch_aiohttp_dns()
@@ -73,11 +78,12 @@ class TradingBotApp:
         logger.info("Solicitud de detencion enviada.")
 
         # Detener watchdog (metodo sincronico)
-        if self.loop and not self.loop.is_closed():
+        loop = self.loop
+        if loop and not loop.is_closed():
             try:
-                self.loop.call_soon_threadsafe(trading_engine.stop_watchdog)
+                loop.call_soon_threadsafe(trading_engine.stop_watchdog)
             except RuntimeError:
-                pass  # loop ya cerrado
+                logger.debug("Loop ya cerrado al detener watchdog")
 
         # Forzar salida del run_until_disconnected() para que el loop termine
         if self.telegram_client and self.loop and not self.loop.is_closed():
@@ -170,7 +176,11 @@ class TradingBotApp:
             text = event.raw_text
             logger.info(f"📥 Mensaje recibido: {text[:50]}...")
 
-            config = load_risk_config()
+            now = time.time()
+            if now - self._last_config_refresh > 30:
+                self._cached_config = load_risk_config()
+                self._last_config_refresh = now
+            config = self._cached_config
             signal = parse_trading_signal(text)
             if signal:
                 active_exchanges = list(exchange_service.clients.keys())
@@ -181,9 +191,11 @@ class TradingBotApp:
                     f"{active_exchanges}"
                 )
                 for ex_id in active_exchanges:
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         trading_engine.execute_signal(signal, config, ex_id)
                     )
+                    trading_engine.active_tasks.add(task)
+                    task.add_done_callback(trading_engine.active_tasks.discard)
             else:
                 logger.info("Formato de señal no reconocido.")
 
@@ -219,7 +231,7 @@ class TradingBotApp:
 
             self.root.after(0, ask)
             code = q.get()
-            logger.info(f"Código recibido desde la GUI: {code}")
+            logger.info("Código de verificación recibido desde la GUI")
             return code
 
         def get_password_gui():
@@ -405,8 +417,11 @@ class TradingBotApp:
 
         # 2. Verificar credenciales de Telegram
         tg = creds["telegram"]
-        if not tg["API_ID"] or not tg["PHONE_NUMBER"]:
-            logger.error("Credenciales de Telegram incompletas.")
+        api_id = tg.get("API_ID", "").strip()
+        api_hash = tg.get("API_HASH", "").strip()
+        phone = tg.get("PHONE_NUMBER", "").strip()
+        if not api_id or not api_id.isdigit() or not phone or not api_hash:
+            logger.error("Credenciales de Telegram incompletas o inválidas (API_ID numérico, API_HASH, PHONE_NUMBER requeridos)")
             self.stop_bot()
             return
 

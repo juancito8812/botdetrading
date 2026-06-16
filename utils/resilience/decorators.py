@@ -58,10 +58,12 @@ def _extract_exchange_id(args: tuple, kwargs: dict) -> str:
         return kwargs["exchange_id"]
     if not args:
         return "unknown"
-    # args[0] suele ser self para métodos bound, args[1] suele ser exchange_id
-    # Pero también podría ser otro tipo (Signal, dict, etc.)
+    known_ids = {"bitget", "bingx", "binance", "bybit", "okx", "kucoin", "mexc", "phemex", "blofin"}
     for arg in args:
-        if isinstance(arg, str):
+        if isinstance(arg, str) and arg.lower() in known_ids:
+            return arg
+    for arg in reversed(args):
+        if isinstance(arg, str) and not arg.startswith("/") and "/" not in arg[:10]:
             return arg
     return "unknown"
 

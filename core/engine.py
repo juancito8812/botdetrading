@@ -232,7 +232,6 @@ class TradingEngine:
             await self._place_stop_loss(client, exchange_id, market_symbol, signal, amount, side_upper, new_pos)
 
             # 6. Colocar Take Profits (TP) con distribución personalizada (#5)
-            amount_remaining = amount
             tp_amounts = self._calculate_tp_amounts(amount, signal.targets, config)
             await self._place_take_profits(
                 client, exchange_id, market_symbol, signal, tp_amounts, side_upper, new_pos
@@ -524,7 +523,7 @@ class TradingEngine:
                 )
             else:
                 sl_order = await client.create_order(
-                    market_symbol, 'market', sl_side, sl_amount, None, {
+                    market_symbol, 'stop', sl_side, sl_amount, None, {
                         'stopPrice': signal.stop_loss,
                         'reduceOnly': True
                     }
@@ -724,42 +723,81 @@ class TradingEngine:
 
                 if position_data:
                     contracts = float(position_data.get('contracts') or position_data.get('size') or position_data.get('amount', 0))
-                    if contracts == 0:
-                        pos.status = "closed"
-                        pos_manager.save()
-                        logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
-                        if self.notifier:
-                            await self.notifier.notify_trade_closed(pos)
-                        continue
+                if contracts == 0:
+                    pos.status = "closed"
+                    pos_manager.save()
+                    logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
+                    if self.notifier:
+                        await self.notifier.notify_trade_closed(pos)
+                    continue
 
-                    mark_price = float(position_data.get('markPrice', 0))
-                    if mark_price > 0:
-                        if pos.side.lower() == 'buy':
-                            if mark_price > pos.highest_price:
-                                pos.highest_price = mark_price
+                if 0 < contracts < pos.amount:
+                    logger.info(f"📉 Posición {pos.symbol} reducida de {pos.amount} a {contracts} (TP parcial)")
+                    pos.amount = contracts
+                    if pos.sl_order_id:
+                        sl_side = 'sell' if pos.side.lower() == 'buy' else 'buy'
+                        sl_amount = float(client.amount_to_precision(pos.market_symbol, contracts))
+                        side_upper = 'LONG' if pos.side.lower() == 'buy' else 'SHORT'
+                        await exchange_service.cancel_order(pos.exchange_id, pos.market_symbol, pos.sl_order_id)
+                        if pos.exchange_id == "bingx":
+                            sl_order = await client.create_order(
+                                pos.market_symbol, 'TRIGGER_MARKET', sl_side, sl_amount, None, {
+                                    'stopPrice': pos.sl_price,
+                                    'positionSide': side_upper
+                                }
+                            )
+                        elif pos.exchange_id == "bitget":
+                            sl_order = await client.create_order(
+                                pos.market_symbol, 'limit', sl_side, sl_amount, pos.sl_price, {
+                                    'stopPrice': pos.sl_price,
+                                    'planType': 'normal_plan',
+                                    'reduceOnly': True
+                                }
+                            )
                         else:
-                            if pos.lowest_price == 0 or mark_price < pos.lowest_price:
-                                pos.lowest_price = mark_price
+                            sl_order = await client.create_order(
+                                pos.market_symbol, 'stop', sl_side, sl_amount, None, {
+                                    'stopPrice': pos.sl_price,
+                                    'reduceOnly': True
+                                }
+                            )
+                        pos.sl_order_id = sl_order.get('id')
+                    pos_manager.save()
 
-                    contracts = float(position_data.get('contracts', pos.amount))
-                    unrealized_pnl = position_data.get('unrealizedPnl')
-                    if unrealized_pnl is not None:
-                        pos.pnl = float(unrealized_pnl)
-                    elif mark_price > 0 and contracts > 0:
-                        if pos.side.lower() == 'buy':
-                            pos.pnl = (mark_price - pos.entry_price) * contracts
-                        else:
-                            pos.pnl = (pos.entry_price - mark_price) * contracts
+                mark_price = float(position_data.get('markPrice', 0))
+                if mark_price > 0:
+                    if pos.side.lower() == 'buy':
+                        if mark_price > pos.highest_price:
+                            pos.highest_price = mark_price
+                    else:
+                        if pos.lowest_price == 0 or mark_price < pos.lowest_price:
+                            pos.lowest_price = mark_price
 
-                    await self._check_trailing_stop(pos, config, client)
+                contracts = float(position_data.get('contracts', pos.amount))
+                contract_size = 1.0
+                if client and client.markets and pos.market_symbol in client.markets:
+                    market_info = client.markets[pos.market_symbol]
+                    raw_size = market_info.get('contractSize', 1.0)
+                    if raw_size:
+                        contract_size = float(raw_size)
+                unrealized_pnl = position_data.get('unrealizedPnl')
+                if unrealized_pnl is not None:
+                    pos.pnl = float(unrealized_pnl)
+                elif mark_price > 0 and contracts > 0:
+                    if pos.side.lower() == 'buy':
+                        pos.pnl = (mark_price - pos.entry_price) * contracts * contract_size
+                    else:
+                        pos.pnl = (pos.entry_price - mark_price) * contracts * contract_size
 
-                    if config.get("auto_breakeven", True) and not pos.is_breakeven and pos.tp1_hit and not pos.trailing_activated:
-                        logger.info(f"🔄 Moviendo SL a break-even para {pos.symbol}")
-                        await self._move_sl_to_breakeven(pos, client)
-                        pos.is_breakeven = True
-                        pos_manager.save()
+                await self._check_trailing_stop(pos, config, client)
 
-                    await self._check_tp1_hit(pos, client)
+                if config.get("auto_breakeven", True) and not pos.is_breakeven and pos.tp1_hit and not pos.trailing_activated:
+                    logger.info(f"🔄 Moving SL to break-even for {pos.symbol}")
+                    await self._move_sl_to_breakeven(pos, client)
+                    pos.is_breakeven = True
+                    pos_manager.save()
+
+                await self._check_tp1_hit(pos, client)
 
             except Exception as e:
                 logger.debug(f"Watchdog: Error verificando posición {pos.symbol}: {e}")
@@ -777,8 +815,8 @@ class TradingEngine:
                         if self.notifier:
                             await self.notifier.notify_tp_hit(pos, 1)
                         break
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"⚠️ Error fetching TP1 order for {pos.symbol}: {e}")
 
     async def _sync_failed_exchanges(self):
         """Reintenta conexión con exchanges fallidos."""
@@ -941,7 +979,7 @@ class TradingEngine:
                 )
             else:
                 sl_order = await client.create_order(
-                    pos.market_symbol, 'market', sl_side, sl_amount, None, {
+                    pos.market_symbol, 'stop', sl_side, sl_amount, None, {
                         'stopPrice': new_sl,
                         'reduceOnly': True
                     }
@@ -1011,7 +1049,7 @@ class TradingEngine:
                 )
             else:
                 sl_order = await client.create_order(
-                    pos.market_symbol, 'market', sl_side, pos.amount, None, {
+                    pos.market_symbol, 'stop', sl_side, pos.amount, None, {
                         'stopPrice': pos.entry_price,
                         'reduceOnly': True
                     }

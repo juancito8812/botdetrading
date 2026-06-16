@@ -70,8 +70,8 @@ async def fetch_top20() -> list:
                 logger.warning("CoinGecko rate limited (429), usando caché")
                 return _get_from_cache("top20") or []
             if resp.status != 200:
-                logger.error(f"CoinGecko error {resp.status}")
-                return []
+                logger.error(f"CoinGecko error {resp.status}, usando caché")
+                return _get_from_cache("top20") or []
             data = await resp.json()
             results = []
             for coin in data:
@@ -132,6 +132,8 @@ async def fetch_market_indices() -> dict:
                 indices["btc_dominance"] = gdata.get("market_cap_percentage", {}).get("btc", 0) or 0
                 indices["eth_dominance"] = gdata.get("market_cap_percentage", {}).get("eth", 0) or 0
                 indices["market_cap_change_24h"] = gdata.get("market_cap_change_percentage_24h_usd", 0) or 0
+            else:
+                return _get_from_cache("indices") or indices
     except asyncio.TimeoutError:
         logger.warning("CoinGecko timeout en global data")
         return _get_from_cache("indices") or indices
@@ -151,6 +153,9 @@ async def fetch_market_indices() -> dict:
                 data = await resp.json()
                 indices["btc_price"] = data.get("bitcoin", {}).get("usd", 0) or 0
                 indices["eth_price"] = data.get("ethereum", {}).get("usd", 0) or 0
+            else:
+                logger.warning(f"CoinGecko error {resp.status} en precios, usando caché")
+                return _get_from_cache("indices") or indices
     except asyncio.TimeoutError:
         logger.warning("CoinGecko timeout en precios BTC/ETH")
     except Exception as e:

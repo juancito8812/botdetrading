@@ -18,10 +18,14 @@ from utils import config_backup
 from services.exchange_service import exchange_service
 from services.market_data import fetch_top20, fetch_market_indices
 from core.manager import pos_manager
-from core.engine import health_monitor
+from core.engine import health_monitor, trading_engine
+from services.updater import (get_current_version, check_latest_version,
+                              is_newer_version, download_update, apply_update)
 from utils.logger import logger
 from datetime import datetime
 from typing import Optional, Dict, Any
+from pathlib import Path
+import csv
 
 
 class GuiHandler(logging.Handler):
@@ -324,7 +328,7 @@ class TradingBotGUI:
             symbol = coin.get("symbol", "?")
             name = coin.get("name", symbol)
             price = coin.get("price", 0)
-            change = coin.get("change_24h", 0)
+            change = coin.get("change_24h") or 0
             volume = coin.get("volume", 0)
             market_cap = coin.get("market_cap", 0)
 
@@ -651,7 +655,6 @@ class TradingBotGUI:
         save_settings(self.settings)
 
         # Actualizar en el notifier si está disponible
-        from core.engine import trading_engine
         if trading_engine.notifier:
             trading_engine.notifier.set_notification_prefs(prefs)
 
@@ -665,7 +668,6 @@ class TradingBotGUI:
     def refresh_telegram_notifications(self):
         """Actualiza la lista de últimas notificaciones desde el notifier."""
         self.tg_notif_list.delete(0, tk.END)
-        from core.engine import trading_engine
         notifier = trading_engine.notifier
         if notifier and notifier.enabled:
             recent = notifier.get_recent()
@@ -689,11 +691,9 @@ class TradingBotGUI:
 
     def send_test_notification(self):
         """Envía una notificación de prueba y muestra el resultado."""
-        from core.engine import trading_engine
         notifier = trading_engine.notifier
         if notifier and notifier.enabled:
             def _do_test():
-                import asyncio
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
@@ -858,7 +858,6 @@ class TradingBotGUI:
 
     def _load_current_version(self):
         """Carga y muestra la versión actual desde VERSION file."""
-        from services.updater import get_current_version
         ver = get_current_version()
         self.upd_version_label.config(text=ver)
 
@@ -870,7 +869,6 @@ class TradingBotGUI:
         self.upd_notes_text.pack_forget()
 
         def _do_check():
-            from services.updater import check_latest_version, is_newer_version, get_current_version
             try:
                 info = check_latest_version()
                 if info is None:
@@ -906,7 +904,6 @@ class TradingBotGUI:
                     self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
                 ))
 
-        import threading
         threading.Thread(target=_do_check, daemon=True).start()
 
     def _show_release_notes(self, body: str):
@@ -932,8 +929,6 @@ class TradingBotGUI:
         self.upd_status_label.config(text=i18n.t("upd_downloading"), foreground="gray")
 
         def _do_download():
-            from services.updater import download_update, apply_update
-            from pathlib import Path
 
             try:
                 url = self._upd_latest_info["download_url"]
@@ -2006,7 +2001,7 @@ class TradingBotGUI:
             filtered = all_positions
 
         # Sort by open_time descending
-        filtered_sorted = sorted(filtered, key=lambda p: p.open_time, reverse=True)[:50]
+        filtered_sorted = sorted(filtered, key=lambda p: p.open_time or "", reverse=True)[:50]
 
         for p in filtered_sorted:
             pnl_str = f"${p.pnl:+.2f}" if p.pnl else "$0.00"

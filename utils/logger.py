@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from logging.handlers import TimedRotatingFileHandler
 import gzip
 import shutil
@@ -18,8 +19,7 @@ def _compress_rotator(source, dest):
         pass
 
 def _cleanup_old_logs(log_file, max_age_days=30):
-    """Elimina logs rotados con más de max_age_days de antigüedad."""
-    import time
+    log = logging.getLogger("TradingBot")
     try:
         log_dir = os.path.dirname(log_file)
         base_name = os.path.basename(log_file)
@@ -31,17 +31,16 @@ def _cleanup_old_logs(log_file, max_age_days=30):
                 if os.path.isfile(fpath) and os.path.getmtime(fpath) < cutoff:
                     try:
                         os.remove(fpath)
-                    except Exception:
-                        pass
-    except Exception:
-        pass
+                    except OSError as e:
+                        log.warning(f"No se pudo eliminar log antiguo {fname}: {e}")
+    except Exception as e:
+        log.warning(f"Error limpiando logs antiguos: {e}")
 
 def setup_logger():
     logger = logging.getLogger("TradingBot")
     logger.setLevel(logging.INFO)
-    
+
     if not logger.handlers:
-        # File Handler con rotación por tiempo (diario, 30 días de retención)
         fh = TimedRotatingFileHandler(
             LOG_FILE, when='midnight', interval=1,
             backupCount=30, encoding='utf-8'
@@ -51,15 +50,13 @@ def setup_logger():
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)
         logger.addHandler(fh)
-        
-        # Limpiar logs antiguos al iniciar
+
         _cleanup_old_logs(LOG_FILE, max_age_days=30)
-        
-        # Console Handler
+
         ch = logging.StreamHandler()
         ch.setFormatter(formatter)
         logger.addHandler(ch)
-        
+
     return logger
 
 logger = setup_logger()

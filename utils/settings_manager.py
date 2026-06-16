@@ -34,7 +34,7 @@ def _get_exe_path() -> str:
     """Retorna la ruta al ejecutable, o al script Python."""
     if getattr(sys, 'frozen', False):
         return str(Path(sys.executable))
-    return str(Path(sys.executable).parent / "main.py")
+    return str(BASE_DIR / "main.py")
 
 def _get_task_name() -> str:
     """Nombre de la tarea en el Programador de Tareas."""
@@ -91,13 +91,13 @@ def enable_autostart() -> Tuple[bool, str]:
     task_name = _get_task_name()
     working_dir = str(BASE_DIR)
     
-    # Crear tarea que se ejecuta al iniciar el sistema (SYSTEM), antes del login
+    # Crear tarea que se ejecuta al iniciar sesión del usuario actual
     cmd = [
         'schtasks', '/create', '/tn', task_name,
         '/tr', f'"{exe_path}"',
-        '/sc', 'onstart',
-        '/ru', 'SYSTEM',
-        '/rl', 'HIGHEST',
+        '/sc', 'onlogon',
+        '/ru', f'{os.environ.get("USERDOMAIN", "")}\\{os.environ.get("USERNAME", "CURRENT_USER")}',
+        '/rl', 'LIMITED',
         '/f',
         '/it'
     ]

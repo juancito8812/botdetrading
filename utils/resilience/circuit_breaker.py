@@ -104,6 +104,7 @@ class CircuitBreaker:
             "state": self._state.value,
             "failure_count": self.failure_count,
             "last_failure_time": self.last_failure_time,
+            "half_open_requests": self.half_open_requests,
         }
         try:
             with open(filepath, "w") as f:
@@ -120,5 +121,6 @@ class CircuitBreaker:
             self._state = CircuitState(data.get("state", "closed"))
             self.failure_count = data.get("failure_count", 0)
             self.last_failure_time = data.get("last_failure_time", 0.0)
+            self.half_open_requests = data.get("half_open_requests", 0)
         except Exception as e:
             logger.error(f"Error cargando circuit breaker {self.name}: {e}")

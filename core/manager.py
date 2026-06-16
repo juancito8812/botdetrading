@@ -120,11 +120,14 @@ class PositionManager:
         return [p for p in self.positions if p.status == "pending"]
 
     def update_status(self, exchange_id: str, market_symbol: str, status: str):
+        updated = False
         for p in self.positions:
             if p.exchange_id == exchange_id and p.market_symbol == market_symbol and p.status in ["open", "pending"]:
                 p.status = status
-                self.save()
-                return True
+                updated = True
+        if updated:
+            self.save()
+            return True
         return False
 
 # Instancia global

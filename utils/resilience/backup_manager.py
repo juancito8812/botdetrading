@@ -67,12 +67,15 @@ class BackupManager:
         """Elimina los backups más antiguos si se excede el máximo."""
         backups = self._list_backups(name)
         while len(backups) > self.max_backups:
-            oldest = backups.pop(0)
+            oldest = backups[0]
             try:
                 os.remove(oldest)
-                logger.debug(f"🗑️ Backup rotado: {oldest}")
             except Exception as e:
                 logger.warning(f"Error rotando backup {oldest}: {e}")
+                backups.pop(0)
+                continue
+            backups.pop(0)
+            logger.debug(f"🗑️ Backup rotado: {oldest}")
 
     def _list_backups(self, name: str) -> List[str]:
         """Lista los backups de un tipo, ordenados por fecha (más antiguos primeros)."""

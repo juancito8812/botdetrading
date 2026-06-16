@@ -28,6 +28,7 @@ class ExchangeService:
     def __init__(self):
         self.clients: Dict[str, Any] = {}
         self.failed_exchanges = set()
+        self._clients_lock = asyncio.Lock()
 
     async def _ensure_event_loop(self, exchange_id: str) -> bool:
         """
@@ -35,33 +36,36 @@ class ExchangeService:
         Si el loop fue cerrado, recrea el cliente automáticamente.
         Retorna True si el cliente está listo.
         """
-        if exchange_id not in self.clients:
-            return False
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_closed():
-                raise RuntimeError("Event loop is closed")
-            return True
-        except RuntimeError:
-            logger.warning(f"🔄 Event loop cerrado para {exchange_id}, recreando cliente...")
-            # Cerrar cliente antiguo si existe
-            if exchange_id in self.clients:
-                try:
-                    await self.clients[exchange_id].close()
-                except Exception:
-                    pass
-                del self.clients[exchange_id]
-            # Recrear con credenciales guardadas
-            creds = load_api_creds()
-            ex_creds = creds["exchanges"].get(exchange_id, {})
-            if ex_creds.get("enabled"):
-                await self.create_client(exchange_id, ex_creds)
-            return exchange_id in self.clients
+        async with self._clients_lock:
+            if exchange_id not in self.clients:
+                return False
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_closed():
+                    raise RuntimeError("Event loop is closed")
+                return True
+            except RuntimeError:
+                logger.warning(f"🔄 Event loop cerrado para {exchange_id}, recreando cliente...")
+                if exchange_id in self.clients:
+                    try:
+                        await self.clients[exchange_id].close()
+                    except Exception:
+                        pass
+                    del self.clients[exchange_id]
+                creds = load_api_creds()
+                ex_creds = creds["exchanges"].get(exchange_id, {})
+                if ex_creds.get("enabled"):
+                    await self._create_client_locked(exchange_id, ex_creds)
+                return exchange_id in self.clients
 
     @timeout_decorator(seconds=60)
     async def create_client(self, exchange_id: str, creds: Dict[str, Any]) -> Optional[Any]:
         """Crea e inicializa un cliente de CCXT."""
-        # Limpiar cliente previo si existe para evitar conflictos de loop
+        async with self._clients_lock:
+            return await self._create_client_locked(exchange_id, creds)
+
+    async def _create_client_locked(self, exchange_id: str, creds: Dict[str, Any]) -> Optional[Any]:
+        """Crea cliente (debe llamarse con _clients_lock adquirido)."""
         if exchange_id in self.clients:
             try: await self.clients[exchange_id].close()
             except: pass
@@ -69,7 +73,6 @@ class ExchangeService:
 
         try:
             exchange_class = getattr(ccxt_async, exchange_id)
-            # ... rest of config ...
             config = {
                 'apiKey': creds["api_key"],
                 'secret': creds["secret"],
@@ -101,16 +104,16 @@ class ExchangeService:
             return None
 
     async def close_all(self):
-        # Persistir estado de circuit breakers
         from utils.config import DATA_DIR
         cb_dir = DATA_DIR / "resilience"
         cb_dir.mkdir(parents=True, exist_ok=True)
         for ex_id, cb in _circuit_breakers.items():
             cb.persist(str(cb_dir / f"cb_{ex_id}.json"))
-        for client in self.clients.values():
-            try: await asyncio.wait_for(client.close(), timeout=5)
-            except: pass
-        self.clients.clear()
+        async with self._clients_lock:
+            for client in self.clients.values():
+                try: await asyncio.wait_for(client.close(), timeout=5)
+                except: pass
+            self.clients.clear()
 
     @retry_decorator(max_retries=3, base_delay=1.0)
     @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
@@ -156,7 +159,10 @@ class ExchangeService:
         except RuntimeError as e:
             if "Event loop is closed" in str(e) or "event loop" in str(e).lower():
                 logger.warning(f"🔄 Event loop error en {exchange_id}, reintentando...")
-                await self._ensure_event_loop(exchange_id)
+                recovered = await self._ensure_event_loop(exchange_id)
+                if not recovered:
+                    raise
+                return await self.get_ticker_price(exchange_id, market_symbol)
             raise
 
     @retry_decorator(max_retries=2, base_delay=1.0)

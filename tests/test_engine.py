@@ -584,7 +584,7 @@ async def test_place_stop_loss_other(mock_ex_svc, engine):
     await engine._place_stop_loss(mock_client, "bybit", "BTC/USDT", signal, 0.01, "LONG", pos)
 
     args, kwargs = mock_client.create_order.call_args
-    assert args[1] == "market"
+    assert args[1] == "stop"
     assert args[5].get("reduceOnly") is True
     assert pos.sl_order_id == "sl_other"
 
@@ -915,7 +915,7 @@ async def test_update_trailing_sl_other(mock_pm, mock_ex_svc, engine):
     await engine._update_trailing_sl(pos, 68000.0, mock_client)
 
     args, kwargs = mock_client.create_order.call_args
-    assert args[1] == "market"
+    assert args[1] == "stop"
     assert args[5].get("reduceOnly") is True
     assert pos.sl_order_id == "new_sl_other"
 
