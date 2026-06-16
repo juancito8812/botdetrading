@@ -610,6 +610,8 @@ Framework de metodologia de desarrollo instalado (14 skills). Los skills estan e
 
 **Documentos de diseno y plan en:** `docs/superpowers/specs/` y `docs/superpowers/plans/`
 
+**Instalacion:** Superpowers se instala via plugin en `opencode.json` desde el repo oficial `obra/superpowers`:
+
 ## Ponytail - Lazy Senior Dev Mode
 
 Integrado como capa transversal en Superpowers. Inyecta la escalera YAGNI en cada respuesta del agente:

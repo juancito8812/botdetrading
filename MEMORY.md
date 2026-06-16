@@ -48,7 +48,7 @@
 - [x] `__init__.py` en utils/ y utils/resilience/
 - [x] Cache de credenciales (eliminado IO cada 30s en watchdog)
 - [x] Ponytail: lazy senior dev mode integrado en Superpowers
-- [x] `opencode.json` con plugin Ponytail
+- [x] `opencode.json` con Superpowers (repo oficial obra/superpowers) + Ponytail
 - [x] `.agents/skills/ponytail/SKILL.md` con niveles lite/full/ultra
 - [x] Notificaciones v2: SL hit, alive heartbeat, signal received, LIMIT filled
 - [x] Batching de TPs múltiples (agrupación en 5s)
