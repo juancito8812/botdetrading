@@ -273,6 +273,41 @@ TARGETS: 120, 130
 
 ---
 
+## 🦸 Superpowers Framework
+
+> **⚠️ REGLA ABSOLUTA: Este proyecto USA SUPERPOWERS. Toda IA — sea Claude, ChatGPT, Codebuff, Cline, Copilot, o cualquier otro agente — DEBE seguir este flujo en CADA sesión, sin excepción.**
+
+### Flujo obligatorio para TODA IA en TODA sesión:
+
+| # | Paso | Descripción |
+|---|------|-------------|
+| 1 | 🦸 **Cargar Superpowers** | Al INICIAR cualquier sesión con cualquier IA — cargar skill `using-superpowers` |
+| 2 | 📖 **Leer contexto** | `MEMORY.md` + `SESSION_HANDOFF.md` + `git log --oneline -5` |
+| 3 | 🧠 **Brainstorming** | Antes de cualquier cambio creativo o implementación |
+| 4 | 📄 **Writing Specs** | Documentar lo que se va a hacer en `docs/superpowers/specs/` |
+| 5 | 📋 **Writing Plans** | Para tareas de 3+ pasos, plan detallado en `docs/superpowers/plans/` |
+| 6 | ⚡ **Subagent Development** | Ejecutar con agentes especializados (file-picker, basher, code-searcher, etc.) |
+| 7 | 👀 **Code Review** | Revisar cambios con code-reviewer antes de finalizar |
+| 8 | ✅ **Verification** | Tests + cobertura + calidad antes de afirmar completitud |
+| 9 | 📝 **Actualizar docs** | Este archivo + `SESSION_HANDOFF.md` + `README.md` si aplica |
+
+> **🔴 Esto aplica a: Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini, y cualquier otro agente/IA que toque este proyecto. La metodología Superpowers es el contrato de calidad del proyecto. Ignorarla = cambios inconsistentes y pérdida de contexto.**
+
+### Skills disponibles:
+Los skills están en `.agents/skills/`. Los principales:
+- `using-superpowers` — Skill base que activa toda la metodología
+- `brainstorming` — Análisis y exploración de opciones
+- `writing-plans` — Planificación estructurada
+- `subagent-driven-development` — Desarrollo con agentes especializados
+- `requesting-code-review` — Revisión de calidad
+- `verification-before-completion` — Validación final
+
+### Archivos de diseño:
+- `docs/superpowers/specs/` — Especificaciones detalladas de features
+- `docs/superpowers/plans/` — Planes de implementación
+
+---
+
 ## 🔗 Enlaces
 
 - **Repositorio:** https://github.com/juancito8812/botdetrading

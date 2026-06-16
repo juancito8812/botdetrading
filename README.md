@@ -97,21 +97,28 @@ La interfaz gráfica se abrirá con las siguientes pestañas:
 
 ## 🦸 Metodología de Desarrollo: Superpowers
 
-Este proyecto utiliza el framework **Superpowers** para mantener consistencia entre sesiones de IA y agentes.
+> **⚠️ REGLA ABSOLUTA: Este proyecto USA SUPERPOWERS. Toda IA — sea Claude, ChatGPT, Codebuff, Cline, Copilot, o cualquier otro agente — DEBE seguir este flujo en CADA sesión, sin excepción.**
 
-### Flujo obligatorio para cualquier IA o agente:
+Este proyecto utiliza el framework **Superpowers** para mantener consistencia absoluta entre sesiones de IA, independientemente del modelo o herramienta que se esté usando.
 
-1. **`using-superpowers`** — Al iniciar cada sesión, cargar este skill primero
-2. **`brainstorming`** — Antes de cualquier cambio creativo o implementación
-3. **`writing-plans`** — Para tareas de 3+ pasos, escribir plan detallado
-4. **`subagent-driven-development`** — Ejecutar tareas con agentes especializados
-5. **`requesting-code-review`** — Revisar cambios antes de finalizar
-6. **`verification-before-completion`** — Verificar tests y calidad antes de afirmar completitud
+### Flujo obligatorio para TODA IA en TODA sesión:
 
-> **⚠️ Importante:** Todo agente de IA que retome este proyecto DEBE cargar el skill `using-superpowers` al inicio de cada sesión y seguir el flujo completo.
+```
+1. 🦸 Cargar Superpowers    → Al INICIAR cualquier sesión con cualquier IA
+2. 📖 Leer contexto          → MEMORY.md + SESSION_HANDOFF.md + git log
+3. 🧠 Brainstorming          → Antes de cualquier cambio creativo o implementación
+4. 📄 Writing Specs          → Documentar lo que se va a hacer
+5. 📋 Writing Plans          → Para tareas de 3+ pasos, plan detallado
+6. ⚡ Subagent Development   → Ejecutar con agentes especializados
+7. 👀 Code Review            → Revisar cambios antes de finalizar
+8. ✅ Verification           → Tests + cobertura + calidad antes de completar
+9. 📝 Actualizar docs        → MEMORY.md + SESSION_HANDOFF.md + README si aplica
+```
+
+> **🔴 Esto aplica a: Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini, y cualquier otro agente/IA que toque este proyecto. Si es una IA trabajando en este código, DEBE seguir Superpowers.**
 
 ### Skills disponibles:
-`.agents/skills/` contiene: brainstorming, writing-plans, subagent-driven-development, test-driven-development, systematic-debugging, requesting-code-review, verification-before-completion, entre otros.
+`.agents/skills/` contiene: `using-superpowers`, `brainstorming`, `writing-plans`, `subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `requesting-code-review`, `verification-before-completion`, entre otros.
 
 ## 🏗️ Arquitectura
 

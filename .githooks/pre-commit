@@ -1,0 +1,62 @@
+#!/bin/bash
+#
+# Pre-commit hook — Superpowers Document Validation
+#
+# Valida que MEMORY.md y SESSION_HANDOFF.md sean actualizados
+# cuando se modifican archivos de código.
+#
+# Instalación:
+#   git config core.hooksPath .githooks
+#
+# Comportamiento:
+#   - Si hay cambios en código (*.py, *.json, *.yml, *.yaml, *.spec, *.iss, *.bat)
+#     y NO hay cambios en MEMORY.md ni SESSION_HANDOFF.md, muestra una advertencia
+#   - La advertencia NO bloquea el commit (exit 0), pero es altamente recomendada
+#
+
+echo ""
+echo "🦸 [Superpowers] Validando documentación..."
+echo ""
+
+# Obtener lista de archivos staged
+STAGED_FILES=$(git diff --cached --name-only)
+
+# Si no hay staged files, salir
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# Determinar si hay cambios en código (no .md)
+CODE_FILES=$(echo "$STAGED_FILES" | grep -E '\.(py|json|yml|yaml|spec|iss|bat)$' || true)
+
+# Determinar si MEMORY.md o SESSION_HANDOFF.md están staged
+MEMORY_STAGED=$(echo "$STAGED_FILES" | grep -E '^MEMORY\.md$' || true)
+HANDOFF_STAGED=$(echo "$STAGED_FILES" | grep -E '^SESSION_HANDOFF\.md$' || true)
+
+if [ -n "$CODE_FILES" ]; then
+    echo "📝 Archivos de código modificados:"
+    echo "$CODE_FILES" | sed 's/^/   /'
+    echo ""
+
+    if [ -z "$MEMORY_STAGED" ] || [ -z "$HANDOFF_STAGED" ]; then
+        echo "⚠️  ⚠️  ⚠️   ADVERTENCIA SUPERPOWERS  ⚠️  ⚠️  ⚠️"
+        echo ""
+        echo "   Has modificado archivos de código pero:"
+        [ -z "$MEMORY_STAGED" ] && echo "   ❌ MEMORY.md NO está actualizado"
+        [ -z "$HANDOFF_STAGED" ] && echo "   ❌ SESSION_HANDOFF.md NO está actualizado"
+        echo ""
+        echo "   📖 Regla #1 de Superpowers:"
+        echo "   Toda sesión de IA DEBE actualizar MEMORY.md y SESSION_HANDOFF.md"
+        echo ""
+        echo "   Para continuar de todas formas: git commit --no-verify"
+        echo "   Para corregir: git add MEMORY.md SESSION_HANDOFF.md"
+        echo ""
+        echo "⚠️  ⚠️  ⚠️   Advertencia — El commit NO fue bloqueado  ⚠️  ⚠️  ⚠️"
+        echo ""
+    else
+        echo "✅ MEMORY.md y SESSION_HANDOFF.md están actualizados. ¡Bien hecho!"
+        echo ""
+    fi
+fi
+
+exit 0

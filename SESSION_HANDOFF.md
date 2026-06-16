@@ -6,19 +6,30 @@
 
 ---
 
-## REGLA #1: Usar Superpowers SIEMPRE
+## REGLA #1: Usar Superpowers SIEMPRE — con TODA IA, en TODA sesion
 
-> **Cada vez que se inicie una nueva sesion o se cambie de agente de IA, se DEBE cargar el skill `using-superpowers` y seguir el flujo completo.**
+> **⚠️ REGLA ABSOLUTA: Este proyecto USA SUPERPOWERS. Toda IA — sea Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini, o cualquier otro agente — DEBE seguir este flujo en CADA sesion, sin excepcion.**
 
-### Flujo obligatorio:
+> **Cada vez que se inicie una NUEVA sesion o se CAMBIE de agente/modelo de IA, se DEBE cargar el skill `using-superpowers` y seguir el flujo completo. No importa si la IA anterior era Claude y ahora es ChatGPT — el flujo es el MISMO.**
 
-1. **Cargar `using-superpowers`** -- El PRIMER paso de cualquier sesion. Este skill activa la metodologia completa.
-2. **Leer `MEMORY.md` y `SESSION_HANDOFF.md`** -- Contexto completo del proyecto y ultima sesion.
-3. **Seguir el flujo de Superpowers**
-4. **Actualizar `MEMORY.md`** al finalizar cada sesion significativa.
-5. **Actualizar `SESSION_HANDOFF.md`** con los commits y cambios de la sesion.
+### Flujo obligatorio para TODA IA en TODA sesion:
 
-> **No seguir este flujo resultara en decisiones inconsistentes y perdida de contexto entre sesiones.**
+```
+1. 🦸 CARGAR Superpowers      → Al INICIAR cualquier sesion con cualquier IA
+                                 (skill: using-superpowers)
+2. 📖 LEER contexto           → MEMORY.md + SESSION_HANDOFF.md + git log --oneline -5
+3. 🧠 BRAINSTORMING           → Antes de cualquier cambio creativo o implementacion
+4. 📄 WRITING SPECS           → Documentar en docs/superpowers/specs/
+5. 📋 WRITING PLANS           → Para tareas de 3+ pasos en docs/superpowers/plans/
+6. ⚡ SUBAGENT DEVELOPMENT    → Ejecutar con agentes especializados
+7. 👀 CODE REVIEW             → Revisar cambios antes de finalizar
+8. ✅ VERIFICATION            → Tests + cobertura + calidad
+9. 📝 ACTUALIZAR docs         → MEMORY.md + SESSION_HANDOFF.md + README si aplica
+```
+
+> **🔴 Esto aplica a: Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini, y cualquier otro agente/IA que toque este proyecto. La metodologia Superpowers es el contrato de calidad del proyecto. Ignorarla = cambios inconsistentes y perdida de contexto entre sesiones.**
+
+> **💡 Si eres una IA leyendo esto: DETENTE. Carga el skill `using-superpowers` AHORA antes de continuar. No asumas que otra IA ya lo hizo por ti.**
 
 ---
 
