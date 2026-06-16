@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 15/06/2026 (v9 - Superpowers reforzado + pre-commit hook + .exe sin consola + cleanup)
+> **Ultima actualizacion:** 15/06/2026 (v12 - StringSession + revert TG Scraping + fix await)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -41,6 +41,7 @@
 
 **Ultima release:** `v1.1.0` -- Chat ID UI, entity resolution, tests market_data
 **Tests:** 365/365 pasando (92% cobertura real)
+**Sesion Telegram:** StringSession (sin SQLite, sin file locking)
 **Coverage:** 87% -> 97% (artificial con duplicados) -> 92% real tras cleanup
 **Pre-commit hook:** `.githooks/pre-commit` valida MEMORY.md + SESSION_HANDOFF.md
 **.exe:** Compilado con `--noconsole` (sin ventana negra)
@@ -50,11 +51,11 @@
 **Commits recientes (origin/master):**
 | Commit | Descripcion |
 |--------|-------------|
+| (pendiente) | fix: StringSession para Telegram + revert TG Scraping + fix await |
+| `a1194df` | Revert 'feat: TG Scraping toggleable en settings' |
+| `d28386f` | fix: log rotation 1 mes + bugs corregidos (engine.py, notifier.py) |
 | `19cd294` | build: actualizar MiBotTrading.spec con --noconsole |
 | `dba82a7` | docs: Superpowers obligatorio + pre-commit hook |
-| `b108f8b` | refactor: engine.py + manager.py + cleanup + .gitignore |
-| `364e9de` | feat: tooltips ayuda (?) + notificaciones seleccionables |
-| `b46ea2b` | test: mejorar cobertura de 75% a 87% (86 tests nuevos, 348 total) |
 
 ---
 
@@ -132,8 +133,40 @@ Ver sesion #14 en version v7 del documento.
 | `dist/MiBotTrading.exe` | Recompilado sin consola (61 MB) |
 
 **Tests:** 365/365 pasando (92% cobertura real)
-**.exe:** `dist/MiBotTrading.exe` (modo --noconsole, incluye .githooks)
+**.exe:** `dist/MiBotTrading.exe` (modo --noconsole, incluye .githooks + hidden-import tg_scraper)
 
+---
+
+### 18. TG Scraping toggleable + Log rotation 1 mes + Bugfixes (15/06/2026)
+
+> ⚠️ **NOTA:** Commit `d4d26a2` (TG Scraping toggle) fue revertido en `a1194df`. El TG Scraping ya NO existe en el codigo. Log rotation y bugfixes de engine/notifier se conservan (commit `d28386f`).
+
+---
+
+### 19. Fix: Telegram database is locked + event loop conflict (15/06/2026)
+
+**Primer intento (evolucion de fixes en main.py):**
+
+| Intento | Fix | Resultado |
+|---------|-----|-----------|
+| 1 | WAL mode + busy_timeout SQLite | ❌ Stale .wal/.shm files causaban lock igual |
+| 2 | Eliminar archivos stale antes de conectar | ❌ BD .session corrupta de crashes previos |
+| 3 | **StringSession** (sin SQLite) | ✅ **SOLUCION DEFINITIVA** |
+
+**Solucion final - StringSession:**
+- `from telethon.sessions import StringSession` — sesion en memoria, sin SQLite
+- `_create_telegram_client()`: usa `StringSession(session_data)` en lugar de archivo `.session`
+- `_save_telegram_session()`: serializa la sesion a texto y la guarda en `user_session.string`
+- Se llama despues de autenticacion exitosa para persistir la sesion
+- Al reconectar, carga la sesion desde el archivo `.string`
+- **No hay archivos `.session`, `.session-wal`, `.session-shm`** → imposible el `database is locked`
+
+**Bugfix adicional - await a metodo sincronico:**
+- `_save_telegram_session()` es un metodo sincronico (`def`, no `async def`) pero se llamaba con `await`
+- Causaba: `TypeError: 'NoneType' object can't be awaited` justo despues de autenticar
+- Fix: `self._save_telegram_session()` (sin `await`)
+
+**Los fixes de concurrencia (lock threading, stop_bot, cleanup) se conservan** de los intentos anteriores.
 
 ---
 

@@ -214,7 +214,8 @@ TradingEngine.watchdog()
 | Módulos al 100% | 11 |
 | Archivos de test | 20 |
 | Pre-commit hook | ✅ `.githooks/pre-commit` |
-| .exe | ✅ `dist/MiBotTrading.exe` (sin consola) |
+| .exe | ✅ `dist/MiBotTrading.exe` (sin consola, StringSession) |
+| Telegram reconexión | ✅ StringSession + lock threading + cleanup loop |
 
 ---
 

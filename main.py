@@ -3,6 +3,7 @@ import os
 import threading
 import tkinter as tk
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 from typing import Optional, cast
 
 from utils.config import (load_api_creds, load_risk_config,
@@ -23,6 +24,10 @@ class TradingBotApp:
         self.bot_running = False
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.telegram_client: Optional[TelegramClient] = None
+        # Protege contra reinicios rapidos: lock + event para sincronizar loops
+        self._loop_lock = threading.Lock()
+        self._loop_stopped = threading.Event()
+        self._loop_stopped.set()  # Inicialmente detenido
 
         # Configurar parche DNS
         patch_aiohttp_dns()
@@ -44,6 +49,11 @@ class TradingBotApp:
     def start_bot(self):
         if self.bot_running:
             return
+        # Esperar a que el loop anterior termine completamente
+        if not self._loop_stopped.wait(timeout=10):
+            logger.warning("El loop anterior no termino en 10s, forzando inicio...")
+        self._loop_stopped.clear()
+
         self.bot_running = True
         self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
         logger.info("Iniciando bot en segundo plano...")
@@ -59,65 +69,98 @@ class TradingBotApp:
             return
         self.bot_running = False
         self.gui.btn_toggle_bot.config(text="🚀 INICIAR BOT")
-        logger.info("Solicitud de detención enviada.")
+        logger.info("Solicitud de detencion enviada.")
 
-        # Detener watchdog (método sincrónico, no necesita create_task)
-        if self.loop:
-            self.loop.call_soon_threadsafe(trading_engine.stop_watchdog)
+        # Detener watchdog (metodo sincronico)
+        if self.loop and not self.loop.is_closed():
+            try:
+                self.loop.call_soon_threadsafe(trading_engine.stop_watchdog)
+            except RuntimeError:
+                pass  # loop ya cerrado
 
-        # Limpiar conexiones de exchanges
-        if self.loop:
-            self.loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(exchange_service.close_all())
-            )
-
-        if self.loop and self.telegram_client:
+        # Forzar salida del run_until_disconnected() para que el loop termine
+        if self.telegram_client and self.loop and not self.loop.is_closed():
             try:
                 tc = cast(TelegramClient, self.telegram_client)
                 self.loop.call_soon_threadsafe(
-                    lambda: asyncio.create_task(
-                        tc.disconnect()  # type: ignore[arg-type]
-                    )
+                    lambda: asyncio.create_task(tc.disconnect())
                 )
             except Exception as e:
-                logger.error(f"Error al desconectar Telegram: {e}")
+                logger.warning(f"Error al desconectar Telegram: {e}")
+
+        # El loop de reconexion detectara bot_running=False, saldra de
+        # run_until_disconnected(), hara cleanup natural y start_bot()
+        # espera con _loop_stopped.wait() a que termine completamente.
 
     def _run_async_loop(self):
-        try:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-            self.loop.run_until_complete(self.main_async())
-        except Exception as e:
-            logger.error(
-                f"Error en el motor del bot: {e}", exc_info=True
-            )
-        finally:
-            if self.loop:
-                self.loop.close()
-                self.loop = None
-            self.bot_running = False
-            # Actualizar UI desde otro hilo de forma segura
-            self.root.after(
-                0,
-                lambda: self.gui.btn_toggle_bot.config(
-                    text="🚀 INICIAR BOT"
+        with self._loop_lock:
+            try:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+                self.loop.run_until_complete(self.main_async())
+            except Exception as e:
+                logger.error(
+                    f"Error en el motor del bot: {e}", exc_info=True
                 )
-            )
+            finally:
+                # Cerrar todas las tareas pendientes
+                if self.loop and not self.loop.is_closed():
+                    try:
+                        # Cancelar todas las tareas pendientes
+                        pending = asyncio.all_tasks(self.loop)
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            self.loop.run_until_complete(
+                                asyncio.gather(*pending, return_exceptions=True)
+                            )
+                    except Exception:
+                        pass
+                    finally:
+                        self.loop.close()
+                        self.loop = None
+
+                self.bot_running = False
+                self._loop_stopped.set()
+                # Actualizar UI desde otro hilo de forma segura
+                self.root.after(
+                    0,
+                    lambda: self.gui.btn_toggle_bot.config(
+                        text="🚀 INICIAR BOT"
+                    )
+                )
 
     async def _create_telegram_client(self, creds, channels):
-        """Crea el cliente de Telegram UNA SOLA VEZ y registra el handler."""
+        """Crea el cliente de Telegram UNA SOLA VEZ y registra el handler.
+        Usa StringSession para evitar file locking de SQLite.
+        """
         tg = creds["telegram"]
 
-        # Asegurar que la carpeta de sesión existe
+        if self.telegram_client:
+            try:
+                old = cast(TelegramClient, self.telegram_client)
+                if old.is_connected():
+                    await old.disconnect()
+                await old.disconnected
+                logger.info("Cliente Telegram anterior desconectado.")
+            except Exception as e:
+                logger.warning(f"Error al desconectar cliente anterior: {e}")
+            finally:
+                self.telegram_client = None
+
         session_dir = BASE_DIR / "telegram_session"
         session_dir.mkdir(parents=True, exist_ok=True)
-        session_path = str(session_dir / "user_session")
+        session_file = session_dir / "user_session.string"
+
+        session_data = None
+        if session_file.exists():
+            session_data = session_file.read_text().strip() or None
 
         self.telegram_client = TelegramClient(
-            session_path, int(tg["API_ID"]), tg["API_HASH"]
+            StringSession(session_data), int(tg["API_ID"]), tg["API_HASH"]
         )
 
-        # Registrar handler de señales UNA SOLA VEZ (no se pierde al reconectar)
+        # Registrar handler de senales UNA SOLA VEZ (no se pierde al reconectar)
         # Filtra solo mensajes de los canales configurados
         @self.telegram_client.on(events.NewMessage(chats=list(channels)))
         async def handler(event):
@@ -142,6 +185,19 @@ class TradingBotApp:
                     )
             else:
                 logger.info("Formato de señal no reconocido.")
+
+    def _save_telegram_session(self):
+        """Guarda la sesion de StringSession a disco."""
+        if not self.telegram_client:
+            return
+        try:
+            session_dir = BASE_DIR / "telegram_session"
+            session_dir.mkdir(parents=True, exist_ok=True)
+            session_str = self.telegram_client.session.save()
+            (session_dir / "user_session.string").write_text(session_str)
+            logger.debug("Sesion Telegram guardada.")
+        except Exception as e:
+            logger.warning(f"No se pudo guardar sesion Telegram: {e}")
 
     def _get_auth_callbacks(self):
         """Retorna las funciones de autenticación vía GUI."""
@@ -278,6 +334,7 @@ class TradingBotApp:
                     continue
 
                 logger.info("✅ Bot conectado a Telegram con éxito.")
+                self._save_telegram_session()
                 me = await tc.get_me()
                 user_first = getattr(me, 'first_name', '?')
                 user_username = getattr(me, 'username', '?')
@@ -300,15 +357,17 @@ class TradingBotApp:
                 trading_engine.stop_watchdog()
                 trading_engine._watchdog_task = asyncio.create_task(trading_engine.watchdog())
 
-                # Bloquear hasta que se pierda la conexión
+                # Bloquear hasta que se pierda la conexion o se detenga el bot
                 await tc.run_until_disconnected()
 
-                if self.bot_running:
-                    logger.warning(
-                        "⚠️ Conexión de Telegram perdida. "
-                        "Reintentando en 10 segundos..."
-                    )
-                    await asyncio.sleep(10)
+                if not self.bot_running:
+                    break
+
+                logger.warning(
+                    "Conexion de Telegram perdida. "
+                    "Reintentando en 10 segundos..."
+                )
+                await asyncio.sleep(10)
 
             except asyncio.CancelledError:
                 break
@@ -318,13 +377,19 @@ class TradingBotApp:
                     logger.warning("🔄 Reintentando conexión en 30 segundos...")
                     await asyncio.sleep(30)
 
-        # Asegurar desconexión limpia al salir
+        # Asegurar desconexion limpia al salir
         if self.telegram_client:
             try:
                 tc = cast(TelegramClient, self.telegram_client)
                 await tc.disconnect()
             except Exception:
                 pass
+
+        # Cerrar conexiones de exchanges
+        try:
+            await exchange_service.close_all()
+        except Exception:
+            pass
 
     async def main_async(self):
         creds = load_api_creds()
