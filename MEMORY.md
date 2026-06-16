@@ -1,6 +1,6 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
-*Última actualización: 16/06/2026 (America/Caracas) — Release v1.4.0: estabilidad, timeouts, lock fixes*
+*Última actualización: 16/06/2026 (America/Caracas) — Notificaciones v2: SL hit, alive, batching, formatos mejorados*
 
 ---
 
@@ -50,6 +50,11 @@
 - [x] Ponytail: lazy senior dev mode integrado en Superpowers
 - [x] `opencode.json` con plugin Ponytail
 - [x] `.agents/skills/ponytail/SKILL.md` con niveles lite/full/ultra
+- [x] Notificaciones v2: SL hit, alive heartbeat, signal received, LIMIT filled
+- [x] Batching de TPs múltiples (agrupación en 5s)
+- [x] Mensajes mejorados: PnL %, duración, precio de salida, tamaño USDT
+- [x] Notificaciones de conexión/desconexión de Telegram
+- [x] Heartbeat cada 4h con estado del bot
 
 ---
 

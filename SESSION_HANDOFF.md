@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 16/06/2026 (v19 - Ponytail integrado en Superpowers)
+> **Ultima actualizacion:** 16/06/2026 (v20 - Notificaciones v2: SL hit, alive, batching, formatos mejorados)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -543,6 +543,40 @@ git log --oneline -5
 - [x] ~~Corregir bugs 19-21 de la auditoría (notifier type syntax, shell=True, apply_update)~~
 - [x] ~~Release v1.3.0 con todos los fixes~~
 - [x] ~~Auditoría v2: 126 bugs/mejoras corregidos~~
+- [x] ~~Notificaciones v2: SL hit, alive, batching, formatos mejorados~~
+
+---
+
+### 27. Notificaciones v2: SL hit, alive, batching, formatos mejorados (16/06/2026)
+
+**Que se hizo:** Implementacion completa del sistema de notificaciones mejorado, siguiendo el flujo Superpowers (brainstorming -> spec -> plan -> subagent implementation -> review).
+
+**Nuevas notificaciones:**
+| Tipo | Trigger |
+|------|---------|
+| `sl_hit` | Stop Loss ejecutado |
+| `signal_received` | Senal detectada (ejecutada o rechazada) |
+| `limit_filled` | Orden LIMIT pendiente se lleno |
+| `alive` | Heartbeat cada 4h |
+| `disconnected` | Perdida inesperada de conexion Telegram |
+| `reconnected` | Reconexion exitosa |
+
+**Mejoras:**
+- Mensajes de apertura incluyen tamano en USDT
+- Mensajes de cierre incluyen precio de salida, PnL %, duracion
+- TPs multiples se agrupan en un solo mensaje (batch 5s)
+- Health monitor: fix emoji duplicado
+- `exit_price` y `close_time` agregados a `Position`
+
+**Archivos modificados:**
+- `services/notifier.py` — +100 lineas (nuevos metodos, batching, formatos)
+- `core/engine.py` — Hooks para SL hit, LIMIT filled, signal received
+- `main.py` — Alive heartbeat loop, disconnect/reconnect hooks
+- `models/data_classes.py` — `exit_price`, `close_time` en Position
+- `tests/test_notifier.py` — Tests actualizados
+
+**Tests:** 366/366 pasando (23 notifier + 343 resto)
+**.exe:** `dist/MiBotTrading.exe`
 
 ---
 
