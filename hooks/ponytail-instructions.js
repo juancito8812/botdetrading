@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// Shared Ponytail instruction builder — reads SKILL.md and filters by mode.
-
 const fs = require('fs');
 const path = require('path');
 const { DEFAULT_MODE, normalizeMode, normalizePersistedMode } = require('./ponytail-config');
@@ -11,59 +9,37 @@ const SKILL_PATH = path.join(__dirname, '..', '.agents', 'skills', 'ponytail', '
 function filterSkillBodyForMode(body, mode) {
   const effectiveMode = normalizeMode(mode) || DEFAULT_MODE;
   const withoutFrontmatter = String(body || '').replace(/^---[\s\S]*?---\s*/, '');
-  return withoutFrontmatter
-    .split(/\r?\n/)
-    .filter((line) => {
-      const tableLabel = line.match(/^\|\s*\*\*(.+?)\*\*\s*\|/);
-      if (tableLabel) {
-        const labelMode = normalizeMode(tableLabel[1].trim());
-        if (labelMode) return labelMode === effectiveMode;
-      }
-      const exampleLabel = line.match(/^-\s*([^:]+):\s*/);
-      if (exampleLabel) {
-        const labelMode = normalizeMode(exampleLabel[1].trim());
-        if (labelMode) return labelMode === effectiveMode;
-      }
-      return true;
-    })
-    .join('\n');
+  return withoutFrontmatter.split(/\r?\n/).filter((line) => {
+    const tableLabel = line.match(/^\|\s*\*\*(.+?)\*\*\s*\|/);
+    if (tableLabel) {
+      const labelMode = normalizeMode(tableLabel[1].trim());
+      if (labelMode) return labelMode === effectiveMode;
+    }
+    const exampleLabel = line.match(/^-\s*([^:]+):\s*/);
+    if (exampleLabel) {
+      const labelMode = normalizeMode(exampleLabel[1].trim());
+      if (labelMode) return labelMode === effectiveMode;
+    }
+    return true;
+  }).join('\n');
 }
 
 function getFallbackInstructions(mode) {
   return 'PONYTAIL MODE ACTIVE — level: ' + mode + '\n\n' +
-    'You are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.\n\n' +
-    '## Persistence\n\n' +
-    'ACTIVE EVERY RESPONSE. No drift back to over-building. Still active if unsure. Off only: "stop ponytail" / "normal mode".\n\n' +
-    'Current level: **' + mode + '**. Switch: `/ponytail lite|full|ultra`.\n\n' +
-    '## The ladder\n\n' +
-    'Before any code, stop at the first rung that holds:\n' +
-    '1. Does this need to be built at all? (YAGNI)\n' +
-    '2. Does the standard library do this? Use it.\n' +
-    '3. Does a native platform feature cover it? Use it.\n' +
-    '4. Does an already-installed dependency solve it? Use it.\n' +
-    '5. Can this be one line? Make it one line.\n' +
-    '6. Only then: write the minimum code that works.\n\n' +
-    '## Rules\n\n' +
-    'No abstractions that were not requested. No avoidable dependencies. No boilerplate nobody asked for. ' +
-    'Deletion over addition. Boring over clever. Fewest files possible. ' +
-    'Ship the lazy version and question the complex request in the same response — never stall. ' +
-    'Between two same-size stdlib options, pick the one correct on edge cases. ' +
-    'Mark intentional simplifications with a `ponytail:` comment.\n\n' +
-    '## Output\n\n' +
-    'Code first. Then at most three short lines: what was skipped, when to add it. ' +
-    'If the explanation is longer than the code, delete the explanation.\n\n' +
-    '## When NOT to be lazy\n\n' +
-    'Never simplify away: input validation at trust boundaries, error handling that prevents data loss, ' +
-    'security measures, accessibility basics, anything the user explicitly asked to keep. ' +
-    'Non-trivial logic leaves ONE runnable check behind. Trivial one-liners need no test.\n\n' +
-    '## Boundaries\n\n' +
-    'Ponytail governs what you build, not how you talk. "stop ponytail" or "normal mode": revert.';
+    '## Persistence\nACTIVE EVERY RESPONSE. Switch: `/ponytail lite|full|ultra`.\n\n' +
+    '## The ladder\n1. Does this need to exist? (YAGNI)\n2. Stdlib? Use it.\n3. Native platform feature? Use it.\n4. Already-installed dependency? Use it.\n5. One line? One line.\n6. Minimum code.\n\n' +
+    '## Rules\nNo unrequested abstractions. No avoidable dependencies. Deletion > addition. Fewest files.\n' +
+    'Mark simplifications with `ponytail:` comment.\n\n' +
+    '## Output\nCode first. Then at most 3 lines: what was skipped, when to add.\n\n' +
+    '## When NOT to be lazy\nInput validation, data-loss handling, security, accessibility.\n' +
+    'Non-trivial logic leaves ONE runnable check.\n\n' +
+    '## Boundaries\n"stop ponytail" / "normal mode": revert.';
 }
 
 function getPonytailInstructions(mode) {
   const configuredMode = normalizePersistedMode(mode) || DEFAULT_MODE;
   if (INDEPENDENT_MODES.has(configuredMode)) {
-    return 'PONYTAIL MODE ACTIVE — level: ' + configuredMode + '. Behavior defined by /ponytail-' + configuredMode + ' skill.';
+    return 'PONYTAIL MODE ACTIVE — level: ' + configuredMode;
   }
   const effectiveMode = normalizeMode(configuredMode) || DEFAULT_MODE;
   try {
@@ -74,8 +50,4 @@ function getPonytailInstructions(mode) {
   }
 }
 
-module.exports = {
-  filterSkillBodyForMode,
-  getFallbackInstructions,
-  getPonytailInstructions,
-};
+module.exports = { filterSkillBodyForMode, getFallbackInstructions, getPonytailInstructions };

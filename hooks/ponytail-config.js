@@ -1,11 +1,5 @@
 #!/usr/bin/env node
 // ponytail — shared configuration resolver
-//
-// Resolution order for default mode:
-//   1. PONYTAIL_DEFAULT_MODE environment variable
-//   2. Config file defaultMode field
-//   3. 'full'
-
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -68,13 +62,7 @@ function writeDefaultMode(mode) {
 }
 
 module.exports = {
-  DEFAULT_MODE,
-  VALID_MODES,
-  RUNTIME_MODES,
-  getDefaultMode,
-  getConfigDir,
-  normalizeMode,
-  normalizeConfigMode,
-  normalizePersistedMode,
-  writeDefaultMode,
+  DEFAULT_MODE, VALID_MODES, RUNTIME_MODES,
+  getDefaultMode, getConfigDir, getConfigPath,
+  normalizeMode, normalizeConfigMode, normalizePersistedMode, writeDefaultMode,
 };
