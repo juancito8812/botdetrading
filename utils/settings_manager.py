@@ -15,6 +15,7 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 DEFAULT_SETTINGS = {
     "language": "es",
     "start_with_windows": True,
+    "tg_scraping_enabled": False,
     "max_positions_per_exchange": {
         "binance": 3,
         "bybit": 3,
