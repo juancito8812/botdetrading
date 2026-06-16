@@ -45,7 +45,7 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     m_sl = re.search(r'(?:STOP\s*LOSS|SL|STOPLOSS)\s*[:\-]?\s*([\d\.]+)', upper)
     if m_sl:
         sl = float(m_sl.group(1))
-        
+    
     # 5. Take Profits (TP/Targets)
     targets = []
     # Opción A: Lista en una sola línea (ej: "Targets: 66000, 67000" o "Take Profit: 66000")

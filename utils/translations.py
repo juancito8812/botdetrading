@@ -77,6 +77,7 @@ TRANSLATIONS = {
         "risk_margin_isolated": "Aislado",
         "risk_tp_count": "Cantidad de TPs a ejecutar:",
         "risk_breakeven": "Mover SL a Break-even al tocar TP1",
+        "risk_require_sl": "Requerir Stop Loss",
         "risk_max_positions": "Máximo de posiciones abiertas por exchange:",
         "risk_capital_pct": "% Capital a usar por Exchange (sobre balance disponible)",
         "risk_entry_mode": "Modo de entrada:",
@@ -231,6 +232,7 @@ TRANSLATIONS = {
         "help_api_key": "Tu API Key del exchange. Se obtiene desde la página de gestión de APIs del exchange.",
         "help_api_secret": "Tu Secret Key del exchange. Nunca compartas esta clave con nadie.",
         "help_api_passphrase": "Frase de seguridad adicional requerida por algunos exchanges (Bitget, OKX, KuCoin).",
+        "help_require_sl": "Cuando está activado, las señales que no tengan Stop Loss serán rechazadas automáticamente. Útil para evitar que mensajes de TP realizados se interpreten como nuevas señales.",
 
         # ─── Notification Preferences ──────────
         "notif_title": "Notificaciones Seleccionables",
@@ -345,6 +347,7 @@ TRANSLATIONS = {
         "risk_margin_isolated": "Isolated",
         "risk_tp_count": "Number of TPs to execute:",
         "risk_breakeven": "Move SL to Break-even on TP1 hit",
+        "risk_require_sl": "Require Stop Loss",
         "risk_max_positions": "Maximum open positions per exchange:",
         "risk_capital_pct": "% Capital per Exchange (over available balance)",
         "risk_entry_mode": "Entry mode:",
@@ -498,6 +501,7 @@ TRANSLATIONS = {
         "help_api_key": "Your exchange API Key. Obtained from the exchange's API management page.",
         "help_api_secret": "Your exchange Secret Key. Never share this key with anyone.",
         "help_api_passphrase": "Additional security phrase required by some exchanges (Bitget, OKX, KuCoin).",
+        "help_require_sl": "When enabled, signals without a Stop Loss will be automatically rejected. Useful to prevent completed TP messages from being interpreted as new signals.",
 
         # ─── Notification Preferences ──────────
         "notif_title": "Selectable Notifications",

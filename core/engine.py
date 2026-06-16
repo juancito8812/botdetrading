@@ -30,6 +30,7 @@ class TradingEngine:
         self._health_check_task = None
         self.notifier: Optional[TelegramNotifier] = None
         self._last_daily_report = 0.0  # timestamp del último reporte diario
+        self._last_health_check_time = 0.0  # timestamp del último health check
         # Cargar órdenes LIMIT pendientes desde disco
         self._load_pending_limits()
 

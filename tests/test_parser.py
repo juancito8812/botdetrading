@@ -95,4 +95,4 @@ if __name__ == "__main__":
     test_parse_targets_ordered_long()
     test_parse_targets_ordered_short()
     test_parse_duplicate_targets()
-    print("✅ Todos los tests del parser pasaron correctamente.")
+print("✅ Todos los tests del parser pasaron correctamente.")

@@ -1,6 +1,6 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
-*Última actualización: 11/06/2026 11:04 PM (America/Caracas)*
+*Última actualización: 15/06/2026 (America/Caracas)*
 
 ---
 
@@ -26,8 +26,9 @@
 - [x] Watchdog cada 30s (monitoreo y sincronización)
 - [x] Persistencia de posiciones en disco
 - [x] Interfaz gráfica completa
-- [x] Tests unitarios (parser + manager)
+- [x] Tests unitarios (365 tests, 92% cobertura)
 - [x] GitHub Actions (tests, lint, build)
+- [x] Pre-commit hook Superpowers (valida MEMORY.md + SESSION_HANDOFF.md)
 - [x] Repositorio en GitHub
 
 ---
@@ -45,10 +46,18 @@ MiBotTrading/
 ├── MEMORY.md                   # ← ESTE ARCHIVO — Memoria del proyecto
 ├── README.md                   # Documentación general
 ├── requirements.txt            # Dependencias
-├── .gitignore
+├── .gitignore                      # Limpieza completa de temporales y artefactos
+│
+├── .githooks/
+│   └── pre-commit                 # Hook Superpowers: valida docs al commitear código
 │
 ├── .agents/
-│   └── MEMORY.md               # Memoria para skills de IA (Cline/Codebuff)
+│   └── MEMORY.md                  # Memoria para skills de IA (Cline/Codebuff)
+│
+├── docs/
+│   └── superpowers/               # Especificaciones y planes de diseño
+│       ├── specs/                 #   - coverage-final.md
+│       └── plans/                 #   - refactor-manager.md
 │
 ├── .github/
 │   └── workflows/
@@ -195,7 +204,17 @@ TradingEngine.watchdog()
 - [x] `test_get_pending_positions` — Obtener pendientes
 - [x] `test_persistence` — Persistencia en disco
 
-**Ejecutar:** `python tests/test_parser.py && python tests/test_manager.py`
+**Ejecutar:** `python -m pytest tests/ -v`
+
+### Estado actual (15/06/2026)
+| Métrica | Valor |
+|---------|-------|
+| Tests totales | **365** |
+| Cobertura | **92%** |
+| Módulos al 100% | 11 |
+| Archivos de test | 20 |
+| Pre-commit hook | ✅ `.githooks/pre-commit` |
+| .exe | ✅ `dist/MiBotTrading.exe` (sin consola) |
 
 ---
 
@@ -262,14 +281,12 @@ TARGETS: 120, 130
 
 ## 📌 Próximos Pasos (Sugerencias)
 
+- [ ] **Subir cobertura a 100%** — Actualmente 92%, engine.py tiene ~55 líneas no cubiertas
 - [ ] Notificaciones por Telegram cuando se abra/cierre una posición
 - [ ] Soporte para más exchanges (Binance, Bybit, etc.)
 - [ ] Backtesting con señales históricas
 - [ ] Dashboard con P&L en tiempo real y gráficos
-- [ ] Órdenes OCO (One Cancels Other)
-- [ ] Alertas de precio y trailing stop por Telegram
 - [ ] Logs rotativos (actualmente crecen sin límite)
-- [ ] Modo simulación/paper trading
 
 ---
 

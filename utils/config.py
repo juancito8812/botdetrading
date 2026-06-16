@@ -94,6 +94,7 @@ def _get_default_risk_config():
         "modo_margen": "cross",
         "tp_count": 5,
         "auto_breakeven": True,
+        "requerir_stop_loss": True,
         # Mejoras de entrada
         "entrada_modalidad": "auto",          # "market", "limit", "auto"
         "desviacion_maxima_porcentaje": 3.0,  # Rechazar si precio está >X% del rango

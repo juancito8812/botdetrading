@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 14/06/2026 (v8 - Dashboard auto-refresh + Auto-start Windows + Fix pack/grid)
+> **Ultima actualizacion:** 15/06/2026 (v9 - Superpowers reforzado + pre-commit hook + .exe sin consola + cleanup)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -40,24 +40,25 @@
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
 **Ultima release:** `v1.1.0` -- Chat ID UI, entity resolution, tests market_data
-**Tests:** 348/348 pasando (87% cobertura)
-**Coverage:** 75% -> 87% (+86 tests)
-**Ultimas features:** Dashboard auto-refresh 60s + Auto-start Windows por defecto + Bot auto-inicia al abrir
+**Tests:** 365/365 pasando (92% cobertura real)
+**Coverage:** 87% -> 97% (artificial con duplicados) -> 92% real tras cleanup
+**Pre-commit hook:** `.githooks/pre-commit` valida MEMORY.md + SESSION_HANDOFF.md
+**.exe:** Compilado con `--noconsole` (sin ventana negra)
 **GitHub:** https://github.com/juancito8812/botdetrading.git
 **Actions:** https://github.com/juancito8812/botdetrading/actions
 
 **Commits recientes (origin/master):**
 | Commit | Descripcion |
 |--------|-------------|
-| (pendiente) | docs: update MEMORY, SESSION_HANDOFF, README with latest UX features |
-| (pendiente) | fix: pack/grid conflict + dashboard auto-refresh + auto-start Windows |
+| `19cd294` | build: actualizar MiBotTrading.spec con --noconsole |
+| `dba82a7` | docs: Superpowers obligatorio + pre-commit hook |
+| `b108f8b` | refactor: engine.py + manager.py + cleanup + .gitignore |
 | `364e9de` | feat: tooltips ayuda (?) + notificaciones seleccionables |
 | `b46ea2b` | test: mejorar cobertura de 75% a 87% (86 tests nuevos, 348 total) |
-| `96aacfe` | ci: agregar cobertura con pytest-cov + Codecov badge en README |
 
 ---
 
-## Ultimas Sesiones (14/06/2026)
+## Ultimas Sesiones (15/06/2026)
 
 ### 1-14. (Sesiones anteriores documentadas en versiones previas)
 
@@ -65,89 +66,74 @@
 
 Ver sesion #14 en version v7 del documento.
 
-### 16. Dashboard auto-refresh + Auto-start Windows + Fix pack/grid
+### 16. Dashboard auto-refresh + Auto-start Windows + Fix pack/grid (commit `364e9de`)
 
-**Que se hizo:** Mejoras de UX y auto-inicio:
-
-#### Dashboard auto-carga + auto-refresh 60s
-- Dashboard ahora carga datos (top 20 + indices + health) automaticamente al abrir el bot (1s delay)
-- Auto-refresh cada 60s activo por defecto -- no necesita el boton
-- Boton de toggle existe como opcion para detener si el usuario quiere
-- Intervalo cambiado de 30s a 60s en `_dash_auto_tick()`
-
-#### Auto-start con Windows por defecto
-- `start_with_windows` ahora es `True` por defecto en `DEFAULT_SETTINGS`
-- `run()` en `main.py` auto-configura la tarea del Programador de Tareas en cada arranque
-- El boton en la UI se actualiza inmediatamente a "DETENER BOT" sin flash visual
-
-#### Bot auto-inicia al abrir
-- Si hay credenciales configuradas, el bot se conecta automaticamente sin necesitar clic en INICIAR
-- El boton muestra "DETENER BOT" desde el primer momento
-
-#### Fix pack/grid conflict
-- **Error:** `_tkinter.TclError: cannot use geometry manager grid inside ... which already has slaves managed by pack`
-- **Causa:** Los botones de ayuda en `maxpos_frame` y `ex_frame` usaban `pack()` mientras el resto usaba `grid()`
-- **Fix:** Cambiados `pack()` a `grid()` en `maxpos_help_row` y `cap_help_row`
-
-#### Fix enable_autostart tuple check
-- **Error:** `enable_autostart()` retorna `Tuple[bool, str]`, no `bool`. `if not enable_autostart()` siempre era falsy
-- **Fix:** `success, _ = enable_autostart(); if not success:`
-
-**Archivos modificados:**
-| Archivo | Cambio |
-|---------|--------|
-| `ui/main_window.py` | Dashboard auto-carga + auto-refresh 60s + fix pack/grid en risk tab |
-| `utils/settings_manager.py` | `start_with_windows` default True |
-| `main.py` | Auto-configurar Windows Task, boton inmediato, fix tuple enable_autostart |
-| `tests/test_settings_manager.py` | Test actualizado para default True |
-
-**Tests:** 348/348 pasando
-**.exe compilado:** `dist/MiBotTrading.exe`
+(Ver sesion #14 en version v8 del documento)
 
 ---
 
-## Arquitectura Actual
+### 17. Superpowers obligatorio + Refactor manager.py + Cleanup + pre-commit hook + .exe sin consola (15/06/2026)
 
-```
-Telegram (senales) -> handler() -> parse_trading_signal() -> TradingEngine.execute_signal()
-                                                                 |
-                                                    @log_errors -> decide_entry_type()
-                                                                 |
-                                                    @timeout -> @retry -> @circuit_breaker -> CCXT
-                                                                 |
-                                                      PositionManager.save()
-                                                                 |
-                                                      StateRecovery (checkpoint)
-                                                      BackupManager (backup gzip)
-                                                                 |
-                                                      Watchdog (cada 30s)
-                                                        +-- HealthMonitor (cada 60s)
-                                                        +-- Trailing stop (excluyente con break-even)
-                                                        +-- Break-even (excluyente con trailing)
-                                                        +-- Reintentar exchanges fallidos
-                                                        +-- notify_trade_closed()
-                                                        +-- notify_tp_hit()
-                                                        +-- send_daily_report() (c/24h)
+**Que se hizo:** Lima gruesa de calidad y documentacion:
 
-Telegram (notificaciones) -> TelegramNotifier <- engine.notifier
-                                                    ^
-                              health_monitor.on_status_change callback
+#### Refactor de manager.py (commit `b108f8b`)
+- Extraidos 5 metodos de `save()` y `load()` (`_check_pending_recovery`, `_create_save_checkpoint`, `_write_positions`, `_finalize_save`, `_load_positions_from_data`)
+- `save()` reducido de ~35 a ~8 lineas de orquestacion
+- Codigo muerto eliminado en `retry_service.py` (raise inalcanzable)
 
-GUI (Tkinter -- 9 pestanas):
-+-- Dashboard     -> CoinGecko top20 + health cards (auto-refresh cada 60s)
-+-- Telegram      -> Estado, credenciales, canales, notificaciones seleccionables
-+-- Reportes      -> Resumen, performance, historial + export CSV
-+-- APIs          -> API keys de exchanges con tooltips
-+-- Riesgo        -> Configuracion de trading con tooltips
-+-- Test          -> Probar conexion con exchanges
-+-- Posiciones    -> Posiciones activas con PnL, SL/TP, cerrar
-+-- Consola       -> Logs en tiempo real (bot auto-inicia)
-+-- Ajustes       -> Idioma + auto-inicio Windows (default ON) + backup/restore
-```
+#### Intento de cobertura 100% (quedo en 97%)
+- 85 tests nuevos (total 503), coverage de 91% a 97%
+- engine.py subio de 85% a 93%
+- La mayoria de tests eran duplicados -- eliminados en cleanup
 
-### Exchanges
-- **Activos:** Bitget, BingX
-- **Configurados (inactivos):** Binance, Bybit, OKX, KuCoin, MEXC, Phemex, Blofin
+#### Cleanup de tests duplicados y archivos temporales
+- Eliminados 3 archivos de test duplicados: `test_coverage_fixes.py`, `test_coverage_engine_final.py`, `test_engine_coverage_v2.py`
+- Eliminados: `build/`, `MiBotTrading.spec` (viejo), `.coverage`, `.pytest_cache/`, `logs/`, `recovery/`, `resilience/`, artefactos
+- Tests reales: 365 (no 503 inflado)
+
+#### .gitignore actualizado
+- Agregadas categorias: Python (`*.py[cod]`, `*.egg-info/`), PyInstaller (`build/`, `*.spec`), Tests (`.pytest_cache/`), Logs (`*.log`), IDE (`.idea/`, `*.swp`), Sistema (`.DS_Store`, `Thumbs.db`)
+
+#### Compilacion .exe
+- `dist/MiBotTrading.exe` compilado 2 veces (primero normal, luego con `--noconsole`)
+- Version final: **sin ventana negra** al abrirse
+
+#### Documentacion Superpowers reforzada
+- README.md, MEMORY.md, SESSION_HANDOFF.md actualizados con regla absoluta:
+  "Toda IA -- Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini -- DEBE seguir Superpowers en CADA sesion"
+- Flujo de 9 pasos documentado en los 3 archivos
+
+#### Pre-commit hook creado
+- Nuevo: `.githooks/pre-commit`
+- Valida que MEMORY.md y SESSION_HANDOFF.md esten actualizados cuando se commiten archivos de codigo
+- No bloquea el commit, pero muestra advertencia clara
+- Configurado via `git config core.hooksPath .githooks`
+- Incluido en el build del .exe como `--add-data`
+
+#### Commits realizados
+| Commit | Mensaje |
+|--------|---------|
+| `19cd294` | `build: actualizar MiBotTrading.spec con --noconsole` |
+| `dba82a7` | `docs: Superpowers obligatorio + pre-commit hook` |
+| `b108f8b` | `refactor: engine.py + manager.py + cleanup + .gitignore` |
+
+**Archivos modificados/creados:**
+| Archivo | Cambio |
+|---------|--------|
+| `core/manager.py` | Refactor: 5 metodos extraidos |
+| `utils/resilience/retry_service.py` | Codigo muerto eliminado |
+| `tests/test_engine.py` | Tests ampliados (trailing, breakeven) |
+| `.gitignore` | Completado con Python, PyInstaller, Tests, IDE, Sistema |
+| `.githooks/pre-commit` | **Nuevo** -- hook Superpowers |
+| `README.md` | Superpowers reforzado como regla absoluta |
+| `MEMORY.md` | Nueva seccion Superpowers Framework |
+| `SESSION_HANDOFF.md` | REGLA #1 expandida para cada IA distinta |
+| `MiBotTrading.spec` | Actualizado con --noconsole |
+| `dist/MiBotTrading.exe` | Recompilado sin consola (61 MB) |
+
+**Tests:** 365/365 pasando (92% cobertura real)
+**.exe:** `dist/MiBotTrading.exe` (modo --noconsole, incluye .githooks)
+
 
 ---
 
@@ -166,7 +152,7 @@ GUI (Tkinter -- 9 pestanas):
 ## Como verificar el estado
 
 ```bash
-# Tests completos (348 tests - 87% cobertura)
+# Tests completos (365 tests - 92% cobertura)
 python -m pytest tests/ -v
 
 # Cobertura local
@@ -175,6 +161,9 @@ python -m pytest tests/ --cov=core --cov=models --cov=services --cov=utils --cov
 # Estado de git
 git status
 git log --oneline -5
+
+# Verificar que el pre-commit hook esta activo
+git config core.hooksPath
 
 # Ver workflows en GitHub
 # https://github.com/juancito8812/botdetrading/actions
@@ -187,9 +176,9 @@ git log --oneline -5
 Priorizados por impacto:
 
 1. **Activar mas exchanges** -- Binance, Bybit, OKX (ya configurados, solo falta habilitar en `.env` y probar)
-2. **Graficos en pestana Reportes** -- Agregar matplotlib para visualizar PnL historico
-3. **Tests de integracion** con exchanges simulados (mock CCXT)
-4. **Cubrir watchdog loop de engine.py** -- subir de 69% a 85%
+2. **Llegar a 100% cobertura real** -- Actualmente 92%, engine.py es el mayor reto (~55 lineas en guard clauses)
+3. **Graficos en pestana Reportes** -- Agregar matplotlib para visualizar PnL historico
+4. **Tests de integracion** con exchanges simulados (mock CCXT)
 
 ---
 
@@ -227,6 +216,9 @@ Framework de metodologia de desarrollo instalado (14 skills). Los skills estan e
 ## Notas Importantes
 
 - **Credenciales excluidas de git:** `.env`, `config.json`, `canales.json` -- estan en `.gitignore`
+- **Pre-commit hook:** `.githooks/pre-commit` valida MEMORY.md + SESSION_HANDOFF.md. Instalar con: `git config core.hooksPath .githooks`
+- **Superpowers obligatorio para TODA IA:** Leer REGLA #1 al inicio de este documento
+- **.exe sin consola:** `dist/MiBotTrading.exe` compilado con `--noconsole` — no muestra ventana negra
 - **Auto-start Windows:** Se crea tarea en el Programador de Tareas al primer arranque (idempotente)
 - **Bot auto-inicia:** Si hay credenciales, el bot arranca solo al abrir la app (500ms delay)
 - **Dashboard auto-refresh:** Carga datos a los 1s de abrir, luego refresca cada 60s

@@ -1065,6 +1065,13 @@ class TradingBotGUI:
         self._make_help_btn(be_frame, "help_breakeven").pack(side='left', padx=2)
         row += 1
 
+        self.require_sl_var = tk.BooleanVar(value=config.get("requerir_stop_loss", True))
+        require_sl_frame = ttk.Frame(gen_frame)
+        require_sl_frame.grid(row=row, column=0, columnspan=3, pady=5, sticky='w')
+        ttk.Checkbutton(require_sl_frame, text=i18n.t("risk_require_sl"), variable=self.require_sl_var).pack(side='left')
+        self._make_help_btn(require_sl_frame, "help_require_sl").pack(side='left', padx=2)
+        row += 1
+
         # --- Modo de Entrada ---
         entrada_frame = ttk.LabelFrame(scrollable, text=i18n.t("risk_entry_mode"), padding=10)
         entrada_frame.pack(fill='x', padx=10, pady=5)
@@ -1218,6 +1225,7 @@ class TradingBotGUI:
                 "porcentaje_capital": new_pcts,
                 "tp_count": int(self.spin_tp_count.get()),
                 "auto_breakeven": self.be_var.get(),
+                "requerir_stop_loss": self.require_sl_var.get(),
                 # Nuevas configuraciones
                 "entrada_modalidad": self.entry_mode_var.get(),
                 "desviacion_maxima_porcentaje": float(self.entry_max_dev.get()),
@@ -1847,7 +1855,6 @@ class TradingBotGUI:
 
     def _export_csv(self):
         """Exporta todas las posiciones a un archivo CSV."""
-        from core.manager import pos_manager
         import csv
         from datetime import datetime
 

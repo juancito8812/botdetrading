@@ -190,8 +190,9 @@ class TelegramNotifier:
         if not self.is_notification_enabled("trade_closed"):
             return
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
-        pnl_str = f"{position.pnl:+.2f}" if position.pnl else "0.00"
-        emoji = "✅" if position.pnl and position.pnl >= 0 else "❌"
+        pnl_val = position.pnl if position.pnl is not None else 0.0
+        pnl_str = f"{pnl_val:+.2f}"
+        emoji = "✅" if pnl_val >= 0 else "❌"
 
         msg = (
             f"{emoji} POSICIÓN CERRADA\n"
@@ -202,8 +203,9 @@ class TelegramNotifier:
             f"PnL: ${pnl_str}"
         )
         await self.send_message(msg)
-        emoji_closed = "✅" if position.pnl and position.pnl >= 0 else "❌"
-        self._add_to_history(f"{emoji_closed} CERRADA {position.symbol} ${position.pnl:+.2f}" if position.pnl else f"❌ CERRADA {position.symbol}")
+        pnl_val = position.pnl if position.pnl is not None else 0.0
+        emoji_closed = "✅" if pnl_val >= 0 else "❌"
+        self._add_to_history(f"{emoji_closed} CERRADA {position.symbol} ${pnl_val:+.2f}")
 
     async def notify_tp_hit(self, position: Position, tp_number: int):
         """Notifica que se alcanzó un Take Profit."""
