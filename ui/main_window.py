@@ -937,10 +937,10 @@ class TradingBotGUI:
                     self.root.after(0, lambda: (
                         self.upd_status_label.config(text=i18n.t("upd_downloaded"), foreground="#00cc00"),
                     ))
-                    # Apply update: esto lanza el .bat y luego debemos cerrar la app
+                    # Apply update: lanza el .bat, luego cierra la app inmediatamente
                     success = apply_update(dest)
                     if success:
-                        self.root.after(1000, lambda: self.root.quit())
+                        self.root.after(0, lambda: self.root.destroy())
                     else:
                         self.root.after(0, lambda: (
                             self.upd_status_label.config(

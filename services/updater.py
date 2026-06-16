@@ -199,7 +199,7 @@ def apply_update(downloaded_path: Path) -> bool:
     try:
         subprocess.Popen(
             ["cmd.exe", "/c", "start", "", str(script)],
-            shell=True,
+            shell=False,
             creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0,
         )
         return True

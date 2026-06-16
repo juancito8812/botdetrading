@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 from models.data_classes import Position
 
@@ -90,7 +90,7 @@ class TelegramNotifier:
         Si self.chat_id cambió (ej: usuario lo modificó en settings.json),
         invalida la caché automáticamente.
         """
-        raw: int | str = self.chat_id
+        raw: Union[int, str] = self.chat_id
         if isinstance(raw, str) and raw.lstrip('-').isdigit():
             raw = int(raw)
 
