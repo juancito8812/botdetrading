@@ -29,7 +29,10 @@ Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecu
 - **📊 PnL en Tiempo Real**: Cálculo de ganancia/pérdida desde el exchange en cada ciclo del watchdog
 - **💾 Backup Cifrado**: Export/Import de toda la configuración en archivo .botconfig protegido con contraseña (AES)
 - **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor (cada 60s), retry con backoff, state recovery y backups automáticos
-- **🔔 Notificaciones seleccionables**: Elige qué alertas quieres recibir (apertura/cierre, TP, trailing, errores, etc.) desde la UI
+- **🔔 Notificaciones seleccionables**: Elige qué alertas quieres recibir (apertura/cierre, TP, trailing, SL hit, señales, errores, etc.) desde la UI
+- **💓 Heartbeat**: El bot envía un mensaje de "sigo vivo" cada 4h con estado de conexiones y PnL
+- **🔌 Alertas de conexión**: Notificación cuando el bot se desconecta de Telegram y cuando se reconecta
+- **🎯 Batching de TPs**: Los Take Profits múltiples se agrupan en un solo mensaje
 - **❔ Tooltips de ayuda**: Cada campo de configuración (Riesgo, Ajustes, APIs) tiene un botón ❔ con descripción detallada
 - **⚡ Inicio automático**: El bot arranca con Windows y se conecta automáticamente al abrir la app — sin necesidad del botón INICIAR
 - **🌐 Multi-idioma**: Español e Inglés
