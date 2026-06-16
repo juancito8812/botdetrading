@@ -120,8 +120,6 @@ class RetryService:
                     )
                     raise MaxRetriesExceeded(exchange_id, operation, e) from e
 
-        raise MaxRetriesExceeded(exchange_id, operation, last_exc)
-
     def _is_retryable(self, exc: Exception) -> bool:
         """Determina si una excepción es reintentable."""
         if isinstance(exc, self._never_retry):

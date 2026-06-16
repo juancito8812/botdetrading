@@ -67,6 +67,7 @@ def engine():
     from core.engine import TradingEngine
     eng = TradingEngine()
     eng.processed_signals = {}
+    eng._last_health_check_time = 0.0  # Inicializar para watchdog
     return eng
 
 
@@ -1030,6 +1031,307 @@ def test_save_pending_limits_permission_error(engine_with_temp_file):
     # No podemos simular fácilmente un error de permisos aquí,
     # pero el except captura cualquier Exception
     eng._save_pending_limits()  # No debe lanzar
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _watchdog_tick
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_watchdog_tick_health_check(engine):
+    """_watchdog_tick ejecuta health check si pasaron 60s."""
+    engine._last_health_check_time = time.time() - 120  # Hace 2 minutos
+    engine.health_monitor._run_cycle = AsyncMock()
+
+    await engine._watchdog_tick()
+
+    engine.health_monitor._run_cycle.assert_called_once()
+    assert engine._last_health_check_time > time.time() - 5  # Actualizado
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_no_health_check_recent(mock_ex_svc, engine):
+    """_watchdog_tick NO ejecuta health check si pasaron menos de 60s."""
+    engine._last_health_check_time = time.time() - 10  # Hace 10 segundos
+    engine.health_monitor._run_cycle = AsyncMock()
+
+    await engine._watchdog_tick()
+
+    engine.health_monitor._run_cycle.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_stale_orders_timeout(mock_ex_svc, engine):
+    """Órdenes LIMIT con timeout son canceladas y limpiadas."""
+    mock_client = MagicMock()
+    mock_client.fetch_order = AsyncMock(return_value={"status": "open"})
+    mock_client.cancel_order = AsyncMock()
+    mock_ex_svc.clients = {"bitget": mock_client}
+
+    order_id = "old_order"
+    engine._pending_limit_orders[order_id] = {
+        "exchange_id": "bitget",
+        "market_symbol": "BTC/USDT",
+        "timestamp": time.time() - 3600,  # Hace 1 hora
+        "signal": _sig(),
+        "config": SAMPLE_CONFIG,
+        "amount": 0.01,
+        "limit_price": 67000,
+        "side": "buy",
+        "side_upper": "LONG",
+        "leverage": 10,
+        "usdt_to_use": 50.0,
+    }
+
+    await engine._watchdog_tick()
+
+    mock_client.cancel_order.assert_called_once()
+    assert order_id not in engine._pending_limit_orders
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_stale_orders_filled(mock_ex_svc, mock_pm, engine):
+    """Orden LIMIT llenada es procesada y removida de pending."""
+    mock_client = MagicMock()
+    mock_client.fetch_order = AsyncMock(return_value={
+        "id": "filled_order", "status": "closed", "filled": 0.01, "average": 67100.0
+    })
+    mock_client.amount_to_precision = MagicMock(return_value="0.01")
+    mock_client.create_order = AsyncMock(return_value={"id": "sl_123"})
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    order_id = "filled_order"
+    engine._pending_limit_orders[order_id] = {
+        "exchange_id": "bitget",
+        "market_symbol": "BTC/USDT",
+        "timestamp": time.time() - 60,
+        "signal": _sig(),
+        "config": SAMPLE_CONFIG,
+        "amount": 0.01,
+        "limit_price": 67000,
+        "side": "buy",
+        "side_upper": "LONG",
+        "leverage": 10,
+        "usdt_to_use": 50.0,
+    }
+
+    await engine._watchdog_tick()
+
+    mock_pm.add_position.assert_called_once()
+    assert order_id not in engine._pending_limit_orders
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_stale_orders_no_client(mock_ex_svc, engine):
+    """Orden LIMIT sin cliente disponible es removida."""
+    mock_ex_svc.clients = {}  # Sin clientes
+
+    order_id = "orphan"
+    engine._pending_limit_orders[order_id] = {
+        "exchange_id": "bitget",
+        "market_symbol": "BTC/USDT",
+        "timestamp": time.time() - 60,
+        "signal": _sig(),
+        "config": SAMPLE_CONFIG,
+        "amount": 0.01,
+        "limit_price": 67000,
+        "side": "buy",
+        "side_upper": "LONG",
+        "leverage": 10,
+        "usdt_to_use": 50.0,
+    }
+
+    await engine._watchdog_tick()
+
+    assert order_id not in engine._pending_limit_orders
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _watchdog_tick — sync positions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_position_closed(mock_ex_svc, mock_pm, engine):
+    """Posición cerrada en exchange se marca como 'closed'."""
+    mock_client = MagicMock()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.fetch_position = AsyncMock(return_value={"contracts": 0})  # Cerrada
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5, status="open")
+    mock_pm.get_open_positions.return_value = [pos]
+    engine.notifier = AsyncMock()
+
+    await engine._watchdog_tick()
+
+    assert pos.status == "closed"
+    mock_pm.save.assert_called()
+    engine.notifier.notify_trade_closed.assert_called_once_with(pos)
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_sync_pnl(mock_ex_svc, mock_pm, engine):
+    """Sincronización actualiza PnL y highest_price desde el exchange."""
+    mock_client = MagicMock()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.fetch_position = AsyncMock(return_value={
+        "contracts": 0.01,
+        "markPrice": 68000,
+        "unrealizedPnl": 10.0,
+    })
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5, status="open",
+                   highest_price=67000)
+    mock_pm.get_open_positions.return_value = [pos]
+
+    await engine._watchdog_tick()
+
+    assert pos.pnl == 10.0  # Desde unrealizedPnl
+    assert pos.highest_price == 68000  # Actualizado
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_trailing_breakeven(mock_ex_svc, mock_pm, engine):
+    """Watchdog ejecuta trailing stop y breakeven en posiciones."""
+    mock_client = MagicMock()
+    mock_client.create_order = AsyncMock(return_value={"id": "new_sl"})
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.fetch_position = AsyncMock(return_value={
+        "contracts": 0.01,                        "markPrice": 67300,
+        "unrealizedPnl": 3.0,
+    })
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5, status="open",
+                   sl_order_id="sl_old", tp_order_ids=["tp1"], tp1_hit=True, highest_price=67300)
+    mock_pm.get_open_positions.return_value = [pos]
+
+    await engine._watchdog_tick()
+
+    # Breakeven debería activarse (TP1 hit, no trailing, no breakeven aún)
+    # 67300 = ~0.45% ganancia, por debajo del 1.5% que activa trailing
+    assert pos.is_breakeven is True
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_position_no_client(mock_ex_svc, mock_pm, engine):
+    """Posición sin cliente en exchange no causa error."""
+    mock_ex_svc.clients = {}  # Sin clientes
+
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5, status="open")
+    mock_pm.get_open_positions.return_value = [pos]
+
+    await engine._watchdog_tick()  # No debe lanzar
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: _watchdog_tick — clean cache + daily report
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_clean_cache(mock_ex_svc, engine):
+    """Señales procesadas hace más de 1 hora se limpian."""
+    old_time = time.time() - 4000  # > 1 hora
+    engine.processed_signals = {
+        ("BTC", "Buy", "bitget"): old_time,
+        ("ETH", "Sell", "bingx"): old_time,
+        ("SOL", "Buy", "bitget"): time.time(),  # Reciente, no se limpia
+    }
+
+    await engine._watchdog_tick()
+
+    assert ("BTC", "Buy", "bitget") not in engine.processed_signals
+    assert ("ETH", "Sell", "bingx") not in engine.processed_signals
+    assert ("SOL", "Buy", "bitget") in engine.processed_signals
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_daily_report(mock_ex_svc, mock_pm, engine):
+    """Reporte diario se envía si pasaron 24h."""
+    mock_ex_svc.clients = {"bitget": MagicMock()}
+    mock_ex_svc.get_balance = AsyncMock(return_value=500.0)
+    mock_pm.get_all_positions.return_value = []
+
+    engine._last_daily_report = time.time() - 90000  # > 24h
+    engine.notifier = AsyncMock()
+
+    await engine._watchdog_tick()
+
+    engine.notifier.send_daily_report.assert_called_once()
+    assert engine._last_daily_report > time.time() - 5  # Actualizado
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_watchdog_tick_no_notifier(mock_ex_svc, engine):
+    """watchdog_tick no falla si no hay notifier configurado."""
+    engine.notifier = None
+    await engine._watchdog_tick()  # No debe lanzar
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: requerir_stop_loss
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_execute_signal_reject_without_sl(mock_ex_svc, engine):
+    """Señal sin SL se rechaza cuando requerir_stop_loss=True."""
+    signal = _sig(stop_loss=None)
+    config = {**SAMPLE_CONFIG, "requerir_stop_loss": True}
+    await engine.execute_signal(signal, config, "bitget")
+    # No debe llamar a get_market_symbol (se rechaza antes)
+    mock_ex_svc.get_market_symbol.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_execute_signal_allow_without_sl(mock_ex_svc, engine):
+    """Señal sin SL se permite cuando requerir_stop_loss=False."""
+    mock_client = _mock_client()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_market_symbol = AsyncMock(return_value="BTC/USDT")
+
+    signal = _sig(stop_loss=None)
+    config = {**SAMPLE_CONFIG, "requerir_stop_loss": False}
+    await engine.execute_signal(signal, config, "bitget")
+    # Debe continuar (llama a get_market_symbol)
+    mock_ex_svc.get_market_symbol.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_execute_signal_with_sl_passes(mock_ex_svc, engine):
+    """Señal CON SL pasa la validación aunque requerir_stop_loss=True."""
+    mock_client = _mock_client()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.get_market_symbol = AsyncMock(return_value="BTC/USDT")
+
+    signal = _sig(stop_loss=66000)  # Tiene SL
+    config = {**SAMPLE_CONFIG, "requerir_stop_loss": True}
+    await engine.execute_signal(signal, config, "bitget")
+    # Debe continuar
+    mock_ex_svc.get_market_symbol.assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

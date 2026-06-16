@@ -52,6 +52,58 @@ class TradingEngine:
         except Exception as e:
             logger.warning(f"⚠️ No se pudieron persistir órdenes LIMIT: {e}")
 
+    def _calculate_usdt_amount(self, balance: float, risk_pct: float,
+                                 min_usdt: float,
+                                 exchange_id: str = "") -> tuple:
+        """
+        Calcula la cantidad de USDT a usar según balance y % de riesgo.
+        Retorna (usdt_to_use, error_msg_or_None).
+        """
+        usdt_to_use = balance * (risk_pct / 100.0)
+        if usdt_to_use < min_usdt:
+            if balance >= min_usdt:
+                usdt_to_use = min_usdt
+            else:
+                return 0.0, f"Saldo insuficiente ({balance} < {min_usdt})"
+        return usdt_to_use, None
+
+    def _get_exchange_params(self, exchange_id: str, side_upper: str,
+                             config: dict) -> dict:
+        """Retorna parámetros específicos del exchange para órdenes."""
+        params = {}
+        if exchange_id == "bingx":
+            params['positionSide'] = side_upper
+        elif exchange_id == "bitget":
+            params['tdMode'] = config.get("modo_margen", "cross")
+        return params
+
+    def _validate_price_deviation(self, price: float, entry_min: float,
+                                   entry_max: float, side: str,
+                                   max_deviation: float) -> tuple:
+        """
+        Valida si el precio actual está dentro de la desviación máxima del rango.
+        Retorna (is_valid, reason_if_not).
+        """
+        if side == 'buy':
+            if price > entry_max and entry_max > 0:
+                deviation = ((price - entry_max) / entry_max) * 100
+                if deviation > max_deviation:
+                    return False, f"Precio {deviation:.1f}% sobre el rango de entrada"
+            elif price < entry_min and entry_min > 0:
+                deviation = ((entry_min - price) / entry_min) * 100
+                if deviation > max_deviation:
+                    return False, f"Precio {deviation:.1f}% bajo el rango de entrada"
+        else:  # Sell / Short
+            if price < entry_min and entry_min > 0:
+                deviation = ((entry_min - price) / entry_min) * 100
+                if deviation > max_deviation:
+                    return False, f"Precio {deviation:.1f}% bajo el rango de entrada"
+            elif price > entry_max and entry_max > 0:
+                deviation = ((price - entry_max) / entry_max) * 100
+                if deviation > max_deviation:
+                    return False, f"Precio {deviation:.1f}% sobre el rango de entrada"
+        return True, ""
+
     def _is_duplicate(self, symbol, side, exchange_id, cooldown=30):
         key = (symbol, side, exchange_id)
         now = time.time()
@@ -67,6 +119,11 @@ class TradingEngine:
         cooldown = config.get("cooldown_segundos", 30)
         if self._is_duplicate(signal.simbolo, signal.direccion, exchange_id, cooldown):
             logger.info(f"⏭️ Señal duplicada ignorada en {exchange_id}: {signal.simbolo} {signal.direccion}")
+            return
+
+        # Validación: rechazar señales sin Stop Loss si está configurado
+        if config.get("requerir_stop_loss", True) and signal.stop_loss is None:
+            logger.warning(f"⛔ Señal {signal.simbolo} rechazada: SL requerido pero no encontrado")
             return
 
         client = exchange_service.clients.get(exchange_id)
@@ -176,48 +233,14 @@ class TradingEngine:
         entry_max_val = signal.entry_max or 0.0
 
         # #3 Validación de precio - ¿está el precio dentro de un rango aceptable?
-        if side == 'buy':
-            if price > entry_max_val:
-                deviation = ((price - entry_max_val) / entry_max_val) * 100
-                if deviation > desviacion_max:
-                    logger.warning(
-                        f"⚠️ Precio demasiado alto ({price:.2f}) vs entrada "
-                        f"({entry_min_val}-{entry_max_val}). "
-                        f"Desviación: {deviation:.1f}% "
-                        f"(máx: {desviacion_max}%)"
-                    )
-                    return (
-                        False,
-                        f"Precio {deviation:.1f}% sobre el rango de entrada"
-                    )
-            elif price < entry_min_val and entry_min_val > 0:
-                deviation = ((entry_min_val - price) / entry_min_val) * 100
-                if deviation > desviacion_max:
-                    logger.warning(
-                        f"⚠️ Precio demasiado bajo ({price:.2f}) vs entrada "
-                        f"({entry_min_val}-{entry_max_val}). "
-                        f"Desviación: {deviation:.1f}% "
-                        f"(máx: {desviacion_max}%)"
-                    )
-                    return (
-                        False,
-                        f"Precio {deviation:.1f}% bajo el rango de entrada"
-                    )
-        else:  # Sell / Short
-            if price < entry_min_val and entry_min_val > 0:
-                deviation = ((entry_min_val - price) / entry_min_val) * 100
-                if deviation > desviacion_max:
-                    return (
-                        False,
-                        f"Precio {deviation:.1f}% bajo el rango de entrada"
-                    )
-            elif price > entry_max_val and entry_max_val > 0:
-                deviation = ((price - entry_max_val) / entry_max_val) * 100
-                if deviation > desviacion_max:
-                    return (
-                        False,
-                        f"Precio {deviation:.1f}% sobre el rango de entrada"
-                    )
+        is_valid, reason = self._validate_price_deviation(
+            price, entry_min_val, entry_max_val, side, desviacion_max
+        )
+        if not is_valid:
+            logger.warning(
+                f"⚠️ {reason}: precio={price:.2f}, rango=({entry_min_val}-{entry_max_val})"
+            )
+            return False, reason
 
         # Decidir MARKET vs LIMIT
         in_range = (
@@ -270,23 +293,16 @@ class TradingEngine:
 
         pct_por_exchange = config.get("porcentaje_capital", {})
         risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
-        usdt_to_use = balance * (risk_pct / 100.0)
-
         min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
-        if usdt_to_use < min_usdt:
-            if balance >= min_usdt:
-                usdt_to_use = min_usdt
-            else:
-                return False, f"Saldo insuficiente ({balance} < {min_usdt})"
+
+        usdt_to_use, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
+        if err:
+            return False, err
 
         amount = (usdt_to_use * leverage) / price
         amount = float(client.amount_to_precision(market_symbol, amount))
 
-        params = {}
-        if exchange_id == "bingx":
-            params['positionSide'] = side_upper
-        elif exchange_id == "bitget":
-            params['tdMode'] = config.get("modo_margen", "cross")
+        params = self._get_exchange_params(exchange_id, side_upper, config)
 
         logger.info(f"🚀 Enviando orden MARKET {side} en {exchange_id} para {market_symbol}")
         order = await client.create_order(market_symbol, 'market', side, amount, None, params)
@@ -317,24 +333,17 @@ class TradingEngine:
 
         pct_por_exchange = config.get("porcentaje_capital", {})
         risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
-        usdt_to_use = balance * (risk_pct / 100.0)
-
         min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
-        if usdt_to_use < min_usdt:
-            if balance >= min_usdt:
-                usdt_to_use = min_usdt
-            else:
-                return False, f"Saldo insuficiente ({balance} < {min_usdt})"
+
+        usdt_to_use, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
+        if err:
+            return False, err
 
         price_now = await exchange_service.get_ticker_price(exchange_id, market_symbol)
         amount = (usdt_to_use * leverage) / price_now
         amount = float(client.amount_to_precision(market_symbol, amount))
 
-        params = {}
-        if exchange_id == "bingx":
-            params['positionSide'] = side_upper
-        elif exchange_id == "bitget":
-            params['tdMode'] = config.get("modo_margen", "cross")
+        params = self._get_exchange_params(exchange_id, side_upper, config)
 
         logger.info(
             f"⏳ Colocando orden LIMIT {side} en {exchange_id} "
@@ -385,10 +394,13 @@ class TradingEngine:
 
         pct_por_exchange = config.get("porcentaje_capital", {})
         risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
-        total_usdt = balance * (risk_pct / 100.0)
+        min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
+
+        total_usdt, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
+        if err:
+            return False, f"Saldo insuficiente para DCA"
         usdt_per_order = total_usdt / dca_parts
 
-        min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
         if usdt_per_order < min_usdt:
             if total_usdt >= min_usdt * dca_parts:
                 usdt_per_order = min_usdt
@@ -399,12 +411,8 @@ class TradingEngine:
         base_amount = (usdt_per_order * leverage) / price_now
         base_amount = float(client.amount_to_precision(market_symbol, base_amount))
 
-        params = {}
         side_upper = 'LONG' if side == 'buy' else 'SHORT'
-        if exchange_id == "bingx":
-            params['positionSide'] = side_upper
-        elif exchange_id == "bitget":
-            params['tdMode'] = config.get("modo_margen", "cross")
+        params = self._get_exchange_params(exchange_id, side_upper, config)
 
         placed_count = 0
         for i, limit_price in enumerate(prices):
@@ -607,6 +615,136 @@ class TradingEngine:
                 exchange_id, market_symbol, entry_price
             )
 
+    async def _check_stale_limit_orders(self, config: dict, now: float):
+        """Revisa órdenes LIMIT pendientes: timeout, llenadas, canceladas."""
+        stale_orders = []
+        for order_id, pending in list(self._pending_limit_orders.items()):
+            elapsed = now - pending["timestamp"]
+            timeout_min = int(config.get("timeout_orden_limit_minutos", 10))
+            exchange_id = pending["exchange_id"]
+            market_symbol = pending["market_symbol"]
+
+            client = exchange_service.clients.get(exchange_id)
+            if not client:
+                stale_orders.append(order_id)
+                continue
+
+            try:
+                order = await client.fetch_order(order_id, market_symbol)
+                status = order.get('status', '')
+                if status == 'closed':
+                    await self._process_filled_limit_order(exchange_id, market_symbol, order, pending)
+                    stale_orders.append(order_id)
+                elif status == 'canceled' or status == 'expired':
+                    logger.info(f"❌ Orden LIMIT {order_id} cancelada/expirada en {exchange_id}")
+                    stale_orders.append(order_id)
+                elif elapsed > timeout_min * 60:
+                    logger.warning(f"⏰ Timeout de orden LIMIT {order_id} en {exchange_id}")
+                    try:
+                        await client.cancel_order(order_id, market_symbol)
+                    except Exception:
+                        pass
+                    stale_orders.append(order_id)
+            except Exception:
+                if elapsed > timeout_min * 60:
+                    stale_orders.append(order_id)
+
+        for oid in stale_orders:
+            self._pending_limit_orders.pop(oid, None)
+        if stale_orders:
+            self._save_pending_limits()
+        return stale_orders
+
+    async def _sync_positions(self, config: dict):
+        """Sincroniza posiciones abiertas con exchange: PnL, trailing, breakeven."""
+        open_positions = pos_manager.get_open_positions()
+        for pos in open_positions:
+            client = exchange_service.clients.get(pos.exchange_id)
+            if not client:
+                continue
+
+            try:
+                position_data = await exchange_service.fetch_position(
+                    pos.exchange_id, pos.market_symbol
+                )
+
+                if position_data:
+                    contracts = float(position_data.get('contracts', 0))
+                    if contracts == 0:
+                        pos.status = "closed"
+                        pos_manager.save()
+                        logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
+                        if self.notifier:
+                            await self.notifier.notify_trade_closed(pos)
+                        continue
+
+                    mark_price = float(position_data.get('markPrice', 0))
+                    if mark_price > 0:
+                        if pos.side.lower() == 'buy':
+                            if mark_price > pos.highest_price:
+                                pos.highest_price = mark_price
+                        else:
+                            if pos.lowest_price == 0 or mark_price < pos.lowest_price:
+                                pos.lowest_price = mark_price
+
+                    contracts = float(position_data.get('contracts', pos.amount))
+                    unrealized_pnl = position_data.get('unrealizedPnl')
+                    if unrealized_pnl is not None:
+                        pos.pnl = float(unrealized_pnl)
+                    elif mark_price > 0 and contracts > 0:
+                        if pos.side.lower() == 'buy':
+                            pos.pnl = (mark_price - pos.entry_price) * contracts
+                        else:
+                            pos.pnl = (pos.entry_price - mark_price) * contracts
+
+                    await self._check_trailing_stop(pos, config, client)
+
+                    if config.get("auto_breakeven", True) and not pos.is_breakeven and pos.tp1_hit and not pos.trailing_activated:
+                        logger.info(f"🔄 Moviendo SL a break-even para {pos.symbol}")
+                        await self._move_sl_to_breakeven(pos, client)
+                        pos.is_breakeven = True
+                        pos_manager.save()
+
+                    await self._check_tp1_hit(pos, client)
+
+            except Exception as e:
+                logger.debug(f"Watchdog: Error verificando posición {pos.symbol}: {e}")
+
+    async def _check_tp1_hit(self, pos, client):
+        """Verifica si TP1 fue alcanzado."""
+        if not pos.tp1_hit and pos.tp_order_ids:
+            for tp_id in pos.tp_order_ids:
+                try:
+                    order = await client.fetch_order(tp_id, pos.market_symbol)
+                    if order.get('status') == 'closed' or order.get('filled', 0) > 0:
+                        pos.tp1_hit = True
+                        pos_manager.save()
+                        logger.info(f"🎯 TP1 alcanzado para {pos.symbol} en {pos.exchange_id}")
+                        if self.notifier:
+                            await self.notifier.notify_tp_hit(pos, 1)
+                        break
+                except Exception:
+                    pass
+
+    async def _sync_failed_exchanges(self):
+        """Reintenta conexión con exchanges fallidos."""
+        from utils.config import load_api_creds
+        failed_snapshot = list(exchange_service.failed_exchanges)
+        for ex_id in failed_snapshot:
+            logger.info(f"🔄 Reintentando conexión con {ex_id}...")
+            creds = load_api_creds()
+            ex_creds = creds["exchanges"].get(ex_id, {})
+            if ex_creds.get("enabled"):
+                await exchange_service.create_client(ex_id, ex_creds)
+
+    def _clean_old_signals(self, now: float):
+        """Limpia señales procesadas antiguas (> 1 hora)."""
+        stale_keys = [k for k, v in self.processed_signals.items() if now - v > 3600]
+        for k in stale_keys:
+            del self.processed_signals[k]
+        if stale_keys:
+            logger.debug(f"🧹 Limpiadas {len(stale_keys)} señales antiguas del caché")
+
     def stop_watchdog(self):
         """Cancela el watchdog si está corriendo."""
         if self._watchdog_task and not self._watchdog_task.done():
@@ -614,178 +752,57 @@ class TradingEngine:
             self._watchdog_task = None
             logger.info("⏹️ Watchdog detenido")
 
+    async def _watchdog_tick(self):
+        """Una iteración del watchdog. Extraída para testing."""
+        from services.exchange_service import _circuit_breakers
+
+        config = load_risk_config()
+        now = time.time()
+
+        # 0. Health check periódico (cada 60s)
+        if now - self._last_health_check_time >= 60:
+            self._last_health_check_time = now
+            await self.health_monitor._run_cycle()
+
+        # 1. Revisar órdenes LIMIT pendientes
+        await self._check_stale_limit_orders(config, now)
+
+        # 2. Sincronizar posiciones abiertas
+        await self._sync_positions(config)
+
+        for ex_id in list(exchange_service.clients.keys()):
+            self.health_monitor.add_exchange(ex_id)
+        self.health_monitor.sync_circuit_breaker_states(_circuit_breakers)
+
+        # 3. Reintentar exchanges fallidos
+        await self._sync_failed_exchanges()
+
+        # 4. Limpiar señales procesadas antiguas
+        self._clean_old_signals(now)
+
+        # 5. Reporte diario (cada 24h)
+        if self.notifier and now - self._last_daily_report > 86400:
+            self._last_daily_report = now
+            all_positions = pos_manager.get_all_positions()
+            balances = {}
+            for ex_id in list(exchange_service.clients.keys()):
+                try:
+                    bal = await exchange_service.get_balance(ex_id)
+                    balances[ex_id] = bal
+                except Exception:
+                    balances[ex_id] = 0.0
+            await self.notifier.send_daily_report(all_positions, balances)
+
     async def watchdog(self):
         """Vigila órdenes pendientes, sincroniza estados y monitorea salud."""
-        
-        # Integrar HealthMonitor — se ejecuta cada 60s dentro del watchdog
         self.health_monitor.set_health_check_func(self._health_check_exchange)
         self._last_health_check_time = time.time()
-        
         while True:
             try:
-                config = load_risk_config()
-                now = time.time()
-
-                # 0. Health check periódico (cada 60s)
-                if now - self._last_health_check_time >= 60:
-                    self._last_health_check_time = now
-                    await self.health_monitor._run_cycle()
-
-                # 1. Revisar órdenes LIMIT pendientes (#1 timeout)
-                stale_orders = []
-                for order_id, pending in list(self._pending_limit_orders.items()):
-                    elapsed = now - pending["timestamp"]
-                    timeout_min = int(config.get("timeout_orden_limit_minutos", 10))
-                    exchange_id = pending["exchange_id"]
-                    market_symbol = pending["market_symbol"]
-
-                    client = exchange_service.clients.get(exchange_id)
-                    if not client:
-                        stale_orders.append(order_id)
-                        continue
-
-                    try:
-                        order = await client.fetch_order(order_id, market_symbol)
-                        status = order.get('status', '')
-                        if status == 'closed':
-                            await self._process_filled_limit_order(exchange_id, market_symbol, order, pending)
-                            stale_orders.append(order_id)
-                        elif status == 'canceled' or status == 'expired':
-                            logger.info(f"❌ Orden LIMIT {order_id} cancelada/expirada en {exchange_id}")
-                            stale_orders.append(order_id)
-                        elif elapsed > timeout_min * 60:
-                            # Timeout: cancelar orden LIMIT
-                            logger.warning(f"⏰ Timeout de orden LIMIT {order_id} en {exchange_id}")
-                            try:
-                                await client.cancel_order(order_id, market_symbol)
-                            except Exception:
-                                pass
-                            stale_orders.append(order_id)
-                    except Exception:
-                        if elapsed > timeout_min * 60:
-                            stale_orders.append(order_id)
-
-                for oid in stale_orders:
-                    self._pending_limit_orders.pop(oid, None)
-                if stale_orders:
-                    self._save_pending_limits()
-
-                # 1. Sincronizar posiciones abiertas
-                open_positions = pos_manager.get_open_positions()
-                for pos in open_positions:
-                    client = exchange_service.clients.get(pos.exchange_id)
-                    if not client:
-                        continue
-
-                    try:
-                        # Verificar estado de la posición
-                        position_data = await exchange_service.fetch_position(
-                            pos.exchange_id, pos.market_symbol
-                        )
-
-                        if position_data:
-                            contracts = float(position_data.get('contracts', 0))
-                            if contracts == 0:
-                                pos.status = "closed"
-                                pos_manager.save()
-                                logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
-                                # Notificar cierre
-                                if self.notifier:
-                                    await self.notifier.notify_trade_closed(pos)
-                                continue
-
-                            # Actualizar precio más alto/bajo para trailing (#4)
-                            mark_price = float(position_data.get('markPrice', 0))
-                            if mark_price > 0:
-                                if pos.side.lower() == 'buy':
-                                    if mark_price > pos.highest_price:
-                                        pos.highest_price = mark_price
-                                else:
-                                    if pos.lowest_price == 0 or mark_price < pos.lowest_price:
-                                        pos.lowest_price = mark_price
-
-                            # Calcular PnL desde el exchange si está disponible
-                            contracts = float(position_data.get('contracts', pos.amount))
-                            unrealized_pnl = position_data.get('unrealizedPnl')
-                            if unrealized_pnl is not None:
-                                pos.pnl = float(unrealized_pnl)
-                            elif mark_price > 0 and contracts > 0:
-                                if pos.side.lower() == 'buy':
-                                    pos.pnl = (mark_price - pos.entry_price) * contracts
-                                else:
-                                    pos.pnl = (pos.entry_price - mark_price) * contracts
-
-                            # #4 Trailing stop automático
-                            await self._check_trailing_stop(pos, config, client)
-
-                            # Auto Breakeven (existente)
-                            # No activar break-even si trailing stop ya se activó (son mutuamente excluyentes)
-                            if config.get("auto_breakeven", True) and not pos.is_breakeven and pos.tp1_hit and not pos.trailing_activated:
-                                logger.info(f"🔄 Moviendo SL a break-even para {pos.symbol}")
-                                await self._move_sl_to_breakeven(pos, client)
-                                pos.is_breakeven = True
-                                pos_manager.save()
-
-                            # Verificar TP1 hit
-                            if not pos.tp1_hit and pos.tp_order_ids:
-                                for tp_id in pos.tp_order_ids:
-                                    try:
-                                        order = await client.fetch_order(tp_id, pos.market_symbol)
-                                        if order.get('status') == 'closed' or order.get('filled', 0) > 0:
-                                            pos.tp1_hit = True
-                                            pos_manager.save()
-                                            logger.info(f"🎯 TP1 alcanzado para {pos.symbol} en {pos.exchange_id}")
-                                            if self.notifier:
-                                                await self.notifier.notify_tp_hit(pos, 1)
-                                            break
-                                    except Exception:
-                                        pass
-
-                    except Exception as e:
-                        logger.debug(f"Watchdog: Error verificando posición {pos.symbol}: {e}")
-
-                # Health check de exchanges activos
-                for ex_id in list(exchange_service.clients.keys()):
-                    self.health_monitor.add_exchange(ex_id)
-
-                # Sincronizar circuit breaker states con health monitor
-                from services.exchange_service import _circuit_breakers
-                self.health_monitor.sync_circuit_breaker_states(_circuit_breakers)
-
-                # 2. Reintentar exchanges fallidos
-                failed_snapshot = list(exchange_service.failed_exchanges)
-                for ex_id in failed_snapshot:
-                    logger.info(f"🔄 Reintentando conexión con {ex_id}...")
-                    from utils.config import load_api_creds
-                    creds = load_api_creds()
-                    ex_creds = creds["exchanges"].get(ex_id, {})
-                    if ex_creds.get("enabled"):
-                        await exchange_service.create_client(ex_id, ex_creds)
-
-                # 3. Limpiar señales procesadas antiguas (> 1 hora)
-                stale_keys = [k for k, v in self.processed_signals.items() if now - v > 3600]
-                for k in stale_keys:
-                    del self.processed_signals[k]
-                if stale_keys:
-                    logger.debug(f"🧹 Limpiadas {len(stale_keys)} señales antiguas del caché")
-
-                # 4. Reporte diario (cada 24h)
-                if self.notifier and now - self._last_daily_report > 86400:
-                    self._last_daily_report = now
-                    all_positions = pos_manager.get_all_positions()
-                    balances = {}
-                    for ex_id in list(exchange_service.clients.keys()):
-                        try:
-                            bal = await exchange_service.get_balance(ex_id)
-                            balances[ex_id] = bal
-                        except Exception:
-                            balances[ex_id] = 0.0
-                    await self.notifier.send_daily_report(all_positions, balances)
-
+                await self._watchdog_tick()
             except Exception as e:
                 logger.error(f"Error en watchdog: {e}", exc_info=True)
-
-            await asyncio.sleep(30)  # Cada 30 segundos
+            await asyncio.sleep(30)
 
     async def _check_trailing_stop(self, pos: Position, config: dict, client):
         """#4 Trailing stop: mueve el SL cuando el precio se mueve a favor."""

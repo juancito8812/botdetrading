@@ -1,36 +1,62 @@
-# Credenciales y Configuración sensible
+# Credenciales y Configuracion sensible
 .env
 config.json
 canales.json
-posiciones.json
+settings.json
 
 # Entorno virtual
 venv/
 .venv/
 env/
-*.pyc
+
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+*.egg
+
+# PyInstaller
+build/
+*.spec
+
+# Tests y Cobertura
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+posiciones.json
+pending_limits.json
+recovery/
+resilience/
 
 # Logs
 logs/
+*.log
 log_bot.txt
 _temp_run_test.txt
 
-# Build
-build/
-dist/
-*.spec
-*.rar
-*.zip
-
-# Sesión Telegram
+# Sesion Telegram
 telegram_session/
+session_*
 
-# IDE
+# IDE / Editores
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 .continue/
 
-# Archivos temporales/legacy
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+nul
+
+# Archivos legacy
 _fix_probar.py
 _fix_probar2.py
 _fix_probar3.py
@@ -38,19 +64,9 @@ _fx.py
 _new_method.py
 fix_guifreeze.py
 fix_step.py
-nul
 bot_unificado_backup.zip
-"bot de trading ultima version.rar"
-
-# Coverage
-coverage.xml
-htmlcov/
-.coverage
 
 # Directorios legacy
 backup_modulos/
 legacy_code/
-
-# Generados por tests
-settings.json
-recovery/
+superpowers/
