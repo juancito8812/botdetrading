@@ -1,6 +1,6 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
-*Última actualización: 16/06/2026 (America/Caracas)*
+*Última actualización: 16/06/2026 (America/Caracas) — Auditoría masiva completada*
 
 ---
 
@@ -288,7 +288,7 @@ TARGETS: 120, 130
 
 4. **Dependencia de CoinGecko** — El dashboard usa la API gratuita de CoinGecko, tiene límite de 10-30 llamadas/minuto.
 
-### Bugs corregidos en ultima sesion (16/06/2026)
+### Bugs corregidos en ultima sesion (16/06/2026 — Sesión 22)
 
 | Bug | Archivo | Sintoma | Solucion |
 |-----|---------|---------|----------|
@@ -301,15 +301,73 @@ TARGETS: 120, 130
 | **M6** | `utils/resilience/state_recovery.py` | Escritura sin atomic_write — corrupcion en crash | `atomic_write_json()` |
 | **M7** | `services/market_data.py` | ClientSession nuevo por llamada — waste conexiones | `_get_session()` reutilizable |
 
+### Bugs PENDIENTES (16/06/2026 — Sesión 23: Auditoría)
+
+Se encontraron **57 bugs/malas prácticas** en todo el código. Los 22 críticos están listados abajo. **NINGUNO fue corregido** — es el trabajo pendiente para la próxima sesión.
+
+| # | Severidad | Bug | Archivo |
+|---|-----------|-----|---------|
+| 1 | 🔴 | Auth code Telegram en logs (plaintext) | `main.py:222` |
+| 2 | 🔴 | TOCTOU race en self.loop | `main.py:76-80` |
+| 3 | 🔴 | Task exceptions nunca retrievadas | `main.py:184-186` |
+| 4 | 🔴 | `load_risk_config()` IO en cada mensaje | `main.py:173` |
+| 5 | 🔴 | `pos.amount` nunca decrementado tras TP parcial | `engine.py:223,643` |
+| 6 | 🔴 | SL default usa MARKET no STOP | `engine.py:525-531` |
+| 7 | 🔴 | PnL ignora contractSize (factor 1000x) | `engine.py:749-752` |
+| 8 | 🔴 | `except: pass` traga error TP1 fetch | `engine.py:777-781` |
+| 9 | 🔴 | HTTP non-200 cachea datos corruptos | `market_data.py:123-157` |
+| 10 | 🔴 | parse_version tuples longitud variable | `updater.py:41-48` |
+| 11 | 🔴 | raise incondicional tras recovery | `exchange_service.py:156-160` |
+| 12 | 🔴 | `_extract_exchange_id` primer string | `decorators.py:49-66` |
+| 13 | 🔴 | `_get_exe_path()` ruta wrong en dev | `settings_manager.py:33-37` |
+| 14 | 🔴 | Task scheduler corre como SYSTEM HIGHEST | `settings_manager.py:94-103` |
+| 15 | 🔴 | `half_open_requests` no persistido | `circuit_breaker.py:100-124` |
+| 16 | 🔴 | `_task` nunca asignado en HealthMonitor | `health_monitor.py:191-200` |
+| 17 | 🔴 | `pop(0)` antes de `os.remove()` en backup | `backup_manager.py:66-75` |
+| 18 | 🔴 | `self.clients` mutado sin lock async | `exchange_service.py:29-113` |
+| 19 | 🔴 | `int \| str` syntax (solo Py3.10+) | `notifier.py:93` |
+| 20 | 🔴 | `shell=True` + lista = doble cmd.exe | `updater.py:195-199` |
+| 21 | 🔴 | `apply_update` no cierra la app | `updater.py:184-203` |
+| 22 | 🔴 | `update_status` solo 1er match | `manager.py:122-128` |
+
 ---
 
 ## 📌 Próximos Pasos (Sugerencias)
 
-- [ ] **Subir cobertura a 100%** — Actualmente 92%, engine.py tiene ~55 líneas no cubiertas
-- [ ] Soporte para más exchanges (Binance, Bybit, etc.)
-- [ ] Backtesting con señales históricas
-- [ ] Dashboard con P&L en tiempo real y gráficos
-- [ ] Tests unitarios del updater
+### 🔴 PRIORIDAD 1 — Trading engine (errores que cuestan dinero)
+- [ ] **C1: pos.amount nunca decrementado** — SL/TP montos erroneos tras TP parcial
+- [ ] **C2: SL default usa MARKET no STOP** — SL ejecuta inmediato en exchanges no-Bitget/BingX
+- [ ] **C3: PnL ignora contractSize** — PnL incorrecto por factor ~1000x
+- [ ] **C5: except:pass en TP1 fetch** — Breakeven nunca activa si falla fetch
+
+### 🔴 PRIORIDAD 2 — Seguridad
+- [ ] **Auth code en logs** — leak de credencial Telegram
+- [ ] **SYSTEM HIGHEST task** — escalacion de privilegios
+- [ ] **API_HASH/API_ID validacion** — crash/retry infinito en startup
+
+### 🔴 PRIORIDAD 3 — Datos correctos
+- [ ] **market_data.py non-200 cachea ceros** — dashboard corrupto
+- [ ] **updater.py parse_version** — version comparison broken
+- [ ] **exchange_service.py raise incondicional** — retry cycles perdidos
+- [ ] **extract_exchange_id primer string** — circuit breaker wrong
+
+### 🟡 PRIORIDAD 4 — Robustez
+- [ ] HealthMonitor _task nunca asignado
+- [ ] CircuitBreaker half_open_requests no persistido
+- [ ] backup_manager pop(0) antes de remove
+- [ ] manager.py update_status solo 1er match
+- [ ] TOCTOU race en self.loop (main.py)
+- [ ] Task exceptions nunca retrievadas
+- [ ] exchange_service.py clients sin lock
+- [ ] main_window.py sorted() crash en None open_time
+- [ ] main_window.py change > 0 crash en None
+
+### 🟢 PRIORIDAD 5 — Calidad
+- [ ] Codigo muerto (amount_remaining, dead state)
+- [ ] Imports dentro de funciones
+- [ ] Logging faltante en except silenciosos
+- [ ] settings_manager autostart path wrong
+- [ ] Compilar .exe con bugfixes
 
 ---
 

@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 16/06/2026 (v15 - 20 bugs fix: C3-C4, H3-H10, M1-M7, L2-L7)
+> **Ultima actualizacion:** 16/06/2026 (v16 - Auditoria masiva: 57 bugs/malos-practicas encontrados)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -40,16 +40,12 @@
 **Stack:** Python 3.14, Tkinter (GUI), CCXT async (exchanges), Telethon (Telegram), asyncio, pytest, PyInstaller
 
 **Ultima release:** `v1.2.0` -- StringSession + revert TG Scraping
-**Ultimo .exe:** `dist/MiBotTrading.exe` (61 MB, con bugfixes C1-C4 + H3-H10 + M1-M7 + L2-L7)
+**Ultimo .exe:** `dist/MiBotTrading.exe` (61 MB, bugfixes hasta sesion 22)
 **Tests:** 365/365 pasando (95% cobertura real)
-**Sesion Telegram:** StringSession (sin SQLite, sin file locking)
-**Bugfix C3:** Ordenes LIMIT huerfanas — cancel_order + log antes de remover
-**Bugfix C4:** Balance 0.0 falsy — `is not None` en vez de `or`
-**Bugfix H4:** sl_price agregado a Position — notificaciones muestran SL real
-**Bugfix H10:** health_map.items() con `list()` snapshot — previene RuntimeError
-**Bugfix M1:** Amount LIMIT usa limit_price en vez de price_now
-**Bugfix M6:** state_recovery.py con atomic_write_json
-**Bugfix M7:** ClientSession reutilizable en market_data.py
+**Auditoria 16/06:** 57 bugs/malos-practicas encontrados (22 criticos, 15 altos, 20+ medios/bajos)
+**Pendiente:** Bugs C1-C5 de engine.py (SL type, PnL, pos.amount, in_range, TP1)
+**Pendiente:** Security fixes (auth code log, SYSTEM task, API_HASH validation)
+**Pendiente:** market_data.py, updater.py, exchange_service.py, decorators.py fixes
 **Superpower docs:** `docs/superpowers/specs/2026-06-15-auto-updater.md`
 **Pre-commit hook:** `.githooks/pre-commit` valida MEMORY.md + SESSION_HANDOFF.md
 **.exe:** Compilado con `--noconsole` (sin ventana negra)
@@ -313,6 +309,64 @@ Ver sesion #14 en version v7 del documento.
 
 ---
 
+### 23. Auditoria masiva: 57 bugs/malas-practicas encontrados (16/06/2026)
+
+**Que se hizo:** Revision de TODO el codigo fuente por 4 agentes en paralelo. Cada agente analizo un grupo de archivos.
+
+**Resultados por modulo:**
+
+| Modulo | Criticos | Altos | Med/Bajos |
+|--------|----------|-------|-----------|
+| `main.py` | 4 | 5 | 3 |
+| `core/engine.py` | 5 | 2 | 5 |
+| `core/manager.py` | 0 | 2 | 0 |
+| `services/exchange_service.py` | 2 | 2 | 1 |
+| `services/market_data.py` | 1 | 2 | 2 |
+| `services/notifier.py` | 0 | 1 | 2 |
+| `services/updater.py` | 2 | 2 | 0 |
+| `utils/resilience/decorators.py` | 1 | 0 | 0 |
+| `utils/resilience/circuit_breaker.py` | 2 | 0 | 2 |
+| `utils/resilience/health_monitor.py` | 1 | 1 | 0 |
+| `utils/resilience/backup_manager.py` | 0 | 1 | 0 |
+| `utils/resilience/logger.py` | 0 | 0 | 2 |
+| `utils/settings_manager.py` | 2 | 0 | 0 |
+| `utils/config.py` | 0 | 0 | 1 |
+| `utils/helpers.py` | 0 | 0 | 2 |
+| `ui/main_window.py` | 0 | 3 | 5 |
+| **TOTAL** | **22** | **15** | **20+** |
+
+### Bugs criticos principales (los 22)
+
+| # | Bug | Archivo | Impacto |
+|---|-----|---------|---------|
+| 1 | Auth code de Telegram en logs (plaintext) | `main.py:222` | Credencial leak |
+| 2 | TOCTOU race en self.loop (AttributeError no capturado) | `main.py:76-80` | Crash al detener |
+| 3 | Task exceptions nunca retrievadas | `main.py:184-186` | Errores silenciosos |
+| 4 | load_risk_config() IO en cada mensaje Telegram | `main.py:173` | Performance |
+| 5 | pos.amount nunca decrementado tras TP parcial | `engine.py:223,643` | SL/TP montos erroneos |
+| 6 | SL default usa orden MARKET no STOP | `engine.py:525-531` | SL ejecuta inmediato |
+| 7 | PnL manual ignora contractSize (factor 1000x) | `engine.py:749-752` | PnL incorrecto |
+| 8 | except: pass traga error de TP1 fetch | `engine.py:777-781` | Breakeven nunca activa |
+| 9 | HTTP non-200 cachea datos corruptos (ceros) | `market_data.py:123-157` | Dashboard corrupto |
+| 10 | parse_version retorna tuples de longitud variable | `updater.py:41-48` | Version comparison broken |
+| 11 | raise incondicional tras event-loop recovery | `exchange_service.py:156-160` | Retry perdido |
+| 12 | _extract_exchange_id retorna primer string | `decorators.py:49-66` | Circuit breaker wrong |
+| 13 | _get_exe_path() ruta wrong en modo dev | `settings_manager.py:33-37` | Autostart roto |
+| 14 | Task scheduler corre como SYSTEM HIGHEST | `settings_manager.py:94-103` | Security risk |
+| 15 | half_open_requests no persistido | `circuit_breaker.py:100-124` | Doble probe en HALF_OPEN |
+| 16 | _task nunca asignado en HealthMonitor | `health_monitor.py:191-200` | stop() es dead code |
+| 17 | pop(0) antes de os.remove() en backup | `backup_manager.py:66-75` | Orphaned backups |
+| 18 | self.clients mutado sin lock async | `exchange_service.py:29-113` | Resource leak |
+| 19 | int | str syntax (solo Python 3.10+) | `notifier.py:93` | SyntaxError en <3.10 |
+| 20 | shell=True + lista = doble cmd.exe | `updater.py:195-199` | Update script roto |
+| 21 | apply_update no cierra la app | `updater.py:184-203` | Update falla silencioso |
+| 22 | update_status solo actualiza 1er match | `manager.py:122-128` | Posiciones duplicadas |
+
+### NOTA IMPORTANTE
+Ninguno de estos bugs fue corregido en esta sesion — solo se documentaron. La sesion fue puramente de auditoria. La siguiente sesion debe empezar corrigiendo los 22 criticos (prioridad: engine.py C1-C5, security, market_data, updater).
+
+---
+
 ## GitHub Actions -- Workflows
 
 | Workflow | Trigger | Stack | Que hace |
@@ -351,11 +405,36 @@ git config core.hooksPath
 
 Priorizados por impacto:
 
-1. **Activar mas exchanges** -- Binance, Bybit, OKX (ya configurados, solo falta habilitar en `.env` y probar)
-2. **Llegar a 100% cobertura real** -- Actualmente 95%, engine.py (84%) y manager.py (79%) son los mayores retos
-3. **Tests unitarios del updater** -- services/updater.py no tiene tests dedicados
-4. **Graficos en pestana Reportes** -- Agregar matplotlib para visualizar PnL historico
-5. **Compilar .exe con bugfixes** -- Recompilar `dist/MiBotTrading.exe` con todas las correcciones de la sesion 22
+### 🔴 PRIORIDAD 1 — Corregir bugs engine.py (trading)
+1. **C1: pos.amount nunca decrementado** — SL/TP montos erroneos tras TP parcial
+2. **C2: SL default usa MARKET no STOP** — SL se ejecuta inmediato en exchanges no-Bitget/BingX
+3. **C3: PnL ignora contractSize** — PnL incorrecto por factor ~1000x
+4. **C5: except:pass en TP1 fetch** — Breakeven nunca activa si falla fetch
+
+### 🔴 PRIORIDAD 2 — Seguridad
+5. **Auth code en logs** — leak de credencial Telegram
+6. **SYSTEM HIGHEST task** — escalacion de privilegios
+7. **API_HASH no validado** — crash en startup
+8. **API_ID invalido** → retry infinito
+
+### 🔴 PRIORIDAD 3 — Datos correctos
+9. **market_data.py non-200 cachea ceros** — dashboard corrupto
+10. **updater.py parse_version** — version comparison broken
+11. **exchange_service.py raise incondicional** — retry cycles perdidos
+12. **extract_exchange_id primer string** — circuit breaker wrong
+
+### 🟡 PRIORIDAD 4 — Robustez
+13. health_monitor.py _task nunca asignado
+14. circuit_breaker.py half_open_requests no persistido
+15. backup_manager.py pop(0) antes de remove
+16. manager.py update_status solo 1er match
+17. main.py TOCTOU race en self.loop
+18. main.py task exceptions nunca retrievadas
+19. exchange_service.py clients sin lock
+20. main_window.py sorted() crash en None open_time
+
+### 🟢 PRIORIDAD 5 — Calidad
+21. Codigo muerto, imports dentro de funciones, logging faltante, settings_manager autostart path, etc.
 
 ---
 
