@@ -12,6 +12,8 @@ from utils.resilience.error_handler import MaxRetriesExceeded
 
 logger = logging.getLogger("TradingBot")
 
+KNOWN_EXCHANGE_IDS = {"bitget", "bingx", "binance", "bybit", "okx", "kucoin", "mexc", "phemex", "blofin"}
+
 
 # ─── TIMEOUT DECORATOR ───────────────────────────────────────────────
 
@@ -35,9 +37,11 @@ def timeout_decorator(
                     func(*args, **kwargs), timeout=seconds
                 )
             except asyncio.TimeoutError:
+                safe_args = tuple(str(a) if not isinstance(a, str) else a[:50] for a in args)
+                safe_kwargs = {k: v if not isinstance(v, str) else v[:50] for k, v in kwargs.items()}
                 logger.error(
                     f"⏰ Timeout ({seconds}s) en {func.__name__} "
-                    f"args={args}, kwargs={kwargs}"
+                    f"args={safe_args}, kwargs={safe_kwargs}"
                 )
                 raise
         return wrapper
@@ -54,13 +58,10 @@ def _extract_exchange_id(args: tuple, kwargs: dict) -> str:
     Para funciones sueltas: args=(exchange_id, ...)
     Para execute_signal: args=(self, signal, config, exchange_id)
     """
-    if "exchange_id" in kwargs:
-        return kwargs["exchange_id"]
-    if not args:
-        return "unknown"
-    known_ids = {"bitget", "bingx", "binance", "bybit", "okx", "kucoin", "mexc", "phemex", "blofin"}
+    if 'exchange_id' in kwargs:
+        return kwargs['exchange_id']
     for arg in args:
-        if isinstance(arg, str) and arg.lower() in known_ids:
+        if isinstance(arg, str) and arg in KNOWN_EXCHANGE_IDS:
             return arg
     for arg in reversed(args):
         if isinstance(arg, str) and not arg.startswith("/") and "/" not in arg[:10]:

@@ -3,10 +3,10 @@ import json
 import logging
 import time
 from typing import Optional, List, Dict, Any
-from models.data_classes import Signal, Position
-from services.exchange_service import exchange_service
+from models.data_classes import Signal, Position, PositionStatus
+from services.exchange_service import exchange_service, _circuit_breakers
 from core.manager import pos_manager
-from utils.config import load_risk_config, DATA_DIR
+from utils.config import load_risk_config, load_api_creds, DATA_DIR
 from utils.resilience.health_monitor import HealthMonitor
 from utils.resilience.decorators import log_errors_decorator
 from services.notifier import TelegramNotifier
@@ -24,6 +24,7 @@ class TradingEngine:
     def __init__(self):
         self.active_tasks = set()
         self.processed_signals = {}  # {(symbol, side): timestamp}
+        self._dedup_lock = asyncio.Lock()
         self._pending_limit_orders: Dict[str, Any] = {}  # {order_id: {exchange_id, market_symbol, signal_data}}
         self._watchdog_task: Optional[asyncio.Task] = None
         self.health_monitor = health_monitor
@@ -33,11 +34,13 @@ class TradingEngine:
         self._last_health_check_time = 0.0  # timestamp del último health check
         # Cargar órdenes LIMIT pendientes desde disco
         self._load_pending_limits()
+        self._cached_creds = load_api_creds()
+        self._added_exchanges: set = set()
 
     def _signal_to_dict(self, signal: 'Signal') -> dict:
         """Convierte un objeto Signal a dict para serialización JSON."""
         return {
-            "simbolo": signal.simbolo,
+            "symbol": signal.symbol,
             "direccion": signal.direccion,
             "entry_min": signal.entry_min,
             "entry_max": signal.entry_max,
@@ -48,9 +51,8 @@ class TradingEngine:
 
     def _signal_from_dict(self, data: dict) -> 'Signal':
         """Reconstruye un objeto Signal desde un dict."""
-        from models.data_classes import Signal
         return Signal(
-            simbolo=data.get("simbolo", ""),
+            symbol=data.get("symbol", ""),
             direccion=data.get("direccion", ""),
             entry_min=data.get("entry_min"),
             entry_max=data.get("entry_max"),
@@ -66,10 +68,11 @@ class TradingEngine:
                 with open(_PENDING_LIMITS_FILE, "r") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
-                    # Convertir señales de dict a Signal si es necesario
                     for order_id, pending in data.items():
                         if isinstance(pending.get("signal"), dict):
                             pending["signal"] = self._signal_from_dict(pending["signal"])
+                        # Reiniciar timestamp para que no expiren inmediatamente al recargar
+                        pending["timestamp"] = time.time()
                     self._pending_limit_orders = data
                     logger.info(f"📂 Cargadas {len(data)} órdenes LIMIT pendientes desde disco")
         except Exception as e:
@@ -114,6 +117,21 @@ class TradingEngine:
             params['tdMode'] = config.get("modo_margen", "cross")
         return params
 
+    def _create_exchange_order(self, exchange_id, side_upper, stop_price, is_tp=False):
+        if exchange_id == "bingx":
+            order_type = 'TRIGGER_LIMIT' if is_tp else 'TRIGGER_MARKET'
+            price = stop_price if is_tp else None
+            params = {'stopPrice': stop_price, 'positionSide': side_upper}
+        elif exchange_id == "bitget":
+            order_type = 'limit'
+            price = stop_price
+            params = {'stopPrice': stop_price, 'planType': 'normal_plan', 'reduceOnly': True}
+        else:
+            order_type = 'limit' if is_tp else 'stop'
+            price = stop_price if is_tp else None
+            params = {'stopPrice': stop_price, 'reduceOnly': True}
+        return order_type, price, params
+
     def _validate_price_deviation(self, price: float, entry_min: float,
                                    entry_max: float, side: str,
                                    max_deviation: float) -> tuple:
@@ -141,29 +159,31 @@ class TradingEngine:
                     return False, f"Precio {deviation:.1f}% sobre el rango de entrada"
         return True, ""
 
-    def _is_duplicate(self, symbol, side, exchange_id, cooldown=30):
-        key = (symbol, side, exchange_id)
-        now = time.time()
-        if key in self.processed_signals:
-            if now - self.processed_signals[key] < cooldown:
-                return True
-        self.processed_signals[key] = now
-        return False
+    async def _is_duplicate(self, symbol, side, exchange_id, cooldown=30):
+        async with self._dedup_lock:
+            key = (symbol, side, exchange_id)
+            now = time.time()
+            if key in self.processed_signals:
+                if now - self.processed_signals[key] < cooldown:
+                    return True
+            self.processed_signals[key] = now
+            return False
 
     @log_errors_decorator(context={"module": "trading_engine"})
     async def execute_signal(self, signal: Signal, config: dict, exchange_id: str):
         """Orquesta la ejecución de una señal en un exchange específico."""
         task = asyncio.current_task()
-        self.active_tasks.add(task)
+        if task:
+            self.active_tasks.add(task)
 
         cooldown = config.get("cooldown_segundos", 30)
-        if self._is_duplicate(signal.simbolo, signal.direccion, exchange_id, cooldown):
-            logger.info(f"⏭️ Señal duplicada ignorada en {exchange_id}: {signal.simbolo} {signal.direccion}")
+        if await self._is_duplicate(signal.symbol, signal.direccion, exchange_id, cooldown):
+            logger.info(f"⏭️ Señal duplicada ignorada en {exchange_id}: {signal.symbol} {signal.direccion}")
             return
 
         # Validación: rechazar señales sin Stop Loss si está configurado
         if config.get("requerir_stop_loss", True) and signal.stop_loss is None:
-            logger.warning(f"⛔ Señal {signal.simbolo} rechazada: SL requerido pero no encontrado")
+            logger.warning(f"⛔ Señal {signal.symbol} rechazada: SL requerido pero no encontrado")
             return
 
         client = exchange_service.clients.get(exchange_id)
@@ -171,9 +191,9 @@ class TradingEngine:
             logger.error(f"Cliente no disponible para {exchange_id}")
             return
 
-        market_symbol = await exchange_service.get_market_symbol(exchange_id, signal.simbolo)
+        market_symbol = await exchange_service.get_market_symbol(exchange_id, signal.symbol)
         if not market_symbol:
-            logger.error(f"Símbolo {signal.simbolo} no encontrado en {exchange_id}")
+            logger.error(f"Símbolo {signal.symbol} no encontrado en {exchange_id}")
             return
 
         try:
@@ -216,7 +236,7 @@ class TradingEngine:
 
             new_pos = Position(
                 exchange_id=exchange_id,
-                symbol=signal.simbolo,
+                symbol=signal.symbol,
                 market_symbol=market_symbol,
                 side=signal.direccion,
                 entry_price=entry_price,
@@ -285,9 +305,7 @@ class TradingEngine:
             return False, reason
 
         # Decidir MARKET vs LIMIT
-        in_range = (
-            entry_min_val <= price <= entry_max_val
-        ) if entry_min_val is not None and entry_max_val is not None else False
+        in_range = entry_min_val <= price <= entry_max_val
 
         if modalidad == "market" or in_range:
             # El precio ya está en rango → MARKET
@@ -334,7 +352,10 @@ class TradingEngine:
         side_upper = 'LONG' if side == 'buy' else 'SHORT'
 
         pct_por_exchange = config.get("porcentaje_capital", {})
-        risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
+        if isinstance(pct_por_exchange, dict):
+            risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
+        else:
+            risk_pct = float(pct_por_exchange)
         min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
 
         usdt_to_use, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
@@ -374,14 +395,16 @@ class TradingEngine:
         side_upper = 'LONG' if side == 'buy' else 'SHORT'
 
         pct_por_exchange = config.get("porcentaje_capital", {})
-        risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
+        if isinstance(pct_por_exchange, dict):
+            risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
+        else:
+            risk_pct = float(pct_por_exchange)
         min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
 
         usdt_to_use, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
         if err:
             return False, err
 
-        price_now = await exchange_service.get_ticker_price(exchange_id, market_symbol)
         amount = (usdt_to_use * leverage) / limit_price
         amount = float(client.amount_to_precision(market_symbol, amount))
 
@@ -435,7 +458,10 @@ class TradingEngine:
             prices.reverse()
 
         pct_por_exchange = config.get("porcentaje_capital", {})
-        risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
+        if isinstance(pct_por_exchange, dict):
+            risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
+        else:
+            risk_pct = float(pct_por_exchange)
         min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
 
         total_usdt, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
@@ -506,28 +532,8 @@ class TradingEngine:
         sl_amount = float(client.amount_to_precision(market_symbol, amount))
 
         try:
-            if exchange_id == "bingx":
-                sl_order = await client.create_order(
-                    market_symbol, 'TRIGGER_MARKET', sl_side, sl_amount, None, {
-                        'stopPrice': signal.stop_loss,
-                        'positionSide': side_upper
-                    }
-                )
-            elif exchange_id == "bitget":
-                sl_order = await client.create_order(
-                    market_symbol, 'limit', sl_side, sl_amount, signal.stop_loss, {
-                        'stopPrice': signal.stop_loss,
-                        'planType': 'normal_plan',
-                        'reduceOnly': True
-                    }
-                )
-            else:
-                sl_order = await client.create_order(
-                    market_symbol, 'stop', sl_side, sl_amount, None, {
-                        'stopPrice': signal.stop_loss,
-                        'reduceOnly': True
-                    }
-                )
+            order_type, price, params = self._create_exchange_order(exchange_id, side_upper, signal.stop_loss)
+            sl_order = await client.create_order(market_symbol, order_type, sl_side, sl_amount, price, params)
 
             new_pos.sl_order_id = sl_order.get('id')
             logger.info(f"🛑 Stop Loss colocado a {signal.stop_loss}")
@@ -546,23 +552,13 @@ class TradingEngine:
             amount_step = total_amount / n_targets
             return [amount_step] * n_targets
 
-        elif distribucion == "progresivo":
+        else:
             pesos = config.get("tp_pesos", [50, 25, 15, 10])
-            # Ajustar cantidad de pesos al número de targets
             if len(pesos) < n_targets:
                 pesos = pesos + [pesos[-1]] * (n_targets - len(pesos))
             pesos = pesos[:n_targets]
-
             total_peso = sum(pesos)
             return [(total_amount * p / total_peso) for p in pesos]
-
-        # "personalizado" - usar pesos exactos
-        pesos = config.get("tp_pesos", [50, 25, 15, 10])
-        if len(pesos) < n_targets:
-            pesos = pesos + [pesos[-1]] * (n_targets - len(pesos))
-        pesos = pesos[:n_targets]
-        total_peso = sum(pesos)
-        return [(total_amount * p / total_peso) for p in pesos]
 
     async def _place_take_profits(
         self, client, exchange_id, market_symbol, signal, tp_amounts, side_upper, new_pos
@@ -574,6 +570,8 @@ class TradingEngine:
         side = signal.direccion.lower()
         tp_side = 'sell' if side == 'buy' else 'buy'
 
+        total_tp = sum(tp_amounts)
+
         for i, target in enumerate(signal.targets):
             if i >= len(tp_amounts):
                 break
@@ -582,30 +580,9 @@ class TradingEngine:
                 continue
 
             try:
-                if exchange_id == "bingx":
-                    tp_order = await client.create_order(
-                        market_symbol, 'TRIGGER_LIMIT', tp_side, tp_amount, target, {
-                            'stopPrice': target,
-                            'positionSide': side_upper
-                        }
-                    )
-                elif exchange_id == "bitget":
-                    tp_order = await client.create_order(
-                        market_symbol, 'limit', tp_side, tp_amount, target, {
-                            'stopPrice': target,
-                            'planType': 'normal_plan',
-                            'reduceOnly': True
-                        }
-                    )
-                else:
-                    tp_order = await client.create_order(
-                        market_symbol, 'limit', tp_side, tp_amount, target, {
-                            'stopPrice': target,
-                            'reduceOnly': True
-                        }
-                    )
+                order_type, price, params = self._create_exchange_order(exchange_id, side_upper, target, is_tp=True)
+                tp_order = await client.create_order(market_symbol, order_type, tp_side, tp_amount, price, params)
                 new_pos.tp_order_ids.append(tp_order.get('id'))
-                total_tp = sum(tp_amounts)
                 pct_str = f" ({(tp_amounts[i]/total_tp*100):.0f}%)" if total_tp > 0 else ""
                 logger.info(f"🎯 Target {i+1} colocado a {target}{pct_str}")
             except Exception as e:
@@ -635,7 +612,7 @@ class TradingEngine:
 
         new_pos = Position(
             exchange_id=exchange_id,
-            symbol=signal.simbolo,
+            symbol=signal.symbol,
             market_symbol=market_symbol,
             side=signal.direccion,
             entry_price=entry_price,
@@ -668,13 +645,13 @@ class TradingEngine:
         stale_orders = []
         for order_id, pending in list(self._pending_limit_orders.items()):
             elapsed = now - pending["timestamp"]
-            timeout_min = int(config.get("timeout_orden_limit_minutos", 10))
+            timeout_min = int(config.get("timeout_orden_limit_minutos", 30))
             exchange_id = pending["exchange_id"]
             market_symbol = pending["market_symbol"]
 
             client = exchange_service.clients.get(exchange_id)
             if not client:
-                stale_orders.append(order_id)
+                # Si el exchange no está conectado, esperar al próximo ciclo
                 continue
 
             try:
@@ -694,6 +671,7 @@ class TradingEngine:
                         logger.warning(f"⚠️ Error cancelando orden LIMIT {order_id} en {exchange_id}: {e}")
                     stale_orders.append(order_id)
             except Exception:
+                logger.warning(f"Error fetching order {order_id}", exc_info=True)
                 if elapsed > timeout_min * 60:
                     try:
                         await client.cancel_order(order_id, market_symbol)
@@ -722,9 +700,17 @@ class TradingEngine:
                 )
 
                 if position_data:
-                    contracts = float(position_data.get('contracts') or position_data.get('size') or position_data.get('amount', 0))
+                    contracts = position_data.get('contracts')
+                    if contracts is None:
+                        contracts = position_data.get('size')
+                    if contracts is None:
+                        contracts = position_data.get('amount', 0)
+                    contracts = float(contracts)
+                else:
+                    continue
+
                 if contracts == 0:
-                    pos.status = "closed"
+                    pos.status = PositionStatus.CLOSED
                     pos_manager.save()
                     logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
                     if self.notifier:
@@ -739,28 +725,8 @@ class TradingEngine:
                         sl_amount = float(client.amount_to_precision(pos.market_symbol, contracts))
                         side_upper = 'LONG' if pos.side.lower() == 'buy' else 'SHORT'
                         await exchange_service.cancel_order(pos.exchange_id, pos.market_symbol, pos.sl_order_id)
-                        if pos.exchange_id == "bingx":
-                            sl_order = await client.create_order(
-                                pos.market_symbol, 'TRIGGER_MARKET', sl_side, sl_amount, None, {
-                                    'stopPrice': pos.sl_price,
-                                    'positionSide': side_upper
-                                }
-                            )
-                        elif pos.exchange_id == "bitget":
-                            sl_order = await client.create_order(
-                                pos.market_symbol, 'limit', sl_side, sl_amount, pos.sl_price, {
-                                    'stopPrice': pos.sl_price,
-                                    'planType': 'normal_plan',
-                                    'reduceOnly': True
-                                }
-                            )
-                        else:
-                            sl_order = await client.create_order(
-                                pos.market_symbol, 'stop', sl_side, sl_amount, None, {
-                                    'stopPrice': pos.sl_price,
-                                    'reduceOnly': True
-                                }
-                            )
+                        order_type, price, params = self._create_exchange_order(pos.exchange_id, side_upper, pos.sl_price)
+                        sl_order = await client.create_order(pos.market_symbol, order_type, sl_side, sl_amount, price, params)
                         pos.sl_order_id = sl_order.get('id')
                     pos_manager.save()
 
@@ -820,12 +786,10 @@ class TradingEngine:
 
     async def _sync_failed_exchanges(self):
         """Reintenta conexión con exchanges fallidos."""
-        from utils.config import load_api_creds
-        creds = load_api_creds()
         failed_snapshot = list(exchange_service.failed_exchanges)
         for ex_id in failed_snapshot:
             logger.info(f"🔄 Reintentando conexión con {ex_id}...")
-            ex_creds = creds["exchanges"].get(ex_id, {})
+            ex_creds = self._cached_creds["exchanges"].get(ex_id, {})
             if ex_creds.get("enabled"):
                 await exchange_service.create_client(ex_id, ex_creds)
 
@@ -839,11 +803,12 @@ class TradingEngine:
 
     async def cancel_pending_tasks(self):
         """Cancela todas las tareas de ejecución de señales pendientes."""
-        for task in list(self.active_tasks):
+        tasks = list(self.active_tasks)
+        for task in tasks:
             task.cancel()
-        if self.active_tasks:
-            await asyncio.gather(*self.active_tasks, return_exceptions=True)
-            self.active_tasks.clear()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.active_tasks.clear()
         logger.info("⏹️ Tareas pendientes canceladas")
 
     def stop_watchdog(self):
@@ -855,8 +820,6 @@ class TradingEngine:
 
     async def _watchdog_tick(self):
         """Una iteración del watchdog. Extraída para testing."""
-        from services.exchange_service import _circuit_breakers
-
         config = load_risk_config()
         now = time.time()
 
@@ -872,7 +835,9 @@ class TradingEngine:
         await self._sync_positions(config)
 
         for ex_id in list(exchange_service.clients.keys()):
-            self.health_monitor.add_exchange(ex_id)
+            if ex_id not in self._added_exchanges:
+                self.health_monitor.add_exchange(ex_id)
+                self._added_exchanges.add(ex_id)
         self.health_monitor.sync_circuit_breaker_states(_circuit_breakers)
 
         # 3. Reintentar exchanges fallidos
@@ -898,11 +863,18 @@ class TradingEngine:
         """Vigila órdenes pendientes, sincroniza estados y monitorea salud."""
         self.health_monitor.set_health_check_func(self._health_check_exchange)
         self._last_health_check_time = time.time()
+        consecutive_errors = 0
+        max_consecutive_errors = 5
         while True:
             try:
                 await self._watchdog_tick()
+                consecutive_errors = 0
             except Exception as e:
-                logger.error(f"Error en watchdog: {e}", exc_info=True)
+                consecutive_errors += 1
+                logger.error(f"Error en watchdog ({consecutive_errors}/{max_consecutive_errors}): {e}", exc_info=True)
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.critical("Demasiados errores consecutivos en watchdog, deteniendo")
+                    break
             await asyncio.sleep(30)
 
     async def _check_trailing_stop(self, pos: Position, config: dict, client):
@@ -962,28 +934,8 @@ class TradingEngine:
             sl_amount = float(client.amount_to_precision(pos.market_symbol, pos.amount))
             side_upper = 'LONG' if pos.side.lower() == 'buy' else 'SHORT'
 
-            if pos.exchange_id == "bingx":
-                sl_order = await client.create_order(
-                    pos.market_symbol, 'TRIGGER_MARKET', sl_side, sl_amount, None, {
-                        'stopPrice': new_sl,
-                        'positionSide': side_upper
-                    }
-                )
-            elif pos.exchange_id == "bitget":
-                sl_order = await client.create_order(
-                    pos.market_symbol, 'limit', sl_side, sl_amount, new_sl, {
-                        'stopPrice': new_sl,
-                        'planType': 'normal_plan',
-                        'reduceOnly': True
-                    }
-                )
-            else:
-                sl_order = await client.create_order(
-                    pos.market_symbol, 'stop', sl_side, sl_amount, None, {
-                        'stopPrice': new_sl,
-                        'reduceOnly': True
-                    }
-                )
+            order_type, price, params = self._create_exchange_order(pos.exchange_id, side_upper, new_sl)
+            sl_order = await client.create_order(pos.market_symbol, order_type, sl_side, sl_amount, price, params)
 
             pos.sl_order_id = sl_order.get('id')
             pos_manager.save()
@@ -1032,28 +984,8 @@ class TradingEngine:
             sl_side = 'sell' if pos.side.lower() == 'buy' else 'buy'
             side_upper = 'LONG' if pos.side.lower() == 'buy' else 'SHORT'
 
-            if pos.exchange_id == "bingx":
-                sl_order = await client.create_order(
-                    pos.market_symbol, 'TRIGGER_MARKET', sl_side, pos.amount, None, {
-                        'stopPrice': pos.entry_price,
-                        'positionSide': side_upper
-                    }
-                )
-            elif pos.exchange_id == "bitget":
-                sl_order = await client.create_order(
-                    pos.market_symbol, 'limit', sl_side, pos.amount, pos.entry_price, {
-                        'stopPrice': pos.entry_price,
-                        'planType': 'normal_plan',
-                        'reduceOnly': True
-                    }
-                )
-            else:
-                sl_order = await client.create_order(
-                    pos.market_symbol, 'stop', sl_side, pos.amount, None, {
-                        'stopPrice': pos.entry_price,
-                        'reduceOnly': True
-                    }
-                )
+            order_type, price, params = self._create_exchange_order(pos.exchange_id, side_upper, pos.entry_price)
+            sl_order = await client.create_order(pos.market_symbol, order_type, sl_side, pos.amount, price, params)
 
             pos.sl_order_id = sl_order.get('id')
             pos_manager.save()

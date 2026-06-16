@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 import ccxt.async_support as ccxt_async
 from typing import Dict, Optional, Any
 from utils.config import EXCHANGES_DEFAULTS, load_api_creds
@@ -15,62 +16,63 @@ logger = logging.getLogger("TradingBot")
 _circuit_breakers = {}
 
 def _get_circuit_breaker(exchange_id: str) -> CircuitBreaker:
-    """Obtiene o crea un circuit breaker para un exchange."""
     if exchange_id not in _circuit_breakers:
         _circuit_breakers[exchange_id] = CircuitBreaker(
             name=exchange_id,
             failure_threshold=5,
             reset_timeout=60,
         )
+        from utils.config import DATA_DIR
+        cb_file = DATA_DIR / "resilience" / f"cb_{exchange_id}.json"
+        if cb_file.exists():
+            try:
+                _circuit_breakers[exchange_id].load(str(cb_file))
+            except Exception as e:
+                logger.warning("No se pudo cargar CB desde disco para %s: %s", exchange_id, e)
     return _circuit_breakers[exchange_id]
 
 class ExchangeService:
     def __init__(self):
         self.clients: Dict[str, Any] = {}
         self.failed_exchanges = set()
-        self._clients_lock = asyncio.Lock()
+        self._clients_lock = threading.Lock()
 
     async def _ensure_event_loop(self, exchange_id: str) -> bool:
-        """
-        Verifica que el event loop del exchange client esté vivo.
-        Si el loop fue cerrado, recrea el cliente automáticamente.
-        Retorna True si el cliente está listo.
-        """
-        async with self._clients_lock:
-            if exchange_id not in self.clients:
-                return False
-            try:
-                loop = asyncio.get_running_loop()
-                if loop.is_closed():
-                    raise RuntimeError("Event loop is closed")
+        with self._clients_lock:
+            if exchange_id in self.clients:
                 return True
-            except RuntimeError:
-                logger.warning(f"🔄 Event loop cerrado para {exchange_id}, recreando cliente...")
-                if exchange_id in self.clients:
-                    try:
-                        await self.clients[exchange_id].close()
-                    except Exception:
-                        pass
-                    del self.clients[exchange_id]
-                creds = load_api_creds()
-                ex_creds = creds["exchanges"].get(exchange_id, {})
-                if ex_creds.get("enabled"):
-                    await self._create_client_locked(exchange_id, ex_creds)
+            creds = load_api_creds()
+            ex_creds = creds["exchanges"].get(exchange_id, {})
+            needs_create = ex_creds.get("enabled")
+        if needs_create:
+            client = await self._create_client_impl(exchange_id, ex_creds)
+            with self._clients_lock:
+                if client:
+                    self.clients[exchange_id] = client
                 return exchange_id in self.clients
+        return False
 
-    @timeout_decorator(seconds=60)
+    @timeout_decorator(seconds=20)
     async def create_client(self, exchange_id: str, creds: Dict[str, Any]) -> Optional[Any]:
         """Crea e inicializa un cliente de CCXT."""
-        async with self._clients_lock:
-            return await self._create_client_locked(exchange_id, creds)
+        with self._clients_lock:
+            if exchange_id in self.clients:
+                try:
+                    await self.clients[exchange_id].close()
+                except Exception as e:
+                    logger.warning("Error cerrando cliente existente: %s", e)
+                del self.clients[exchange_id]
 
-    async def _create_client_locked(self, exchange_id: str, creds: Dict[str, Any]) -> Optional[Any]:
-        """Crea cliente (debe llamarse con _clients_lock adquirido)."""
-        if exchange_id in self.clients:
-            try: await self.clients[exchange_id].close()
-            except: pass
-            del self.clients[exchange_id]
+        client = await self._create_client_impl(exchange_id, creds)
 
+        with self._clients_lock:
+            if client:
+                self.clients[exchange_id] = client
+                self.failed_exchanges.discard(exchange_id)
+        return client
+
+    async def _create_client_impl(self, exchange_id: str, creds: Dict[str, Any]) -> Optional[Any]:
+        """Crea el cliente CCXT (sin lock, llamar desde el event loop correcto)."""
         try:
             exchange_class = getattr(ccxt_async, exchange_id)
             config = {
@@ -92,15 +94,14 @@ class ExchangeService:
             
             if exchange_id == "bingx":
                 try: await client.load_time_difference()
-                except: pass
+                except Exception as e: logger.warning("Error cargando time difference para BingX: %s", e)
                 
-            self.clients[exchange_id] = client
-            self.failed_exchanges.discard(exchange_id)
             return client
             
         except Exception as e:
             logger.error(f"Error inicializando {exchange_id}: {e}")
-            self.failed_exchanges.add(exchange_id)
+            with self._clients_lock:
+                self.failed_exchanges.add(exchange_id)
             return None
 
     async def close_all(self):
@@ -109,19 +110,24 @@ class ExchangeService:
         cb_dir.mkdir(parents=True, exist_ok=True)
         for ex_id, cb in _circuit_breakers.items():
             cb.persist(str(cb_dir / f"cb_{ex_id}.json"))
-        async with self._clients_lock:
-            for client in self.clients.values():
-                try: await asyncio.wait_for(client.close(), timeout=5)
-                except: pass
+        with self._clients_lock:
+            clients = list(self.clients.items())
+        for ex_id, client in clients:
+            try:
+                await asyncio.wait_for(client.close(), timeout=5)
+            except Exception as e:
+                logger.warning("Error cerrando cliente %s: %s", ex_id, e)
+        with self._clients_lock:
             self.clients.clear()
 
-    @retry_decorator(max_retries=3, base_delay=1.0)
     @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
+    @retry_decorator(max_retries=3, base_delay=1.0)
     @timeout_decorator(seconds=30)
     @log_errors_decorator(context={"module": "exchange_service"})
     async def get_balance(self, exchange_id: str) -> float:
-        client = self.clients.get(exchange_id)
-        if not client: return 0.0
+        with self._clients_lock:
+            client = self.clients.get(exchange_id)
+            if not client: return 0.0
         try:
             params = {}
             if exchange_id in ["binance", "bybit", "okx"]:
@@ -131,46 +137,75 @@ class ExchangeService:
             
             balance = await client.fetch_balance(params=params)
             usdt = balance.get('USDT', {})
-            free = usdt.get('free')
-            if free is not None:
-                return float(free)
-            avail = usdt.get('available')
-            if avail is not None:
-                return float(avail)
-            return float(usdt.get('total', 0.0))
+            if isinstance(usdt, dict):
+                free = usdt.get('free')
+                if free is not None:
+                    logger.info(f"💰 Balance {exchange_id}: disponible={free}, total={usdt.get('total', 'N/A')}")
+                    return float(free)
+                avail = usdt.get('available')
+                if avail is not None:
+                    logger.info(f"💰 Balance {exchange_id}: disponible={avail}")
+                    return float(avail)
+                total = usdt.get('total')
+                if total is not None:
+                    logger.info(f"💰 Balance {exchange_id}: total={total} (sin free)")
+                    return float(total)
+            try:
+                return float(usdt)
+            except (TypeError, ValueError):
+                pass
+            return 0.0
         except Exception as e:
             logger.error(f"Error balance {exchange_id}: {e}")
             return 0.0
 
-    @retry_decorator(max_retries=2, base_delay=1.0)
     @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
-    @timeout_decorator(seconds=10)
+    @retry_decorator(max_retries=2, base_delay=1.0)
+    @timeout_decorator(seconds=30)
     async def get_ticker_price(self, exchange_id: str, market_symbol: str) -> float:
-        # Verificar event loop antes de usar el cliente
-        alive = await self._ensure_event_loop(exchange_id)
-        if not alive:
-            logger.warning(f"⚠️ Cliente no disponible para {exchange_id} en get_ticker_price")
-            return 0.0
-        client = self.clients.get(exchange_id)
-        if not client: return 0.0
+        with self._clients_lock:
+            client = self.clients.get(exchange_id)
+            if not client:
+                logger.warning("Cliente no disponible para %s en get_ticker_price", exchange_id)
+                return 0.0
         try:
             ticker = await client.fetch_ticker(market_symbol)
             return float(ticker['last'])
         except RuntimeError as e:
             if "Event loop is closed" in str(e) or "event loop" in str(e).lower():
-                logger.warning(f"🔄 Event loop error en {exchange_id}, reintentando...")
-                recovered = await self._ensure_event_loop(exchange_id)
-                if not recovered:
-                    raise
-                return await self.get_ticker_price(exchange_id, market_symbol)
+                logger.warning("Event loop error en %s, reintentando...", exchange_id)
+                for _ in range(3):
+                    with self._clients_lock:
+                        if exchange_id in self.clients:
+                            client = self.clients.get(exchange_id)
+                            break
+                        creds = load_api_creds()
+                        ex_creds = creds["exchanges"].get(exchange_id, {})
+                        needs_create = ex_creds.get("enabled")
+                    if needs_create:
+                        new_client = await self._create_client_impl(exchange_id, ex_creds)
+                        with self._clients_lock:
+                            if new_client:
+                                self.clients[exchange_id] = new_client
+                            client = self.clients.get(exchange_id)
+                    if client:
+                        try:
+                            ticker = await client.fetch_ticker(market_symbol)
+                            return float(ticker['last'])
+                        except RuntimeError:
+                            continue
+                    await asyncio.sleep(1)
+                logger.error("No se pudo recuperar cliente %s tras event loop error", exchange_id)
+                return 0.0
             raise
 
-    @retry_decorator(max_retries=2, base_delay=1.0)
     @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
+    @retry_decorator(max_retries=2, base_delay=1.0)
     @timeout_decorator(seconds=30)
     async def set_leverage(self, exchange_id: str, market_symbol: str, leverage: int, margin_mode: str = 'cross', side: str = 'LONG'):
-        client = self.clients.get(exchange_id)
-        if not client: return
+        with self._clients_lock:
+            client = self.clients.get(exchange_id)
+            if not client: return
         try:
             # 1. Configurar Modo de Margen
             try:
@@ -181,7 +216,7 @@ class ExchangeService:
             # 2. Configurar Apalancamiento
             params = {}
             if exchange_id == "bingx":
-                params['side'] = side.upper() # BingX requiere side
+                params['side'] = side.upper()
             
             await client.set_leverage(leverage, market_symbol, params)
             
@@ -196,10 +231,11 @@ class ExchangeService:
         except Exception as e:
             logger.warning(f"⚠️ {exchange_id}: No se pudo configurar apalancamiento/margen: {e}")
 
+    @circuit_breaker_decorator_dynamic(resolver=_get_circuit_breaker)
+    @retry_decorator(max_retries=2, base_delay=1.0)
     async def get_market_symbol(self, exchange_id: str, symbol_base: str) -> Optional[str]:
-        """Busca el símbolo de mercado completo para un símbolo base dado."""
-        await self._ensure_event_loop(exchange_id)
-        client = self.clients.get(exchange_id)
+        with self._clients_lock:
+            client = self.clients.get(exchange_id)
         if not client or not client.markets:
             return None
         
@@ -230,28 +266,52 @@ class ExchangeService:
     @retry_decorator(max_retries=2, base_delay=1.0)
     @timeout_decorator(seconds=30)
     async def fetch_position(self, exchange_id: str, market_symbol: str) -> Optional[Dict[str, Any]]:
-        client = self.clients.get(exchange_id)
-        if not client: return None
+        with self._clients_lock:
+            client = self.clients.get(exchange_id)
+            if not client: return None
         try:
             positions = await client.fetch_positions([market_symbol])
             for p in positions:
                 if p['symbol'] == market_symbol:
                     return p
             return None
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                logger.warning("Event loop error en fetch_position para %s", exchange_id)
+                with self._clients_lock:
+                    client = self.clients.pop(exchange_id, None)
+                if client:
+                    try:
+                        await client.close()
+                    except Exception:
+                        pass
+            return None
         except Exception as e:
-            logger.error(f"Error consultando posición en {exchange_id}: {e}")
+            logger.error("Error consultando posición en %s: %s", exchange_id, e)
             return None
 
     @retry_decorator(max_retries=2, base_delay=1.0)
     @timeout_decorator(seconds=30)
     async def cancel_order(self, exchange_id: str, market_symbol: str, order_id: str):
-        client = self.clients.get(exchange_id)
-        if not client: return False
+        with self._clients_lock:
+            client = self.clients.get(exchange_id)
+            if not client: return False
         try:
             await client.cancel_order(order_id, market_symbol)
             return True
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                logger.warning("Event loop error en cancel_order para %s", exchange_id)
+                with self._clients_lock:
+                    client = self.clients.pop(exchange_id, None)
+                if client:
+                    try:
+                        await client.close()
+                    except Exception:
+                        pass
+            return False
         except Exception as e:
-            logger.debug(f"Error cancelando orden {order_id} en {exchange_id}: {e}")
+            logger.debug("Error cancelando orden %s en %s: %s", order_id, exchange_id, e)
             return False
 
 # Instancia global

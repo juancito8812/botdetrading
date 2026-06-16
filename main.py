@@ -4,11 +4,12 @@ import threading
 import time
 import tkinter as tk
 from telethon import TelegramClient, events
+from telethon.errors.rpcerrorlist import AuthKeyDuplicatedError
 from telethon.sessions import StringSession
 from typing import Optional, cast
 
 from utils.config import (load_api_creds, load_risk_config,
-                          load_channels, BASE_DIR)
+                          load_channels, init_dirs, BASE_DIR)
 from utils.logger import logger
 from utils.helpers import patch_aiohttp_dns
 from services.exchange_service import exchange_service
@@ -19,11 +20,28 @@ from utils.settings_manager import load_settings, enable_autostart
 from services.updater import get_current_version, check_latest_version, is_newer_version
 
 
+class AsyncWorker:
+    def __init__(self):
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+        self.thread.start()
+
+    def run(self, coro):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop)
+
+    def stop(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
+
+
+_async_worker = AsyncWorker()
+
+
 class TradingBotApp:
     def __init__(self):
+        init_dirs()
         self.root = tk.Tk()
-        self.gui = TradingBotGUI(self.root)
-        self.bot_running = False
+        self.gui = TradingBotGUI(self.root, toggle_callback=self.toggle_bot)
+        self.bot_running = threading.Event()
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.telegram_client: Optional[TelegramClient] = None
         # Protege contra reinicios rapidos: lock + event para sincronizar loops
@@ -38,42 +56,42 @@ class TradingBotApp:
         # Configurar parche DNS
         patch_aiohttp_dns()
 
-        # Sobrescribir el comando del botón en la GUI
-        self.gui.toggle_bot = self.toggle_bot
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def toggle_bot(self):
+        running = self.bot_running.is_set()
         logger.info(
             f"Bot toggle presionado. Estado actual bot_running: "
-            f"{self.bot_running}"
+            f"{running}"
         )
-        if not self.bot_running:
+        if not running:
             self.start_bot()
         else:
             self.stop_bot()
 
     def start_bot(self):
-        if self.bot_running:
-            return
-        # Esperar a que el loop anterior termine completamente
-        if not self._loop_stopped.wait(timeout=10):
-            logger.warning("El loop anterior no termino en 10s, forzando inicio...")
-        self._loop_stopped.clear()
+        with self._loop_lock:
+            if self.bot_running.is_set():
+                return
+            # Esperar a que el loop anterior termine completamente
+            if not self._loop_stopped.wait(timeout=10):
+                logger.warning("El loop anterior no termino en 10s, forzando inicio...")
+            self._loop_stopped.clear()
 
-        self.bot_running = True
+            self.bot_running.set()
         self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
         logger.info("Iniciando bot en segundo plano...")
 
-        # Iniciamos el hilo pero sin bloquear la UI
         thread = threading.Thread(
             target=self._run_async_loop, daemon=True
         )
         thread.start()
 
     def stop_bot(self):
-        if not self.bot_running:
-            return
-        self.bot_running = False
+        with self._loop_lock:
+            if not self.bot_running.is_set():
+                return
+            self.bot_running.clear()
         self.gui.btn_toggle_bot.config(text="🚀 INICIAR BOT")
         logger.info("Solicitud de detencion enviada.")
 
@@ -95,47 +113,43 @@ class TradingBotApp:
             except Exception as e:
                 logger.warning(f"Error al desconectar Telegram: {e}")
 
-        # El loop de reconexion detectara bot_running=False, saldra de
-        # run_until_disconnected(), hara cleanup natural y start_bot()
-        # espera con _loop_stopped.wait() a que termine completamente.
-
     def _run_async_loop(self):
         with self._loop_lock:
-            try:
-                self.loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self.loop)
-                self.loop.run_until_complete(self.main_async())
-            except Exception as e:
-                logger.error(
-                    f"Error en el motor del bot: {e}", exc_info=True
-                )
-            finally:
-                # Cerrar todas las tareas pendientes
-                if self.loop and not self.loop.is_closed():
-                    try:
-                        # Cancelar todas las tareas pendientes
-                        pending = asyncio.all_tasks(self.loop)
-                        for task in pending:
-                            task.cancel()
-                        if pending:
-                            self.loop.run_until_complete(
-                                asyncio.gather(*pending, return_exceptions=True)
-                            )
-                    except Exception:
-                        pass
-                    finally:
-                        self.loop.close()
-                        self.loop = None
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+        try:
+            self.loop.run_until_complete(self.main_async())
+        except asyncio.CancelledError:
+            logger.debug("Async loop cancelled.")
+        except Exception as e:
+            logger.error(
+                f"Error en el motor del bot: {e}", exc_info=True
+            )
+        finally:
+            # Cerrar todas las tareas pendientes
+            if self.loop and not self.loop.is_closed():
+                try:
+                    pending = asyncio.all_tasks(self.loop)
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        self.loop.run_until_complete(
+                            asyncio.gather(*pending, return_exceptions=True)
+                        )
+                except Exception:
+                    pass
+                finally:
+                    self.loop.close()
+                    self.loop = None
 
-                self.bot_running = False
-                self._loop_stopped.set()
-                # Actualizar UI desde otro hilo de forma segura
-                self.root.after(
-                    0,
-                    lambda: self.gui.btn_toggle_bot.config(
-                        text="🚀 INICIAR BOT"
-                    )
+            self.bot_running.clear()
+            self._loop_stopped.set()
+            self.root.after(
+                0,
+                lambda: self.gui.btn_toggle_bot.config(
+                    text="🚀 INICIAR BOT"
                 )
+            )
 
     async def _create_telegram_client(self, creds, channels):
         """Crea el cliente de Telegram UNA SOLA VEZ y registra el handler.
@@ -171,21 +185,28 @@ class TradingBotApp:
         # Filtra solo mensajes de los canales configurados
         @self.telegram_client.on(events.NewMessage(chats=list(channels)))
         async def handler(event):
-            if not self.bot_running:
+            if not self.bot_running.is_set():
                 return
             text = event.raw_text
             logger.info(f"📥 Mensaje recibido: {text[:50]}...")
 
             now = time.time()
             if now - self._last_config_refresh > 30:
-                self._cached_config = load_risk_config()
+                self._cached_config = await asyncio.to_thread(load_risk_config)
                 self._last_config_refresh = now
             config = self._cached_config
+
+            # Recargar canales dinámicamente para reflejar cambios en la UI
+            current_channels = await asyncio.to_thread(load_channels)
+            if current_channels != channels:
+                channels.clear()
+                channels.update(current_channels)
+
             signal = parse_trading_signal(text)
             if signal:
                 active_exchanges = list(exchange_service.clients.keys())
                 logger.info(
-                    f"📊 Señal detectada: {signal.simbolo} "
+                    f"📊 Señal detectada: {signal.symbol} "
                     f"{signal.direccion}. "
                     f"Procesando en {len(active_exchanges)} exchanges: "
                     f"{active_exchanges}"
@@ -222,14 +243,20 @@ class TradingBotApp:
             q = queue.Queue()
 
             def ask():
-                code = simpledialog.askstring(
+                dialog = simpledialog.askstring(
                     "Telegram Auth",
                     "Introduce el código recibido:",
                     parent=self.root
                 )
-                q.put(code)
+                q.put(dialog)
 
-            self.root.after(0, ask)
+            def show_dialog():
+                self.root.lift()
+                self.root.focus_force()
+                ask()
+
+            self.root.after(0, show_dialog)
+            logger.info("⏳ Esperando código de verificación... (revisa detrás de la ventana)")
             code = q.get()
             logger.info("Código de verificación recibido desde la GUI")
             return code
@@ -325,7 +352,7 @@ class TradingBotApp:
         get_code, get_password = self._get_auth_callbacks()
         tg = creds["telegram"]
 
-        while self.bot_running:
+        while self.bot_running.is_set():
             try:
                 tc = cast(TelegramClient, self.telegram_client)
 
@@ -333,6 +360,9 @@ class TradingBotApp:
                 if not tc.is_connected():
                     logger.info("Conectando/reconectando Telegram...")
                     await tc.connect()
+                    logger.info("Telegram conectado, iniciando sesión...")
+                else:
+                    logger.info("Telegram ya conectado.")
 
                 # Autenticar (usa sesión guardada si existe)
                 await tc.start(
@@ -373,7 +403,7 @@ class TradingBotApp:
                 # Bloquear hasta que se pierda la conexion o se detenga el bot
                 await tc.run_until_disconnected()
 
-                if not self.bot_running:
+                if not self.bot_running.is_set():
                     break
 
                 logger.warning(
@@ -384,9 +414,13 @@ class TradingBotApp:
 
             except asyncio.CancelledError:
                 break
+            except AuthKeyDuplicatedError as e:
+                logger.error(f"❌ Error de sesión Telegram: {e}")
+                logger.error("La sesión fue usada desde dos IPs diferentes. Elimina el archivo de sesión y re-autentica.")
+                break
             except Exception as e:
                 logger.error(f"Error en bucle de Telegram: {e}", exc_info=True)
-                if self.bot_running:
+                if self.bot_running.is_set():
                     logger.warning("🔄 Reintentando conexión en 30 segundos...")
                     await asyncio.sleep(30)
 
@@ -409,23 +443,35 @@ class TradingBotApp:
         config = load_risk_config()
         channels = load_channels()
 
-        # 1. Inicializar Exchanges
-        logger.info("Inicializando exchanges activos...")
-        for ex_id, ex_creds in creds["exchanges"].items():
-            if ex_creds.get("enabled"):
-                await exchange_service.create_client(ex_id, ex_creds)
-
-        # 2. Verificar credenciales de Telegram
+        # 1. Verificar credenciales de Telegram
         tg = creds["telegram"]
         api_id = tg.get("API_ID", "").strip()
         api_hash = tg.get("API_HASH", "").strip()
         phone = tg.get("PHONE_NUMBER", "").strip()
         if not api_id or not api_id.isdigit() or not phone or not api_hash:
-            logger.error("Credenciales de Telegram incompletas o inválidas (API_ID numérico, API_HASH, PHONE_NUMBER requeridos)")
+            logger.error("Credenciales de Telegram incompletas o inválidas")
             self.stop_bot()
             return
 
+        # 2. Lanzar inicialización de exchanges en background (no bloquea Telegram)
+        logger.info("Inicializando exchanges activos en segundo plano...")
+        async def _init_exchanges():
+            for ex_id, ex_creds in creds["exchanges"].items():
+                if ex_creds.get("enabled"):
+                    try:
+                        await asyncio.wait_for(
+                            exchange_service.create_client(ex_id, ex_creds),
+                            timeout=15
+                        )
+                        logger.info(f"✅ {ex_id}: Conectado correctamente")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"⚠️ {ex_id}: Timeout 15s, continuando sin él...")
+                    except Exception as e:
+                        logger.warning(f"⚠️ {ex_id}: Error conectando: {e}")
+        asyncio.create_task(_init_exchanges())
+
         # 3. Ejecutar el bucle de reconexión de Telegram
+        logger.info("Iniciando bucle de reconexión de Telegram...")
         await self._telegram_reconnection_loop(creds, config, channels)
 
     def on_closing(self):
@@ -500,7 +546,6 @@ class TradingBotApp:
                 logger.debug(f"Auto-check de actualizaciones: {e}")
 
         # Ejecutar en un hilo separado para no bloquear la UI
-        import threading
         thread = threading.Thread(target=_do_check, daemon=True)
         thread.start()
 

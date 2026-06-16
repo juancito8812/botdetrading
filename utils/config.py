@@ -1,24 +1,27 @@
 import os
 import json
 import logging
+import shutil
 from dotenv import load_dotenv, set_key
 from utils.helpers import atomic_write_json, BASE_DIR, DATA_DIR
 
 logger = logging.getLogger("TradingBot")
 
-# Archivos de configuración (se leen desde BASE_DIR, junto al .exe)
+# Archivos de configuración (se leen desde DATA_DIR)
 ENV_FILE = BASE_DIR / ".env"
-CONFIG_FILE = BASE_DIR / "config.json"
-CANALES_FILE = BASE_DIR / "canales.json"
+CONFIG_FILE = DATA_DIR / "config.json"
+CANALES_FILE = DATA_DIR / "canales.json"
 
 # Archivos de datos (se escriben en DATA_DIR = %APPDATA%/MiBotTrading)
 POSICIONES_FILE = DATA_DIR / "posiciones.json"
 LOG_FILE = DATA_DIR / "log_bot.txt"
 LOGS_DIR = DATA_DIR / "logs"
 
-# Asegurar que los directorios de datos existen
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(LOGS_DIR, exist_ok=True)
+
+def init_dirs():
+    """Crea los directorios necesarios para datos y logs."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(LOGS_DIR, exist_ok=True)
 
 EXCHANGES_DEFAULTS = {
     "binance": {"name": "Binance", "needs_passphrase": False, "default_type": "future"},
@@ -32,14 +35,19 @@ EXCHANGES_DEFAULTS = {
     "blofin": {"name": "Blofin", "needs_passphrase": False, "default_type": "swap"},
 }
 
+def _clean(v):
+    if v is None: return ""
+    v = str(v).strip()
+    if (v.startswith("'") and v.endswith("'")) or (v.startswith('"') and v.endswith('"')):
+        return v[1:-1]
+    return v
+
+
 def load_api_creds():
-    load_dotenv(ENV_FILE)
-    def _clean(v):
-        if v is None: return ""
-        v = str(v).strip()
-        if (v.startswith("'") and v.endswith("'")) or (v.startswith('"') and v.endswith('"')):
-            return v[1:-1]
-        return v
+    if ENV_FILE.exists():
+        load_dotenv(ENV_FILE)
+    else:
+        logger.warning("Archivo .env no encontrado en %s", ENV_FILE)
 
     creds = {"exchanges": {}, "telegram": {}}
     for ex in EXCHANGES_DEFAULTS:
@@ -58,6 +66,9 @@ def load_api_creds():
     return creds
 
 def save_api_creds(creds):
+    if not isinstance(creds, dict) or "exchanges" not in creds:
+        logger.error("Estructura de credenciales inválida")
+        return
     for ex, data in creds["exchanges"].items():
         set_key(str(ENV_FILE), f"{ex.upper()}_API_KEY", data["api_key"])
         set_key(str(ENV_FILE), f"{ex.upper()}_SECRET", data["secret"])
@@ -84,6 +95,10 @@ def load_risk_config():
             return data
     except Exception as e:
         logger.warning(f"⚠️ Error cargando config.json, usando defaults: {e}")
+        try:
+            shutil.copy(CONFIG_FILE, str(CONFIG_FILE) + ".corrupted")
+        except Exception:
+            pass
         return _get_default_risk_config()
 
 def _get_default_risk_config():
@@ -101,7 +116,7 @@ def _get_default_risk_config():
         # Mejoras de entrada
         "entrada_modalidad": "auto",          # "market", "limit", "auto"
         "desviacion_maxima_porcentaje": 3.0,  # Rechazar si precio está >X% del rango
-        "timeout_orden_limit_minutos": 10,    # Cancelar orden LIMIT si no se llena
+        "timeout_orden_limit_minutos": 30,    # Cancelar orden LIMIT si no se llena
         "dca_habilitado": True,               # Múltiples entradas escalonadas
         "dca_partes": 3,                      # En cuántas partes dividir
         # Trailing stop
@@ -122,6 +137,10 @@ def load_channels():
         with open(CANALES_FILE, "r") as f:
             return set(json.load(f))
     except Exception:
+        try:
+            shutil.copy(CANALES_FILE, str(CANALES_FILE) + ".corrupted")
+        except Exception:
+            pass
         return set()
 
 def save_channels(channels_set):

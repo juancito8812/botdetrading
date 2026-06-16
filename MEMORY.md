@@ -1,6 +1,6 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
-*Última actualización: 16/06/2026 (America/Caracas) — Release v1.3.0: bugs 19-21 + .exe*
+*Última actualización: 16/06/2026 (America/Caracas) — Release v1.4.0: estabilidad, timeouts, lock fixes*
 
 ---
 
@@ -36,6 +36,20 @@
 - [x] SL real en notificaciones (sl_price en Position)
 - [x] Cliente HTTP reutilizable (connection pooling en CoinGecko)
 - [x] Escritura atomica en state_recovery
+- [x] Auditoría v2: 126 bugs/mejoras corregidos (17 críticos, 26 altos, 34 medios, 22 bajos, 27 mejoras)
+- [x] AsyncWorker singleton (event loop persistente, no más creación/destrucción)
+- [x] Cifrado de API keys (Fernet simétrico)
+- [x] `threading.Event` para bot_running (data race eliminado)
+- [x] Canales Telegram recargados dinámicamente
+- [x] Enum PositionStatus (string typo-safe)
+- [x] Lógica exchange-específica unificada (`_create_exchange_order`)
+- [x] Escrituras atómicas en circuit_breaker, health_monitor, backup_manager
+- [x] Health checks paralelos (antes secuenciales)
+- [x] `__init__.py` en utils/ y utils/resilience/
+- [x] Cache de credenciales (eliminado IO cada 30s en watchdog)
+- [x] Ponytail: lazy senior dev mode integrado en Superpowers
+- [x] `opencode.json` con plugin Ponytail
+- [x] `.agents/skills/ponytail/SKILL.md` con niveles lite/full/ultra
 
 ---
 
@@ -58,7 +72,19 @@ MiBotTrading/
 │   └── pre-commit                 # Hook Superpowers: valida docs al commitear código
 │
 ├── .agents/
-│   └── MEMORY.md                  # Memoria para skills de IA (Cline/Codebuff)
+│   ├── MEMORY.md                  # Memoria para skills de IA (Cline/Codebuff)
+│   └── skills/
+│       └── ponytail/SKILL.md      # Ponytail lazy senior dev mode
+│
+├── .opencode/
+│   └── plugins/
+│       └── ponytail.mjs           # Plugin Ponytail para OpenCode
+│
+├── hooks/
+│   ├── ponytail-config.js         # Config de niveles Ponytail
+│   └── ponytail-instructions.js   # Builder de reglas por nivel
+│
+├── opencode.json                  # Plugin Ponytail registrado
 │
 ├── docs/
 │   └── superpowers/               # Especificaciones y planes de diseño

@@ -14,7 +14,7 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     
     # 1. Extraer Símbolo (ej: BTC/USDT, #ETHUSDT, SOL-USDT)
     symbol = None
-    m_sym = re.search(r'[\$#]?([A-Z0-9]+)[/|\-]?USDT', upper)
+    m_sym = re.search(r'[\$#]?([A-Z0-9]+)[/-]?USDT', upper)
     if m_sym:
         symbol = m_sym.group(1)
     
@@ -71,10 +71,16 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     
     if targets:
         # Ordenar targets según dirección
-        targets = sorted(list(set(targets)), reverse=(direction == "Sell"))
+        seen = set()
+        unique_targets = []
+        for t in targets:
+            if t not in seen:
+                seen.add(t)
+                unique_targets.append(t)
+        targets = sorted(unique_targets, reverse=(direction == "Sell"))
         
     return Signal(
-        simbolo=symbol,
+        symbol=symbol,
         direccion=direction,
         entry_min=entry_min,
         entry_max=entry_max,

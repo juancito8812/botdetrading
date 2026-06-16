@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Callable, Awaitable, Any
 
+from utils.helpers import atomic_write_json
 from utils.resilience.error_handler import ExchangeConnectionError
 
 logger = logging.getLogger("TradingBot")
@@ -83,6 +84,8 @@ class HealthMonitor:
     """
 
     def __init__(self, check_interval: float = 60.0):
+        if check_interval <= 0:
+            raise ValueError("check_interval must be > 0")
         self.check_interval = check_interval
         self._health_map: Dict[str, ExchangeHealth] = {}
         self._health_check_func: Optional[Callable[..., Awaitable[bool]]] = None
@@ -165,9 +168,9 @@ class HealthMonitor:
             )
 
     async def _run_cycle(self):
-        """Ejecuta un ciclo completo de health checks."""
-        for exchange_id in list(self._health_map.keys()):
-            await self._check_single_exchange(exchange_id)
+        """Ejecuta un ciclo completo de health checks en paralelo."""
+        exchanges = list(self._health_map.keys())
+        await asyncio.gather(*[self._check_single_exchange(ex_id) for ex_id in exchanges])
 
         for eid, health in list(self._health_map.items()):
             if health.status != HealthStatus.HEALTHY:
@@ -206,7 +209,6 @@ class HealthMonitor:
                 eid: health.to_dict()
                 for eid, health in list(self._health_map.items())
             }
-            with open(filepath, "w") as f:
-                json.dump(data, f, indent=2)
+            atomic_write_json(filepath, data, indent=2)
         except Exception as e:
             logger.error(f"Error persistiendo health data: {e}")

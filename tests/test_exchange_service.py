@@ -141,36 +141,25 @@ async def test_ensure_loop_no_client(svc):
 @pytest.mark.asyncio
 @patch("services.exchange_service.ccxt_async")
 @patch("services.exchange_service.load_api_creds")
-async def test_ensure_loop_closed_recreates(mock_load_creds, mock_ccxt, svc):
-    """Loop cerrado recrea el cliente automáticamente."""
+async def test_ensure_loop_creates_when_missing(mock_load_creds, mock_ccxt, svc):
+    """_ensure_event_loop crea cliente si no existe y hay creds."""
     mock_client = _mock_client()
     mock_ccxt.bitget = MagicMock(return_value=mock_client)
     mock_load_creds.return_value = _mock_creds("bitget")
 
-    # Agregar cliente cuyo loop está cerrado
-    dead_client = MagicMock()
-    dead_client.close = AsyncMock()
-    svc.clients["bitget"] = dead_client
-
-    # Parchear asyncio.get_running_loop para que lance RuntimeError
-    with patch("asyncio.get_running_loop", side_effect=RuntimeError("Event loop is closed")):
-        result = await svc._ensure_event_loop("bitget")
+    result = await svc._ensure_event_loop("bitget")
 
     assert result is True
-    assert svc.clients["bitget"] is mock_client  # Reemplazado
-    dead_client.close.assert_awaited_once()
+    assert svc.clients["bitget"] is mock_client
 
 
 @pytest.mark.asyncio
 @patch("services.exchange_service.load_api_creds")
-async def test_ensure_loop_closed_recreate_fails(mock_load_creds, svc):
-    """Si recrear el cliente falla, retorna False."""
-    dead_client = MagicMock()
-    dead_client.close = AsyncMock()
-    svc.clients["bitget"] = dead_client
+async def test_ensure_loop_no_creds_returns_false(mock_load_creds, svc):
+    """_ensure_event_loop retorna False si no hay creds habilitadas."""
+    mock_load_creds.return_value = _mock_creds("bitget", enabled=False)
 
-    with patch("asyncio.get_running_loop", side_effect=RuntimeError("Event loop is closed")):
-        result = await svc._ensure_event_loop("bitget")
+    result = await svc._ensure_event_loop("bitget")
 
     assert result is False
 
@@ -402,19 +391,16 @@ async def test_get_ticker_price_no_client(svc):
 
 
 @pytest.mark.asyncio
-async def test_get_ticker_price_runtime_error_ensures_loop(svc):
-    """RuntimeError en fetch_ticker llama a _ensure_event_loop y relanza."""
+@patch("services.exchange_service.load_api_creds")
+async def test_get_ticker_price_runtime_error_recovers(mock_load_creds, svc):
+    """RuntimeError en fetch_ticker intenta recuperar cliente en loop."""
+    mock_load_creds.return_value = _mock_creds("bitget", enabled=True)
     client = _mock_client()
     client.fetch_ticker = AsyncMock(side_effect=RuntimeError("Event loop is closed"))
     svc.clients["bitget"] = client
 
-    with patch.object(svc, "_ensure_event_loop", new=AsyncMock(return_value=True)) as mock_ensure:
-        with pytest.raises(RuntimeError):
-            await svc.get_ticker_price("bitget", "BTC/USDT")
-        # El decorador @retry_decorator puede reintentar, así que verificamos que
-        # _ensure_event_loop fue llamado AL MENOS una vez
-        assert mock_ensure.await_count >= 1
-        mock_ensure.assert_awaited_with("bitget")
+    price = await svc.get_ticker_price("bitget", "BTC/USDT")
+    assert price == 0.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -11,8 +11,9 @@ import json
 import os
 import subprocess
 import sys
-import urllib.error
+import time
 import urllib.request
+import aiohttp
 from pathlib import Path
 from typing import Optional
 
@@ -42,7 +43,7 @@ def parse_version(version_str: str) -> tuple:
     """Convierte 'v1.2.3' a tupla (1, 2, 3) para comparar.
     Siempre retorna una tupla de 3 elementos para evitar TypeError
     al comparar versiones de distinta longitud."""
-    v = version_str.lstrip("vV")
+    v = version_str.removeprefix("v").removeprefix("V")
     parts = v.split(".")
     try:
         parts_int = [int(p) for p in parts]
@@ -62,40 +63,33 @@ def is_newer_version(latest: str, current: str) -> bool:
 
 # ─── Download ───────────────────────────────────────────────────
 
-def download_update(download_url: str, dest_dir: Path = UPDATE_DIR) -> Optional[Path]:
-    """Descarga el archivo de actualización a dest_dir.
-
-    Retorna la ruta completa al archivo descargado o None.
-    """
+async def download_update(download_url: str, dest_dir: Path = UPDATE_DIR) -> Optional[Path]:
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
         filename = download_url.rstrip("/").split("/")[-1] or "update.exe"
         dest_path = dest_dir / filename
 
-        logger.info(f"📥 Descargando actualización: {filename}")
+        logger.info(f"Descargando actualización: {filename}")
 
-        req = urllib.request.Request(
-            download_url, headers={"User-Agent": "MiBotTrading/1.0"}
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            total = int(resp.headers.get("Content-Length", 0))
-            downloaded = 0
-            last_pct = -1
-            with open(dest_path, "wb") as f:
-                while True:
-                    chunk = resp.read(8192)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total > 0:
-                        pct = downloaded * 100 // total
-                        if pct != last_pct and pct % 10 == 0:
-                            logger.info(f"  Progreso: {pct}%")
-                            last_pct = pct
+        async with aiohttp.ClientSession() as session:
+            async with session.get(download_url, headers={"User-Agent": "MiBotTrading/1.0"}) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                last_pct = -1
+                with open(dest_path, "wb") as f:
+                    async for chunk in resp.content.iter_chunked(8192):
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            pct = downloaded * 100 // total
+                            if pct != last_pct and pct % 25 == 0:
+                                logger.info(f"  Progreso: {pct}%")
+                                last_pct = pct
 
         size_mb = dest_path.stat().st_size / (1024 * 1024)
-        logger.info(f"✅ Descarga completada: {dest_path.name} ({size_mb:.1f} MB)")
+        logger.info(f"Descarga completada: {dest_path.name} ({size_mb:.1f} MB)")
         return dest_path
     except Exception as e:
         logger.error(f"Error descargando actualización: {e}")
@@ -210,8 +204,13 @@ def apply_update(downloaded_path: Path) -> bool:
 
 # ─── Sync convenience ──────────────────────────────────────────
 
+_last_check = 0.0
+_last_result = None
+
 def check_latest_version() -> Optional[dict]:
-    """Versión sincrónica para checkear la última versión desde GitHub Releases."""
+    global _last_check, _last_result
+    if time.time() - _last_check < 300:
+        return _last_result
     try:
         req = urllib.request.Request(
             RELEASES_API,
@@ -233,11 +232,13 @@ def check_latest_version() -> Optional[dict]:
             if not download_url and name.endswith(".zip"):
                 download_url = asset.get("browser_download_url", "")
 
-        return {
+        _last_check = time.time()
+        _last_result = {
             "tag_name": data.get("tag_name", "v0.0.0"),
             "download_url": download_url,
             "body": data.get("body", ""),
         }
+        return _last_result
     except Exception as e:
         logger.warning(f"Error checking for updates: {e}")
         return None

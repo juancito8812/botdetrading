@@ -6,6 +6,7 @@ import logging
 from enum import Enum
 from typing import Optional
 
+from utils.helpers import atomic_write_json
 from utils.resilience.error_handler import CircuitBreakerOpenError
 
 logger = logging.getLogger("TradingBot")
@@ -107,15 +108,14 @@ class CircuitBreaker:
             "half_open_requests": self.half_open_requests,
         }
         try:
-            with open(filepath, "w") as f:
-                json.dump(data, f)
+            atomic_write_json(filepath, data)
         except Exception as e:
             logger.error(f"Error persistiendo circuit breaker {self.name}: {e}")
 
     def load(self, filepath: str):
         """Carga el estado desde un archivo JSON."""
         try:
-            with open(filepath, "r") as f:
+            with open(filepath, "r", encoding='utf-8') as f:
                 data = json.load(f)
             self.name = data.get("name", self.name)
             self._state = CircuitState(data.get("state", "closed"))

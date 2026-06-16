@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import subprocess
+import copy
 import logging
 from pathlib import Path
 from typing import Tuple
@@ -44,7 +45,7 @@ def load_settings() -> dict:
     """Carga los ajustes desde el archivo settings.json."""
     if not SETTINGS_FILE.exists():
         save_settings(DEFAULT_SETTINGS)
-        return dict(DEFAULT_SETTINGS)
+        return copy.deepcopy(DEFAULT_SETTINGS)
     try:
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
@@ -55,7 +56,7 @@ def load_settings() -> dict:
         return data
     except Exception as e:
         logger.error(f"Error cargando settings: {e}")
-        return dict(DEFAULT_SETTINGS)
+        return copy.deepcopy(DEFAULT_SETTINGS)
 
 def save_settings(settings: dict):
     """Guarda los ajustes."""

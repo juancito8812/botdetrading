@@ -8,7 +8,7 @@ import time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
-from models.data_classes import Signal, Position
+from models.data_classes import Signal, Position, PositionStatus
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ def _sig(symbol="BTCUSDT", direction="Buy", entry_min=67000, entry_max=68000,
          stop_loss=66000, targets=None):
     """Crea un Signal de prueba."""
     return Signal(
-        simbolo=symbol,
+        symbol=symbol,
         direccion=direction,
         entry_min=entry_min,
         entry_max=entry_max,
@@ -77,33 +77,38 @@ def engine():
     return eng
 
 
-def test_is_duplicate_new_signal(engine):
+@pytest.mark.asyncio
+async def test_is_duplicate_new_signal(engine):
     """Señal nueva no es duplicada."""
-    assert engine._is_duplicate("BTC", "Buy", "bitget", 30) is False
+    assert await engine._is_duplicate("BTC", "Buy", "bitget", 30) is False
 
 
-def test_is_duplicate_within_cooldown(engine):
+@pytest.mark.asyncio
+async def test_is_duplicate_within_cooldown(engine):
     """Misma señal dentro del cooldown es duplicada."""
-    engine._is_duplicate("BTC", "Buy", "bitget", 30)
-    assert engine._is_duplicate("BTC", "Buy", "bitget", 30) is True
+    await engine._is_duplicate("BTC", "Buy", "bitget", 30)
+    assert await engine._is_duplicate("BTC", "Buy", "bitget", 30) is True
 
 
-def test_is_duplicate_after_cooldown(engine):
+@pytest.mark.asyncio
+async def test_is_duplicate_after_cooldown(engine):
     """Misma señal después del cooldown no es duplicada (simulado con timestamp antiguo)."""
     engine.processed_signals[("BTC", "Buy", "bitget")] = time.time() - 60
-    assert engine._is_duplicate("BTC", "Buy", "bitget", 30) is False
+    assert await engine._is_duplicate("BTC", "Buy", "bitget", 30) is False
 
 
-def test_is_duplicate_different_exchange(engine):
+@pytest.mark.asyncio
+async def test_is_duplicate_different_exchange(engine):
     """Misma señal en distinto exchange no es duplicada."""
-    engine._is_duplicate("BTC", "Buy", "bitget", 30)
-    assert engine._is_duplicate("BTC", "Buy", "bingx", 30) is False
+    await engine._is_duplicate("BTC", "Buy", "bitget", 30)
+    assert await engine._is_duplicate("BTC", "Buy", "bingx", 30) is False
 
 
-def test_is_duplicate_different_side(engine):
+@pytest.mark.asyncio
+async def test_is_duplicate_different_side(engine):
     """Misma señal con distinto lado no es duplicada."""
-    engine._is_duplicate("BTC", "Buy", "bitget", 30)
-    assert engine._is_duplicate("BTC", "Sell", "bitget", 30) is False
+    await engine._is_duplicate("BTC", "Buy", "bitget", 30)
+    assert await engine._is_duplicate("BTC", "Sell", "bitget", 30) is False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -780,7 +785,7 @@ async def test_process_filled_limit_order(mock_ex_svc, mock_pm, engine):
     mock_client.create_order = AsyncMock(return_value={"id": "sl_123"})
     mock_ex_svc.clients = {"bitget": mock_client}
 
-    signal = Signal(simbolo="BTC/USDT", direccion="Buy", entry_min=67000, entry_max=68000,
+    signal = Signal(symbol="BTC/USDT", direccion="Buy", entry_min=67000, entry_max=68000,
                     stop_loss=66000, targets=[69000])
     pending = {
         "side": "buy",
@@ -809,7 +814,7 @@ async def test_process_filled_limit_order_partial_fill(mock_ex_svc, mock_pm, eng
     mock_client.create_order = AsyncMock(return_value={"id": "sl_123"})
     mock_ex_svc.clients = {"bitget": mock_client}
 
-    signal = Signal(simbolo="BTC/USDT", direccion="Buy", entry_min=67000, entry_max=68000,
+    signal = Signal(symbol="BTC/USDT", direccion="Buy", entry_min=67000, entry_max=68000,
                     stop_loss=66000, targets=[69000])
     pending = {
         "side": "buy",
@@ -1135,7 +1140,7 @@ async def test_watchdog_tick_stale_orders_filled(mock_ex_svc, mock_pm, engine):
 @pytest.mark.asyncio
 @patch("core.engine.exchange_service")
 async def test_watchdog_tick_stale_orders_no_client(mock_ex_svc, engine):
-    """Orden LIMIT sin cliente disponible es removida."""
+    """Orden LIMIT sin cliente disponible se conserva hasta que el cliente reconecte."""
     mock_ex_svc.clients = {}  # Sin clientes
 
     order_id = "orphan"
@@ -1155,7 +1160,7 @@ async def test_watchdog_tick_stale_orders_no_client(mock_ex_svc, engine):
 
     await engine._watchdog_tick()
 
-    assert order_id not in engine._pending_limit_orders
+    assert order_id in engine._pending_limit_orders
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1172,13 +1177,13 @@ async def test_watchdog_tick_position_closed(mock_ex_svc, mock_pm, engine):
     mock_ex_svc.fetch_position = AsyncMock(return_value={"contracts": 0})  # Cerrada
 
     pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
-                   side="Buy", entry_price=67000, amount=0.01, leverage=5, status="open")
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5, status=PositionStatus.OPEN)
     mock_pm.get_open_positions.return_value = [pos]
     engine.notifier = AsyncMock()
 
     await engine._watchdog_tick()
 
-    assert pos.status == "closed"
+    assert pos.status == PositionStatus.CLOSED
     mock_pm.save.assert_called()
     engine.notifier.notify_trade_closed.assert_called_once_with(pos)
 

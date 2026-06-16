@@ -17,7 +17,7 @@ def test_parse_long_signal():
     """Test básico de señal LONG."""
     signal = _assert_signal("LONG #BTCUSDT\nENTRY: 65000\nSL: 64000\nTarget 1: 66000")
     assert signal is not None, "Debería parsear una señal válida"
-    assert signal.simbolo == "BTC", f"Esperaba BTC, obtuvo {signal.simbolo}"
+    assert signal.symbol == "BTC", f"Esperaba BTC, obtuvo {signal.symbol}"
     assert signal.direccion == "Buy", f"Esperaba Buy, obtuvo {signal.direccion}"
     assert signal.stop_loss == 64000.0
     assert 66000.0 in signal.targets
@@ -26,7 +26,7 @@ def test_parse_long_signal():
 def test_parse_short_signal():
     """Test básico de señal SHORT."""
     signal = _assert_signal("SHORT #ETHUSDT\nENTRY: 3500\nSL: 3600\nTP1: 3400\nTP2: 3300")
-    assert signal.simbolo == "ETH"
+    assert signal.symbol == "ETH"
     assert signal.direccion == "Sell"
     assert signal.stop_loss == 3600.0
     assert len(signal.targets) == 2
@@ -63,7 +63,7 @@ def test_parse_with_multiple_formats():
     ]
     for text in texts:
         signal = _assert_signal(text)
-        assert signal.simbolo is not None
+        assert signal.symbol is not None
         assert signal.direccion is not None
 
 

@@ -268,7 +268,7 @@ async def test_fetch_top20_timeout_with_cache():
     sessions = [success_session, timeout_session]
 
     with patch("aiohttp.ClientSession") as mock_cls:
-        mock_cls.side_effect = lambda: sessions.pop(0)
+        mock_cls.side_effect = lambda *args, **kwargs: sessions.pop(0)
 
         result1 = await fetch_top20()
         assert len(result1) == 2

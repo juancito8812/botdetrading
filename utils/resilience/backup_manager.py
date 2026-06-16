@@ -5,7 +5,8 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime
+import tempfile
+from datetime import datetime, timezone
 from typing import List, Optional
 
 logger = logging.getLogger("TradingBot")
@@ -42,12 +43,8 @@ class BackupManager:
         Returns:
             Ruta al archivo de backup, o None si falló.
         """
-        if not os.path.exists(source_path):
-            logger.warning(f"Backup: {source_path} no existe, saltando")
-            return None
-
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
             backup_name = f"{name}_{timestamp}.json.gz"
             backup_path = os.path.join(self.backup_dir, backup_name)
 
@@ -114,8 +111,10 @@ class BackupManager:
         latest = backups[-1]
         try:
             with gzip.open(latest, "rb") as f_in:
-                with open(target_path, "wb") as f_out:
+                fd, tmp_path = tempfile.mkstemp(suffix='.json', prefix='.tmp_', dir=os.path.dirname(target_path))
+                with os.fdopen(fd, 'wb') as f_out:
                     shutil.copyfileobj(f_in, f_out)
+            os.replace(tmp_path, target_path)
             logger.info(f"♻️ Backup restaurado: {latest} → {target_path}")
             return True
         except Exception as e:

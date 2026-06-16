@@ -16,7 +16,7 @@ import utils.config
 utils.config.POSICIONES_FILE = type(POSICIONES_FILE)(_temp_path)
 
 from core.manager import pos_manager, PositionManager
-from models.data_classes import Position
+from models.data_classes import Position, PositionStatus
 
 
 def setup_module():
@@ -46,9 +46,9 @@ def test_get_open_positions():
     pos_manager.positions = []
     pos_manager.save()
     
-    pos1 = Position(exchange_id="bitget", symbol="BTC", market_symbol="BTC/USDT", side="Buy", entry_price=65000, amount=0.01, leverage=5, status="open")
-    pos2 = Position(exchange_id="bingx", symbol="ETH", market_symbol="ETH/USDT", side="Sell", entry_price=3500, amount=0.1, leverage=10, status="open")
-    pos3 = Position(exchange_id="bitget", symbol="SOL", market_symbol="SOL/USDT", side="Buy", entry_price=100, amount=1, leverage=3, status="closed")
+    pos1 = Position(exchange_id="bitget", symbol="BTC", market_symbol="BTC/USDT", side="Buy", entry_price=65000, amount=0.01, leverage=5, status=PositionStatus.OPEN)
+    pos2 = Position(exchange_id="bingx", symbol="ETH", market_symbol="ETH/USDT", side="Sell", entry_price=3500, amount=0.1, leverage=10, status=PositionStatus.OPEN)
+    pos3 = Position(exchange_id="bitget", symbol="SOL", market_symbol="SOL/USDT", side="Buy", entry_price=100, amount=1, leverage=3, status=PositionStatus.CLOSED)
     
     for p in [pos1, pos2, pos3]:
         pos_manager.add_position(p)
@@ -67,7 +67,7 @@ def test_update_status():
     assert result == True
     
     btc_pos = [p for p in pos_manager.positions if p.symbol == "BTC"]
-    assert btc_pos[0].status == "closed"
+    assert btc_pos[0].status == PositionStatus.CLOSED
 
 
 def test_get_pending_positions():

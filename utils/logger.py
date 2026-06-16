@@ -15,8 +15,9 @@ def _compress_rotator(source, dest):
             with gzip.open(dest, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
         os.remove(source)
-    except Exception:
-        pass
+    except Exception as e:
+        log = logging.getLogger("TradingBot")
+        log.warning("Error comprimiendo log %s: %s", source, e)
 
 def _cleanup_old_logs(log_file, max_age_days=30):
     log = logging.getLogger("TradingBot")

@@ -1,6 +1,7 @@
 """Tests para utils/translations.py — I18n y diccionario de traducciones."""
 
 import pytest
+from unittest.mock import patch
 from utils.translations import TRANSLATIONS, I18n, i18n
 
 
@@ -65,7 +66,6 @@ def test_i18n_default_language():
     """I18n por defecto usa español."""
     i = I18n()
     assert i.current_lang == "es"
-    assert i.lang == "es"
 
 
 def test_i18n_custom_language():
@@ -105,7 +105,8 @@ def test_i18n_t_missing_key_returns_key():
 def test_i18n_set_language():
     """set_language cambia el idioma."""
     i = I18n("es")
-    i.set_language("en")
+    with patch("utils.translations.save_settings"):
+        i.set_language("en")
     assert i.current_lang == "en"
     assert i.t("app_title") == TRANSLATIONS["en"]["app_title"]
 
@@ -119,14 +120,16 @@ def test_i18n_set_language_same():
         notified.append(True)
 
     i.add_listener(listener)
-    i.set_language("es")  # Mismo idioma
+    with patch("utils.translations.save_settings"):
+        i.set_language("es")  # Mismo idioma
     assert len(notified) == 0  # No debe notificar
 
 
 def test_i18n_set_language_invalid():
     """set_language a idioma inválido no cambia."""
     i = I18n("es")
-    i.set_language("fr")  # No existe
+    with patch("utils.translations.save_settings"):
+        i.set_language("fr")  # No existe
     assert i.current_lang == "es"
 
 
@@ -139,7 +142,8 @@ def test_i18n_listener():
         notified.append(True)
 
     i.add_listener(listener)
-    i.set_language("en")
+    with patch("utils.translations.save_settings"):
+        i.set_language("en")
     assert len(notified) == 1
 
 
@@ -156,7 +160,8 @@ def test_i18n_multiple_listeners():
 
     i.add_listener(listener1)
     i.add_listener(listener2)
-    i.set_language("en")
+    with patch("utils.translations.save_settings"):
+        i.set_language("en")
     assert count[0] == 2
 
 

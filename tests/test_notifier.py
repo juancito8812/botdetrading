@@ -60,7 +60,7 @@ async def test_notify_trade_open(notifier, mock_telegram):
     args = mock_telegram.send_message.call_args[0]
     assert "🚀" in args[1] or "LONG" in args[1]
     assert "BTC/USDT" in args[1]
-    assert "67,432" in args[1].replace(",", "") or "67432" in args[1]
+    assert "67,432" in args[1] or "67432.50" in args[1]
     assert "5x" in args[1]
 
 
@@ -243,11 +243,11 @@ async def test_resolve_chat_id_value_error_no_user(notifier, mock_telegram):
 
 
 @pytest.mark.asyncio
-async def test_resolve_chat_id_other_exception_returns_raw(notifier, mock_telegram):
-    """_resolve_chat_id retorna raw si es otro tipo de Exception."""
+async def test_resolve_chat_id_other_exception_raises(notifier, mock_telegram):
+    """_resolve_chat_id propaga excepciones inesperadas."""
     mock_telegram.get_entity.side_effect = Exception("random")
-    result = await notifier._resolve_chat_id()
-    assert result == "test_chat"  # Retorna raw
+    with pytest.raises(Exception):
+        await notifier._resolve_chat_id()
 
 
 @pytest.mark.asyncio

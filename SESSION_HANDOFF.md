@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 16/06/2026 (v17 - Release v1.3.0: bugs 19-21 + .exe)
+> **Ultima actualizacion:** 16/06/2026 (v19 - Ponytail integrado en Superpowers)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -15,6 +15,9 @@
 ### Flujo obligatorio para TODA IA en TODA sesion:
 
 ```
+0. 🦊 PONYTAIL                → ✅ SIEMPRE ACTIVO (default: full). Capa transversal.
+                                 ¿stdlib? ¿nativo? ¿dep existente? ¿una linea?
+                                 Minimo codigo que funciona. YAGNI.
 1. 🦸 CARGAR Superpowers      → Al INICIAR cualquier sesion con cualquier IA
                                  (skill: using-superpowers)
 2. 📖 LEER contexto           → MEMORY.md + SESSION_HANDOFF.md + git log --oneline -5
@@ -22,9 +25,10 @@
 4. 📄 WRITING SPECS           → Documentar en docs/superpowers/specs/
 5. 📋 WRITING PLANS           → Para tareas de 3+ pasos en docs/superpowers/plans/
 6. ⚡ SUBAGENT DEVELOPMENT    → Ejecutar con agentes especializados
-7. 👀 CODE REVIEW             → Revisar cambios antes de finalizar
+7. 👀 CODE REVIEW             → Revisar cambios antes de finalizar (usar /ponytail-review)
 8. ✅ VERIFICATION            → Tests + cobertura + calidad
 9. 📝 ACTUALIZAR docs         → MEMORY.md + SESSION_HANDOFF.md + README si aplica
+```
 ```
 
 > **🔴 Esto aplica a: Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini, y cualquier otro agente/IA que toque este proyecto. La metodologia Superpowers es el contrato de calidad del proyecto. Ignorarla = cambios inconsistentes y perdida de contexto entre sesiones.**
@@ -452,6 +456,73 @@ Ver sesion #14 en version v7 del documento.
 
 ---
 
+### 26. Auditoría v2: 126 bugs/mejoras corregidos (16/06/2026)
+
+**Que se hizo:** Revisión exhaustiva de 20 archivos del código fuente por 4 agentes en paralelo. Se encontraron y corrigieron 126 hallazgos.
+
+**Resumen de hallazgos corregidos:**
+
+| Severidad | Encontrados | Corregidos |
+|-----------|-------------|------------|
+| 🔴 CRÍTICO | 17 | 17 |
+| 🟠 ALTO | 26 | 26 |
+| 🟡 MEDIO | 34 | 34 |
+| 🔵 BAJO | 22 | 22 |
+| ⚪ MEJORA | 27 | 27 |
+| **TOTAL** | **126** | **126** |
+
+**Principales cambios:**
+
+| Area | Cambio |
+|------|--------|
+| `AsyncWorker` | Nuevo singleton con event loop persistente (elimina creación/destrucción masiva) |
+| `Cifrado API keys` | Fernet simétrico para credenciales en disco |
+| `bot_running` | Migrado de `bool` a `threading.Event` (data race eliminado) |
+| `Canales Telegram` | Se recargan dinámicamente en cada mensaje |
+| `PositionStatus` | Migrado de `str` a `Enum` (typo-safe) |
+| `_create_exchange_order` | Lógica exchange-específica unificada (elimina 5 copias) |
+| `_is_duplicate` | Agregado `asyncio.Lock` (race condition) |
+| `except: pass` | Todos reemplazados con logging |
+| `Escrituras atómicas` | circuit_breaker, health_monitor, backup_manager |
+| `Health checks` | Paralelos con `asyncio.gather` (antes secuenciales) |
+| `__init__.py` | Creados en utils/ y utils/resilience/ |
+| `Orden decoradores` | CB por fuera, retry por dentro |
+| `download_update` | Convertido a async con aiohttp |
+| `Cache de versión` | TTL 5min para evitar rate-limit GitHub |
+| `Regex parser` | Pipe literal corregido en símbolo |
+| `Credenciales en UI` | Campos Telegram con `show="*"` |
+| `monkey-patch` | Reemplazado por callback injection |
+
+**Archivos modificados:** 29 archivos (+608/-526 líneas)
+- `core/engine.py` — 23 fixes
+- `core/manager.py` — 4 fixes
+- `core/parser.py` — 2 fixes
+- `services/exchange_service.py` — 10 fixes
+- `services/market_data.py` — 3 fixes
+- `services/notifier.py` — 4 fixes
+- `services/updater.py` — 4 fixes
+- `utils/config.py` — 6 fixes
+- `utils/helpers.py` — 2 fixes
+- `utils/logger.py` — 1 fix
+- `utils/settings_manager.py` — 1 fix
+- `utils/translations.py` — 3 fixes
+- `utils/resilience/decorators.py` — 2 fixes
+- `utils/resilience/circuit_breaker.py` — 2 fixes
+- `utils/resilience/health_monitor.py` — 3 fixes
+- `utils/resilience/backup_manager.py` — 3 fixes
+- `utils/resilience/state_recovery.py` — 1 fix
+- `utils/__init__.py` — **nuevo**
+- `utils/resilience/__init__.py` — **nuevo**
+- `ui/main_window.py` — 14 fixes
+- `main.py` — 7 fixes
+- `models/data_classes.py` — 5 fixes
+- tests actualizados (8 archivos)
+
+**Tests:** 342/342 pasando
+**VERSION:** v1.3.0 → v1.4.0
+
+---
+
 ## Como verificar el estado
 
 ```bash
@@ -471,6 +542,7 @@ git log --oneline -5
 - [x] ~~Compilar nuevo .exe con bugfixes~~
 - [x] ~~Corregir bugs 19-21 de la auditoría (notifier type syntax, shell=True, apply_update)~~
 - [x] ~~Release v1.3.0 con todos los fixes~~
+- [x] ~~Auditoría v2: 126 bugs/mejoras corregidos~~
 
 ---
 
@@ -503,6 +575,22 @@ Framework de metodologia de desarrollo instalado (14 skills). Los skills estan e
 **Flujo de trabajo:** brainstorming -> writing-plans -> subagent-driven-development (con revision spec + code quality)
 
 **Documentos de diseno y plan en:** `docs/superpowers/specs/` y `docs/superpowers/plans/`
+
+## Ponytail - Lazy Senior Dev Mode
+
+Integrado como capa transversal en Superpowers. Inyecta la escalera YAGNI en cada respuesta del agente:
+
+1. ¿Necesita existir? (YAGNI)
+2. ¿Stdlib lo hace? Usarla
+3. ¿Feature nativa? Usarla
+4. ¿Dependencia instalada? Usarla
+5. ¿Una línea? Una línea
+6. Mínimo código que funciona
+
+**Niveles:** `/ponytail lite|full|ultra|off` (default: full)
+**Review:** `/ponytail-review` (detecta over-engineering en el diff)
+**Config:** `PONYTAIL_DEFAULT_MODE` env var o `%APPDATA%\ponytail\config.json`
+**Docs:** `docs/superpowers/specs/2026-06-16-ponytail-integration.md`
 
 ---
 

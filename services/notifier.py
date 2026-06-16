@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
 
-from models.data_classes import Position
+from models.data_classes import Position, PositionStatus
 
 logger = logging.getLogger("TradingBot")
 
@@ -91,7 +91,9 @@ class TelegramNotifier:
         invalida la caché automáticamente.
         """
         raw: Union[int, str] = self.chat_id
-        if isinstance(raw, str) and raw.lstrip('-').isdigit():
+        if isinstance(raw, str) and raw.isdigit():
+            raw = int(raw)
+        elif isinstance(raw, str) and raw.startswith('-') and raw[1:].isdigit():
             raw = int(raw)
 
         # Invalidar caché si el chat_id cambió
@@ -118,9 +120,6 @@ class TelegramNotifier:
                     f"Para enviar a un GRUPO: la cuenta del bot debe ser MIEMBRO del grupo."
                 )
             raise
-        except Exception as e:
-            logger.error(f"Error resolviendo entidad Telegram para chat_id={raw}: {e}")
-            return raw
 
     async def send_message(self, text: str) -> bool:
         """
@@ -170,7 +169,7 @@ class TelegramNotifier:
             return
         side_emoji = "🚀" if position.side.lower() == "buy" else "🔻"
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
-        sl_text = f"${position.sl_price:,.2f}" if position.sl_price > 0 else f"${position.entry_price}" if position.sl_order_id else "Sin SL"
+        sl_text = f"${position.sl_price:,.2f}" if position.sl_price > 0 else f"${position.entry_price:,.2f}" if position.sl_order_id else "Sin SL"
         tp_count = len(position.tp_order_ids) if position.tp_order_ids else 0
 
         msg = (
@@ -204,9 +203,7 @@ class TelegramNotifier:
             f"PnL: ${pnl_str}"
         )
         await self.send_message(msg)
-        pnl_val = position.pnl if position.pnl is not None else 0.0
-        emoji_closed = "✅" if pnl_val >= 0 else "❌"
-        self._add_to_history(f"{emoji_closed} CERRADA {position.symbol} ${pnl_val:+.2f}")
+        self._add_to_history(f"{emoji} CERRADA {position.symbol} ${pnl_str}")
 
     async def notify_tp_hit(self, position: Position, tp_number: int):
         """Notifica que se alcanzó un Take Profit."""
@@ -286,7 +283,7 @@ class TelegramNotifier:
         today = datetime.now().strftime("%d/%m/%Y")
         lines = [f"📊 Reporte Diario — {today}", "━" * 25]
 
-        open_positions = [p for p in positions if p.status == "open"]
+        open_positions = [p for p in positions if p.status == PositionStatus.OPEN]
         lines.append(f"Posiciones abiertas: {len(open_positions)}")
 
         total_pnl = sum(p.pnl or 0.0 for p in positions)

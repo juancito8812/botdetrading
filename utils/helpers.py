@@ -1,11 +1,14 @@
 import os
 import json
 import tempfile
+from contextlib import contextmanager
 import aiohttp
 import aiohttp.resolver
 import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger("TradingBot")
 
 # --- DETERMINAR RAÍZ DEL PROYECTO ---
 if getattr(sys, 'frozen', False):
@@ -17,9 +20,11 @@ else:
     BASE_DIR = Path(__file__).parent.parent
     DATA_DIR = BASE_DIR
 
+
 # --- PARCHE DNS PARA WINDOWS ---
-def patch_aiohttp_dns():
-    """Parchea aiohttp para usar ThreadedResolver en Windows."""
+@contextmanager
+def patched_dns_resolver():
+    """Context manager que parchea aiohttp para usar ThreadedResolver en Windows."""
     _original_tcp_init = aiohttp.TCPConnector.__init__
 
     def _patched_tcp_init(self, *, resolver=None, **kwargs):
@@ -28,6 +33,23 @@ def patch_aiohttp_dns():
         _original_tcp_init(self, resolver=resolver, **kwargs)
 
     aiohttp.TCPConnector.__init__ = _patched_tcp_init
+    try:
+        yield
+    finally:
+        aiohttp.TCPConnector.__init__ = _original_tcp_init
+
+
+def patch_aiohttp_dns():
+    """Parchea aiohttp para usar ThreadedResolver en Windows (versión directa)."""
+    _original_tcp_init = aiohttp.TCPConnector.__init__
+
+    def _patched_tcp_init(self, *, resolver=None, **kwargs):
+        if resolver is None:
+            resolver = aiohttp.resolver.ThreadedResolver()
+        _original_tcp_init(self, resolver=resolver, **kwargs)
+
+    aiohttp.TCPConnector.__init__ = _patched_tcp_init
+
 
 # --- ESCRITURA ATÓMICA ---
 def atomic_write_json(filepath, data, **kwargs):
@@ -39,7 +61,7 @@ def atomic_write_json(filepath, data, **kwargs):
             json.dump(data, f, **kwargs)
         os.replace(tmp_path, filepath)
     except Exception as e:
-        logging.error(f"Error en escritura atómica a {filepath}: {e}")
+        logger.error(f"Error en escritura atómica a {filepath}: {e}")
         try:
             os.unlink(tmp_path)
         except Exception:

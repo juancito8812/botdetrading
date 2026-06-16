@@ -127,7 +127,7 @@ class StateRecovery:
     def load(self, filepath: str):
         """Carga los checkpoints desde un archivo JSON."""
         try:
-            with open(filepath, "r") as f:
+            with open(filepath, "r", encoding='utf-8') as f:
                 data = json.load(f)
             self.checkpoints = [Checkpoint.from_dict(cp) for cp in data]
 

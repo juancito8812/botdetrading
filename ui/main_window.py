@@ -1,9 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext, filedialog
 import asyncio
 import threading
 import logging
 import os
+import base64
+import hashlib
+from cryptography.fernet import Fernet
 
 from utils.config import (
     load_api_creds, save_api_creds, load_risk_config, save_risk_config,
@@ -18,14 +21,30 @@ from utils import config_backup
 from services.exchange_service import exchange_service
 from services.market_data import fetch_top20, fetch_market_indices
 from core.manager import pos_manager
+from models.data_classes import PositionStatus
 from core.engine import health_monitor, trading_engine
 from services.updater import (get_current_version, check_latest_version,
                               is_newer_version, download_update, apply_update)
 from utils.logger import logger
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from pathlib import Path
 import csv
+
+COLOR_GREEN = "#00cc00"
+COLOR_RED = "#ff4444"
+COLOR_YELLOW = "#ccaa00"
+COLOR_BRIGHT_GREEN = "#00ff00"
+
+
+def safe_callback(fn):
+    def wrapper(self, *args, **kwargs):
+        try:
+            if self.root.winfo_exists():
+                return fn(self, *args, **kwargs)
+        except tk.TclError:
+            pass
+    return wrapper
 
 
 class GuiHandler(logging.Handler):
@@ -41,8 +60,9 @@ class GuiHandler(logging.Handler):
 
 
 class TradingBotGUI:
-    def __init__(self, root):
+    def __init__(self, root, toggle_callback=None):
         self.root = root
+        self.toggle_callback = toggle_callback
         self.settings = load_settings()
         # Inicializar idioma desde settings
         i18n.current_lang = self.settings.get("language", "es")
@@ -72,9 +92,6 @@ class TradingBotGUI:
         self.notebook.add(self.tab_posiciones, text=i18n.t("tab_posiciones"))
         self.notebook.add(self.tab_consola, text=i18n.t("tab_consola"))
         self.notebook.add(self.tab_settings, text=i18n.t("tab_settings"))
-
-        # Pestaña de consola debe ir al final (la usan otras tabs)
-        self.last_tab_index = 7
 
         # Inicializar UI de pestañas
         self.setup_dashboard_tab()
@@ -318,9 +335,9 @@ class TradingBotGUI:
         # Color MCap change
         mcap_change = indices.get('market_cap_change_24h', 0)
         if mcap_change >= 0:
-            self.indices_labels["mcap_change"].config(foreground="#00ff00")
+            self.indices_labels["mcap_change"].config(foreground=COLOR_BRIGHT_GREEN)
         else:
-            self.indices_labels["mcap_change"].config(foreground="#ff4444")
+            self.indices_labels["mcap_change"].config(foreground=COLOR_RED)
 
         # Poblar tree
         for i, coin in enumerate(coins):
@@ -349,15 +366,15 @@ class TradingBotGUI:
                 f"${market_cap:,.0f}" if market_cap else "N/A",
             ), tags=tags)
 
-        self.dash_tree.tag_configure("up", foreground="#00ff00")
-        self.dash_tree.tag_configure("down", foreground="#ff4444")
+        self.dash_tree.tag_configure("up", foreground=COLOR_BRIGHT_GREEN)
+        self.dash_tree.tag_configure("down", foreground=COLOR_RED)
 
     def _format_timestamp(self, timestamp: Optional[float]) -> str:
         """Formatea un timestamp UNIX a hora legible o 'Nunca'."""
         if not timestamp:
             return i18n.t("health_never")
         dt = datetime.fromtimestamp(timestamp)
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         if dt.date() == now.date():
             return dt.strftime("%H:%M")
         return dt.strftime("%d/%m %H:%M")
@@ -374,7 +391,8 @@ class TradingBotGUI:
 
             # Reconstruir labels si cambió la cantidad de exchanges
             for child in self.health_container.winfo_children():
-                child.destroy()
+                if child.winfo_exists():
+                    child.destroy()
 
             if not summary:
                 lbl = ttk.Label(self.health_container, text=i18n.t("dash_health_unknown"), foreground="gray")
@@ -393,15 +411,15 @@ class TradingBotGUI:
                 if status == "healthy":
                     led = "🟢"
                     status_text = i18n.t("dash_health_healthy")
-                    fg_color = "#00cc00"
+                    fg_color = COLOR_GREEN
                 elif status == "degraded":
                     led = "🟡"
                     status_text = i18n.t("dash_health_degraded")
-                    fg_color = "#ccaa00"
+                    fg_color = COLOR_YELLOW
                 elif status == "down":
                     led = "🔴"
                     status_text = i18n.t("dash_health_down")
-                    fg_color = "#ff4444"
+                    fg_color = COLOR_RED
                 else:
                     led = "⚪"
                     status_text = i18n.t("dash_health_unknown")
@@ -411,15 +429,15 @@ class TradingBotGUI:
                 if cb_state == "closed":
                     cb_icon = "🔒"
                     cb_text = i18n.t("health_cb_closed")
-                    cb_color = "#00cc00"
+                    cb_color = COLOR_GREEN
                 elif cb_state == "open":
                     cb_icon = "🔓"
                     cb_text = i18n.t("health_cb_open")
-                    cb_color = "#ff4444"
+                    cb_color = COLOR_RED
                 elif cb_state == "half_open":
                     cb_icon = "⚠️"
                     cb_text = i18n.t("health_cb_half_open")
-                    cb_color = "#ccaa00"
+                    cb_color = COLOR_YELLOW
                 else:
                     cb_icon = "?"
                     cb_text = cb_state
@@ -439,7 +457,7 @@ class TradingBotGUI:
 
                 # Fallos
                 fail_text = f"{failures} {i18n.t('health_failures')}" if failures > 0 else "✓ 0"
-                fail_color = "#ff4444" if failures > 0 else "#00cc00"
+                fail_color = COLOR_RED if failures > 0 else COLOR_GREEN
                 ttk.Label(card, text=f"⚠ {fail_text}", foreground=fail_color, font=("", 8)).pack(anchor='w', padx=2)
 
                 # Circuit breaker
@@ -462,14 +480,19 @@ class TradingBotGUI:
         else:
             self.dash_auto_active = True
             self.dash_auto_btn.config(text="⏹ Stop Auto-Refresh")
-            self._dash_auto_tick()
+            self._dash_auto_refresh()
 
     def _dash_auto_tick(self):
         if not self.dash_auto_active:
             return
+        self._dash_auto_refresh()
+
+    def _dash_auto_refresh(self):
+        if not self.dash_auto_active:
+            return
         self.refresh_dashboard()
         self.refresh_health()
-        self.dash_auto_job = self.root.after(60000, self._dash_auto_tick)
+        self.root.after(60000, self._dash_auto_tick)
 
     # ==================== TAB: TELEGRAM ====================
     def setup_telegram_tab(self):
@@ -510,17 +533,17 @@ class TradingBotGUI:
         cred_frame.pack(fill='x', padx=10, pady=5)
 
         ttk.Label(cred_frame, text="API_ID:").grid(row=0, column=0, sticky='e', pady=2)
-        self.tg_entry_api_id = ttk.Entry(cred_frame, width=30)
+        self.tg_entry_api_id = ttk.Entry(cred_frame, width=30, show="*")
         self.tg_entry_api_id.insert(0, creds["telegram"].get("API_ID", ""))
         self.tg_entry_api_id.grid(row=0, column=1, padx=5, pady=2, sticky='w')
 
         ttk.Label(cred_frame, text="API_HASH:").grid(row=1, column=0, sticky='e', pady=2)
-        self.tg_entry_api_hash = ttk.Entry(cred_frame, width=50)
+        self.tg_entry_api_hash = ttk.Entry(cred_frame, width=50, show="*")
         self.tg_entry_api_hash.insert(0, creds["telegram"].get("API_HASH", ""))
         self.tg_entry_api_hash.grid(row=1, column=1, padx=5, pady=2, sticky='w')
 
         ttk.Label(cred_frame, text="Phone:").grid(row=2, column=0, sticky='e', pady=2)
-        self.tg_entry_phone = ttk.Entry(cred_frame, width=30)
+        self.tg_entry_phone = ttk.Entry(cred_frame, width=30, show="*")
         self.tg_entry_phone.insert(0, creds["telegram"].get("PHONE_NUMBER", ""))
         self.tg_entry_phone.grid(row=2, column=1, padx=5, pady=2, sticky='w')
 
@@ -721,13 +744,13 @@ class TradingBotGUI:
     def update_telegram_status(self, connected: bool, user: str = "", phone: str = "", chat_id: str = ""):
         """Actualiza el estado de conexión de Telegram en la UI."""
         if connected:
-            self.tg_status_label.config(text=f"🟢 {i18n.t('tg_connected_as')}: {user}", foreground="#00cc00")
+            self.tg_status_label.config(text=f"🟢 {i18n.t('tg_connected_as')}: {user}", foreground=COLOR_GREEN)
             if phone:
                 self.tg_user_label.config(text=f"📱 {phone}")
             if chat_id:
                 self.tg_chatid_label.config(text=f"🆔 {i18n.t('tg_chat_id')}: {chat_id}")
         else:
-            self.tg_status_label.config(text="🔴 Desconectado", foreground="#ff4444")
+            self.tg_status_label.config(text="🔴 Desconectado", foreground=COLOR_RED)
             self.tg_user_label.config(text="")
             self.tg_chatid_label.config(text="")
 
@@ -873,7 +896,7 @@ class TradingBotGUI:
                 info = check_latest_version()
                 if info is None:
                     self.root.after(0, lambda: (
-                        self.upd_status_label.config(text=i18n.t("upd_error"), foreground="#ff4444"),
+                        self.upd_status_label.config(text=i18n.t("upd_error"), foreground=COLOR_RED),
                         self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
                     ))
                     return
@@ -887,7 +910,7 @@ class TradingBotGUI:
                     self.root.after(0, lambda: (
                         self.upd_status_label.config(
                             text=f"{i18n.t('upd_available')} {latest}",
-                            foreground="#00cc00"
+                            foreground=COLOR_GREEN
                         ),
                         self.upd_download_btn.config(state='normal'),
                         self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
@@ -895,12 +918,12 @@ class TradingBotGUI:
                     ))
                 else:
                     self.root.after(0, lambda: (
-                        self.upd_status_label.config(text=i18n.t("upd_uptodate"), foreground="#00cc00"),
+                        self.upd_status_label.config(text=i18n.t("upd_uptodate"), foreground=COLOR_GREEN),
                         self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
                     ))
             except Exception as e:
                 self.root.after(0, lambda: (
-                    self.upd_status_label.config(text=f"{i18n.t('upd_error')}: {str(e)[:60]}", foreground="#ff4444"),
+                    self.upd_status_label.config(text=f"{i18n.t('upd_error')}: {str(e)[:60]}", foreground=COLOR_RED),
                     self.upd_check_btn.config(state='normal', text=i18n.t("upd_check")),
                 ))
 
@@ -935,7 +958,7 @@ class TradingBotGUI:
                 dest = download_update(url)
                 if dest:
                     self.root.after(0, lambda: (
-                        self.upd_status_label.config(text=i18n.t("upd_downloaded"), foreground="#00cc00"),
+                        self.upd_status_label.config(text=i18n.t("upd_downloaded"), foreground=COLOR_GREEN),
                     ))
                     # Apply update: lanza el .bat, luego cierra la app inmediatamente
                     success = apply_update(dest)
@@ -945,7 +968,7 @@ class TradingBotGUI:
                         self.root.after(0, lambda: (
                             self.upd_status_label.config(
                                 text="Error al aplicar la actualización",
-                                foreground="#ff4444"
+                                foreground=COLOR_RED
                             ),
                             self.upd_download_btn.config(
                                 state='normal', text=i18n.t("upd_download")
@@ -971,13 +994,10 @@ class TradingBotGUI:
                     ),
                 ))
 
-        import threading
         threading.Thread(target=_do_download, daemon=True).start()
 
     def _export_config(self):
         """Exporta toda la configuración a un archivo .botconfig cifrado."""
-        from tkinter import filedialog
-
         filepath = filedialog.asksaveasfilename(
             defaultextension=".botconfig",
             filetypes=[(i18n.t("backup_file_desc"), "*.botconfig")],
@@ -1013,7 +1033,7 @@ class TradingBotGUI:
             success = config_backup.export_config(pw, filepath)
             if success:
                 # Guardar timestamp del backup en settings
-                self.settings["last_backup_at"] = datetime.now().isoformat()
+                self.settings["last_backup_at"] = datetime.now(timezone.utc).isoformat()
                 self.settings["last_backup_file"] = filepath
                 save_settings(self.settings)
                 self._update_backup_status()
@@ -1028,8 +1048,6 @@ class TradingBotGUI:
 
     def _import_config(self):
         """Importa configuración desde un archivo .botconfig cifrado."""
-        from tkinter import filedialog
-
         filepath = filedialog.askopenfilename(
             filetypes=[(i18n.t("backup_file_desc"), "*.botconfig")],
             title=i18n.t("backup_import")
@@ -1075,7 +1093,7 @@ class TradingBotGUI:
                 if last_file:
                     nombre = os.path.basename(last_file)
                     texto += f"  |  {i18n.t('backup_file')}: {nombre}"
-                self.backup_status_label.config(text=texto, foreground="#00cc00")
+                self.backup_status_label.config(text=texto, foreground=COLOR_GREEN)
             except Exception:
                 self.backup_status_label.config(text=f"⚪ {i18n.t('backup_last')}: {i18n.t('backup_never')}", foreground="gray")
         else:
@@ -1148,14 +1166,14 @@ class TradingBotGUI:
 
             ttk.Label(frame, text=i18n.t("apis_api_key")).grid(row=1, column=0, sticky='e')
             key_entry = ttk.Entry(frame, width=50, show="*")
-            key_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("api_key", ""))
+            key_entry.insert(0, self._decrypt(creds["exchanges"].get(ex_id, {}).get("api_key", "")))
             key_entry.grid(row=1, column=1, padx=5, pady=2)
             self._make_help_btn(frame, "help_api_key").grid(row=1, column=2, padx=2)
             widgets["api_key"] = key_entry
 
             ttk.Label(frame, text=i18n.t("apis_secret")).grid(row=2, column=0, sticky='e')
             sec_entry = ttk.Entry(frame, width=50, show="*")
-            sec_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("secret", ""))
+            sec_entry.insert(0, self._decrypt(creds["exchanges"].get(ex_id, {}).get("secret", "")))
             sec_entry.grid(row=2, column=1, padx=5, pady=2)
             self._make_help_btn(frame, "help_api_secret").grid(row=2, column=2, padx=2)
             widgets["secret"] = sec_entry
@@ -1163,23 +1181,39 @@ class TradingBotGUI:
             if info["needs_passphrase"]:
                 ttk.Label(frame, text=i18n.t("apis_passphrase")).grid(row=3, column=0, sticky='e')
                 pass_entry = ttk.Entry(frame, width=50, show="*")
-                pass_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("passphrase", ""))
+                pass_entry.insert(0, self._decrypt(creds["exchanges"].get(ex_id, {}).get("passphrase", "")))
                 pass_entry.grid(row=3, column=1, padx=5, pady=2)
                 self._make_help_btn(frame, "help_api_passphrase").grid(row=3, column=2, padx=2)
                 widgets["passphrase"] = pass_entry
 
             self.exchange_widgets[ex_id] = widgets
 
+    def _get_cipher(self):
+        key = base64.urlsafe_b64encode(hashlib.sha256(b"MiBotTrading-Secret-Key").digest())
+        return Fernet(key)
+
+    def _encrypt(self, value: str) -> str:
+        if not value:
+            return ""
+        return self._get_cipher().encrypt(value.encode()).decode()
+
+    def _decrypt(self, value: str) -> str:
+        if not value:
+            return ""
+        try:
+            return self._get_cipher().decrypt(value.encode()).decode()
+        except Exception:
+            return value
+
     def save_apis(self):
         new_creds = {"exchanges": {}, "telegram": {}}
-        # Telegram creds are saved from the Telegram tab
         creds = load_api_creds()
         new_creds["telegram"] = creds.get("telegram", {})
         for ex_id, w in self.exchange_widgets.items():
             new_creds["exchanges"][ex_id] = {
-                "api_key": w["api_key"].get().strip(),
-                "secret": w["secret"].get().strip(),
-                "passphrase": w["passphrase"].get().strip() if "passphrase" in w else "",
+                "api_key": self._encrypt(w["api_key"].get().strip()),
+                "secret": self._encrypt(w["secret"].get().strip()),
+                "passphrase": self._encrypt(w["passphrase"].get().strip()) if "passphrase" in w else "",
                 "enabled": w["enabled"].get()
             }
         save_api_creds(new_creds)
@@ -1508,7 +1542,7 @@ class TradingBotGUI:
 
     def _on_pos_double_click(self, event):
         """Maneja doble clic en una posición."""
-        item = self.tree_pos.identify_row(event.y)
+        item = self.tree_pos.focus()
         if not item:
             return
         col = self.tree_pos.identify_column(event.x)
@@ -1518,20 +1552,18 @@ class TradingBotGUI:
         if not values:
             return
         exchange_id = values[0].lower()
-        symbol = values[1]
 
-        # Find the position object
-        for p in pos_manager.get_open_positions():
-            if p.exchange_id == exchange_id and p.symbol == symbol:
-                # Última columna (actions) o columna SL → modify
-                if col_idx >= 7:
-                    self._open_modify_popup(p)
-                # Primera columna (pnl) → close
-                elif col_idx == 6:
-                    self._close_position(p)
-                else:
-                    self._open_modify_popup(p)
-                break
+        # Use item index to find the correct position (handles duplicates)
+        idx = self.tree_pos.index(item)
+        open_positions = pos_manager.get_open_positions()
+        if idx < len(open_positions):
+            p = open_positions[idx]
+            if col_idx >= 7:
+                self._open_modify_popup(p)
+            elif col_idx == 6:
+                self._close_position(p)
+            else:
+                self._open_modify_popup(p)
 
     def update_positions_list(self):
         """Actualiza la tabla solo con posiciones activas."""
@@ -1564,8 +1596,8 @@ class TradingBotGUI:
                 f"{i18n.t('positions_modify')} | {i18n.t('positions_close')}"
             ), tags=tags)
 
-        self.tree_pos.tag_configure("profit", foreground="#00cc00")
-        self.tree_pos.tag_configure("loss", foreground="#ff4444")
+        self.tree_pos.tag_configure("profit", foreground=COLOR_GREEN)
+        self.tree_pos.tag_configure("loss", foreground=COLOR_RED)
 
     def _open_modify_popup(self, position):
         """Abre ventana para modificar SL/TP de una posición."""
@@ -1772,7 +1804,8 @@ class TradingBotGUI:
                     loop.close()
                     return
 
-                side = 'sell' if position.side.lower() == 'buy' else 'buy'
+                side_map = {"Buy": "sell", "Sell": "buy"}
+                close_side = side_map.get(position.side, "sell")
                 amount = float(client.amount_to_precision(position.market_symbol, position.amount))
 
                 params = {}
@@ -1783,12 +1816,12 @@ class TradingBotGUI:
                     params['tdMode'] = 'cross'
 
                 order = loop.run_until_complete(client.create_order(
-                    position.market_symbol, 'market', side, amount, None, params
+                    position.market_symbol, 'market', close_side, amount, None, params
                 ))
 
                 if order.get('id'):
                     # Marcar como cerrada en pos_manager
-                    position.status = "closed"
+                    position.status = PositionStatus.CLOSED
                     pos_manager.save()
                     self.root.after(0, lambda: (
                         messagebox.showinfo(i18n.t("positions_close_success"),
@@ -1829,11 +1862,8 @@ class TradingBotGUI:
         self.consola_text.config(state=tk.DISABLED)
 
     def toggle_bot(self):
-        pass
-
-    def on_closing(self):
-        if messagebox.askokcancel(i18n.t("cancel"), "¿Desea cerrar el bot?"):
-            self.root.destroy()
+        if self.toggle_callback:
+            self.toggle_callback()
 
     # ==================== TAB: REPORTES ====================
     def setup_reports_tab(self):
@@ -1925,8 +1955,8 @@ class TradingBotGUI:
     def refresh_reports(self):
         """Actualiza todas las estadísticas de la pestaña Reportes."""
         all_positions = pos_manager.get_all_positions()
-        closed = [p for p in all_positions if p.status == "closed"]
-        open_pos = [p for p in all_positions if p.status == "open"]
+        closed = [p for p in all_positions if p.status == PositionStatus.CLOSED]
+        open_pos = [p for p in all_positions if p.status == PositionStatus.OPEN]
 
         # ─── Summary ───
         total = len(all_positions)
@@ -1944,7 +1974,7 @@ class TradingBotGUI:
             text=f"{win_rate:.1f}% ({win_count}/{closed_count})" if closed_count > 0 else "N/A")
         pnl_text = f"${total_pnl:+.2f}"
         self.reports_summary_labels["total_pnl"].config(text=pnl_text,
-            foreground="#00cc00" if total_pnl >= 0 else "#ff4444")
+            foreground=COLOR_GREEN if total_pnl >= 0 else COLOR_RED)
         self.reports_summary_labels["best_trade"].config(
             text=f"{best.symbol} ${best.pnl:+.2f}" if best else "--")
         self.reports_summary_labels["worst_trade"].config(
@@ -2014,10 +2044,10 @@ class TradingBotGUI:
                 tags = ("loss",)
             self.tree_reports_tr.insert("", tk.END, values=(
                 p.symbol, f"{side_emoji} {side_text}", pnl_str,
-                p.status.upper(), p.open_time), tags=tags)
+                p.status.value.upper(), p.open_time), tags=tags)
 
-        self.tree_reports_tr.tag_configure("profit", foreground="#00cc00")
-        self.tree_reports_tr.tag_configure("loss", foreground="#ff4444")
+        self.tree_reports_tr.tag_configure("profit", foreground=COLOR_GREEN)
+        self.tree_reports_tr.tag_configure("loss", foreground=COLOR_RED)
 
     def _update_ex_balance(self, exchange_id: str, balance: float):
         """Actualiza la columna Balance en la tabla por exchange."""
@@ -2030,14 +2060,18 @@ class TradingBotGUI:
 
     def _export_csv(self):
         """Exporta todas las posiciones a un archivo CSV."""
-        import csv
-        from datetime import datetime
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            title=i18n.t("export_csv")
+        )
+        if not filepath:
+            return
 
         try:
-            filename = f"trades_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
             all_positions = pos_manager.get_all_positions()
 
-            with open(filename, "w", newline="", encoding="utf-8") as f:
+            with open(filepath, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
                     "Exchange", "Symbol", "Side", "Entry Price",
@@ -2048,14 +2082,14 @@ class TradingBotGUI:
                         p.exchange_id, p.symbol, p.side, p.entry_price,
                         p.amount, p.leverage,
                         f"{p.pnl:.2f}" if p.pnl else "0.00",
-                        p.status, p.open_time
+                        p.status.value, p.open_time
                     ])
 
             messagebox.showinfo(
-                i18n.t("export_csv_success").format(file=filename),
-                f"{len(all_positions)} trades exportados a {filename}"
+                i18n.t("export_csv_success").format(file=filepath),
+                f"{len(all_positions)} trades exportados"
             )
-            logger.info(f"📥 CSV exportado: {filename} ({len(all_positions)} trades)")
+            logger.info(f"📥 CSV exportado: {filepath} ({len(all_positions)} trades)")
         except Exception as e:
             messagebox.showerror(i18n.t("export_csv_error"), str(e))
             logger.error(f"Error exportando CSV: {e}")

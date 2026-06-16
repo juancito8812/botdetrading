@@ -1,4 +1,5 @@
 """Sistema de traducciones Español/Inglés para la UI."""
+from utils.settings_manager import load_settings, save_settings
 
 TRANSLATIONS = {
     "es": {
@@ -95,7 +96,6 @@ TRANSLATIONS = {
         "risk_trailing": "Trailing Stop",
         "risk_trailing_activation": "Activación trailing (% ganancia):",
         "risk_trailing_distance": "Distancia trailing (%):",
-        "risk_breakeven": "Mover SL a Break-even al tocar TP1",
         "risk_save_success": "Configuración de riesgo actualizada correctamente.",
         
         # Settings
@@ -576,7 +576,6 @@ class I18n:
     """Gestor de internacionalización."""
     
     def __init__(self, lang: str = "es"):
-        self.lang = lang
         self.current_lang = lang
         self.listeners = []
     
@@ -584,6 +583,9 @@ class I18n:
         """Cambia el idioma."""
         if lang in TRANSLATIONS and lang != self.current_lang:
             self.current_lang = lang
+            settings = load_settings()
+            settings["language"] = lang
+            save_settings(settings)
             self._notify()
     
     def t(self, key: str) -> str:
