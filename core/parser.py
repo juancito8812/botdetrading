@@ -35,8 +35,11 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     entry_min = entry_max = None
     m_entry = re.search(r'(?:ENTRY|ENTRADA)[S]?\s*[:\-]?\s*([\d\.]+)(?:\s*[-a]\s*([\d\.]+))?', upper)
     if m_entry:
-        val1 = float(m_entry.group(1))
-        val2 = float(m_entry.group(2)) if m_entry.group(2) else val1
+        try:
+            val1 = float(m_entry.group(1))
+            val2 = float(m_entry.group(2)) if m_entry.group(2) else val1
+        except ValueError:
+            return None
         entry_min = min(val1, val2)
         entry_max = max(val1, val2)
         
@@ -44,18 +47,27 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     sl = None
     m_sl = re.search(r'(?:STOP\s*LOSS|SL|STOPLOSS)\s*[:\-]?\s*([\d\.]+)', upper)
     if m_sl:
-        sl = float(m_sl.group(1))
+        try:
+            sl = float(m_sl.group(1))
+        except ValueError:
+            return None
     
     # 5. Take Profits (TP/Targets)
     targets = []
     # Opción A: Lista en una sola línea (ej: "Targets: 66000, 67000" o "Take Profit: 66000")
     m_targets_line = re.search(r'(?:TARGETS\s*|TAKE\s*PROFIT)\s*[:\-]?\s*([\d\.\s\,\-]+)', upper)
     if m_targets_line:
-        targets = [float(x) for x in re.findall(r'[\d\.]+', m_targets_line.group(1))]
+        try:
+            targets = [float(x) for x in re.findall(r'[\d\.]+', m_targets_line.group(1))]
+        except ValueError:
+            return None
     else:
         # Opción B: Múltiples líneas individuales (TP1: xxx, Target 1: yyy...)
         tp_matches = re.finditer(r'(?:TP\s*\d+\s*|TARGET\s+\d+\s*)[:\-]\s*([\d\.]+)', upper)
-        targets = [float(m.group(1)) for m in tp_matches]
+        try:
+            targets = [float(m.group(1)) for m in tp_matches]
+        except ValueError:
+            return None
     
     if targets:
         # Ordenar targets según dirección

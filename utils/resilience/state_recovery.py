@@ -8,6 +8,8 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from utils.helpers import atomic_write_json
+
 logger = logging.getLogger("TradingBot")
 
 
@@ -118,8 +120,7 @@ class StateRecovery:
         """Guarda los checkpoints a un archivo JSON."""
         try:
             data = [cp.to_dict() for cp in self.checkpoints]
-            with open(filepath, "w") as f:
-                json.dump(data, f, indent=2)
+            atomic_write_json(filepath, data, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error persistiendo checkpoints: {e}")
 

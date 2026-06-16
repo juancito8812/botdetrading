@@ -5,6 +5,7 @@ import sys
 import subprocess
 import logging
 from pathlib import Path
+from typing import Tuple
 from utils.helpers import BASE_DIR, DATA_DIR, atomic_write_json
 
 logger = logging.getLogger("TradingBot")
@@ -78,7 +79,7 @@ def is_autostart_enabled() -> bool:
     except Exception:
         return False
 
-def enable_autostart() -> tuple[bool, str]:
+def enable_autostart() -> Tuple[bool, str]:
     """
     Crea una tarea en el Programador de Tareas para iniciar el bot al encender.
     Retorna (éxito, mensaje).
@@ -114,7 +115,7 @@ def enable_autostart() -> tuple[bool, str]:
         logger.error(f"Error en enable_autostart: {e}")
         return False, f"Error: {e}"
 
-def disable_autostart() -> tuple[bool, str]:
+def disable_autostart() -> Tuple[bool, str]:
     """
     Elimina la tarea del Programador de Tareas.
     Retorna (éxito, mensaje).

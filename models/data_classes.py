@@ -12,6 +12,7 @@ class Position:
     amount: float
     leverage: int
     sl_order_id: Optional[str] = None
+    sl_price: float = 0.0
     tp_order_ids: List[str] = field(default_factory=list)
     entry_order_ids: List[str] = field(default_factory=list)
     open_time: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))

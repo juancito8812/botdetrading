@@ -58,7 +58,6 @@ class ExchangeService:
                 await self.create_client(exchange_id, ex_creds)
             return exchange_id in self.clients
 
-    @retry_decorator(max_retries=2, base_delay=2.0)
     @timeout_decorator(seconds=60)
     async def create_client(self, exchange_id: str, creds: Dict[str, Any]) -> Optional[Any]:
         """Crea e inicializa un cliente de CCXT."""
@@ -129,7 +128,13 @@ class ExchangeService:
             
             balance = await client.fetch_balance(params=params)
             usdt = balance.get('USDT', {})
-            return float(usdt.get('free') or usdt.get('available') or usdt.get('total') or 0.0)
+            free = usdt.get('free')
+            if free is not None:
+                return float(free)
+            avail = usdt.get('available')
+            if avail is not None:
+                return float(avail)
+            return float(usdt.get('total', 0.0))
         except Exception as e:
             logger.error(f"Error balance {exchange_id}: {e}")
             return 0.0

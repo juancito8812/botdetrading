@@ -18,12 +18,8 @@ else:
     DATA_DIR = BASE_DIR
 
 # --- PARCHE DNS PARA WINDOWS ---
-# ... (rest of helper code) ...
 def patch_aiohttp_dns():
-    """
-    Parche para forzar el uso de ThreadedResolver en aiohttp,
-    evitando errores de DNS en entornos Windows.
-    """
+    """Parchea aiohttp para usar ThreadedResolver en Windows."""
     _original_tcp_init = aiohttp.TCPConnector.__init__
 
     def _patched_tcp_init(self, *, resolver=None, **kwargs):

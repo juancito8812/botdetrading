@@ -153,6 +153,9 @@ class TradingEngine:
     @log_errors_decorator(context={"module": "trading_engine"})
     async def execute_signal(self, signal: Signal, config: dict, exchange_id: str):
         """Orquesta la ejecución de una señal en un exchange específico."""
+        task = asyncio.current_task()
+        self.active_tasks.add(task)
+
         cooldown = config.get("cooldown_segundos", 30)
         if self._is_duplicate(signal.simbolo, signal.direccion, exchange_id, cooldown):
             logger.info(f"⏭️ Señal duplicada ignorada en {exchange_id}: {signal.simbolo} {signal.direccion}")
@@ -219,6 +222,7 @@ class TradingEngine:
                 entry_price=entry_price,
                 amount=amount,
                 leverage=leverage,
+                sl_price=signal.stop_loss or 0.0,
                 highest_price=entry_price if signal.direccion.lower() == 'buy' else 0.0,
                 lowest_price=entry_price if signal.direccion.lower() == 'sell' else float('inf'),
                 entry_order_ids=[entry_order_id] if entry_order_id else []
@@ -243,6 +247,8 @@ class TradingEngine:
 
         except Exception as e:
             logger.error(f"Error fatal ejecutando señal en {exchange_id}: {e}", exc_info=True)
+        finally:
+            self.active_tasks.discard(task)
 
     async def _decide_entry_type(
         self, exchange_id: str, market_symbol: str,
@@ -282,7 +288,7 @@ class TradingEngine:
         # Decidir MARKET vs LIMIT
         in_range = (
             entry_min_val <= price <= entry_max_val
-        ) if entry_min_val and entry_max_val else False
+        ) if entry_min_val is not None and entry_max_val is not None else False
 
         if modalidad == "market" or in_range:
             # El precio ya está en rango → MARKET
@@ -377,7 +383,7 @@ class TradingEngine:
             return False, err
 
         price_now = await exchange_service.get_ticker_price(exchange_id, market_symbol)
-        amount = (usdt_to_use * leverage) / price_now
+        amount = (usdt_to_use * leverage) / limit_price
         amount = float(client.amount_to_precision(market_symbol, amount))
 
         params = self._get_exchange_params(exchange_id, side_upper, config)
@@ -600,14 +606,14 @@ class TradingEngine:
                         }
                     )
                 new_pos.tp_order_ids.append(tp_order.get('id'))
-                logger.info(f"🎯 Target {i+1} colocado a {target} ({(tp_amounts[i]/sum(tp_amounts)*100):.0f}%)")
+                total_tp = sum(tp_amounts)
+                pct_str = f" ({(tp_amounts[i]/total_tp*100):.0f}%)" if total_tp > 0 else ""
+                logger.info(f"🎯 Target {i+1} colocado a {target}{pct_str}")
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo colocar TP{i+1} en {exchange_id}: {e}")
 
     async def _process_filled_limit_order(self, exchange_id, market_symbol, order, pending):
         """Procesa una orden LIMIT que se llenó. Crea posición + SL/TP."""
-        from models.data_classes import Signal
-
         side = pending["side"]
         side_upper = pending["side_upper"]
         # Reconstruir Signal si vino como dict desde disco
@@ -636,6 +642,7 @@ class TradingEngine:
             entry_price=entry_price,
             amount=filled,
             leverage=leverage,
+            sl_price=signal.stop_loss or 0.0,
             highest_price=entry_price if side == 'buy' else 0.0,
             lowest_price=entry_price if side == 'sell' else float('inf'),
             entry_order_ids=[order.get('id')],
@@ -684,11 +691,16 @@ class TradingEngine:
                     logger.warning(f"⏰ Timeout de orden LIMIT {order_id} en {exchange_id}")
                     try:
                         await client.cancel_order(order_id, market_symbol)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error cancelando orden LIMIT {order_id} en {exchange_id}: {e}")
                     stale_orders.append(order_id)
             except Exception:
                 if elapsed > timeout_min * 60:
+                    try:
+                        await client.cancel_order(order_id, market_symbol)
+                        logger.info(f"✅ Orden LIMIT cancelada (timeout fetch): {order_id}")
+                    except Exception as cancel_err:
+                        logger.warning(f"⚠️ No se pudo cancelar orden huérfana {order_id}: {cancel_err}")
                     stale_orders.append(order_id)
 
         for oid in stale_orders:
@@ -711,7 +723,7 @@ class TradingEngine:
                 )
 
                 if position_data:
-                    contracts = float(position_data.get('contracts', 0))
+                    contracts = float(position_data.get('contracts') or position_data.get('size') or position_data.get('amount', 0))
                     if contracts == 0:
                         pos.status = "closed"
                         pos_manager.save()
@@ -771,10 +783,10 @@ class TradingEngine:
     async def _sync_failed_exchanges(self):
         """Reintenta conexión con exchanges fallidos."""
         from utils.config import load_api_creds
+        creds = load_api_creds()
         failed_snapshot = list(exchange_service.failed_exchanges)
         for ex_id in failed_snapshot:
             logger.info(f"🔄 Reintentando conexión con {ex_id}...")
-            creds = load_api_creds()
             ex_creds = creds["exchanges"].get(ex_id, {})
             if ex_creds.get("enabled"):
                 await exchange_service.create_client(ex_id, ex_creds)
@@ -786,6 +798,15 @@ class TradingEngine:
             del self.processed_signals[k]
         if stale_keys:
             logger.debug(f"🧹 Limpiadas {len(stale_keys)} señales antiguas del caché")
+
+    async def cancel_pending_tasks(self):
+        """Cancela todas las tareas de ejecución de señales pendientes."""
+        for task in list(self.active_tasks):
+            task.cancel()
+        if self.active_tasks:
+            await asyncio.gather(*self.active_tasks, return_exceptions=True)
+            self.active_tasks.clear()
+        logger.info("⏹️ Tareas pendientes canceladas")
 
     def stop_watchdog(self):
         """Cancela el watchdog si está corriendo."""

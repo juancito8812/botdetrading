@@ -75,14 +75,21 @@ class BackupManager:
                 logger.warning(f"Error rotando backup {oldest}: {e}")
 
     def _list_backups(self, name: str) -> List[str]:
-        """Lista los backups de un tipo, ordenados por fecha (más antiguos primero)."""
+        """Lista los backups de un tipo, ordenados por fecha (más antiguos primeros)."""
         pattern = f"{name}_"
         backups = []
         for f in os.listdir(self.backup_dir):
             if f.startswith(pattern) and f.endswith(".json.gz"):
                 full_path = os.path.join(self.backup_dir, f)
                 backups.append(full_path)
-        backups.sort(key=os.path.getmtime)
+
+        def _safe_getmtime(path):
+            try:
+                return os.path.getmtime(path)
+            except OSError:
+                return 0
+
+        backups.sort(key=_safe_getmtime)
         return backups
 
     def restore_latest(self, target_path: str, name: str) -> bool:

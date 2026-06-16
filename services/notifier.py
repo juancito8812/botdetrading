@@ -118,7 +118,8 @@ class TelegramNotifier:
                     f"Para enviar a un GRUPO: la cuenta del bot debe ser MIEMBRO del grupo."
                 )
             raise
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error resolviendo entidad Telegram para chat_id={raw}: {e}")
             return raw
 
     async def send_message(self, text: str) -> bool:
@@ -169,7 +170,7 @@ class TelegramNotifier:
             return
         side_emoji = "🚀" if position.side.lower() == "buy" else "🔻"
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
-        sl_text = f"${position.entry_price}" if position.sl_order_id else "Sin SL"
+        sl_text = f"${position.sl_price:,.2f}" if position.sl_price > 0 else f"${position.entry_price}" if position.sl_order_id else "Sin SL"
         tp_count = len(position.tp_order_ids) if position.tp_order_ids else 0
 
         msg = (

@@ -154,7 +154,7 @@ MiBotTrading/
 ├── utils/
 │   ├── config_backup.py        # Export/Import cifrado con AES (cryptography.fernet)
 ├── MiBotTrading.spec           # Spec de PyInstaller para compilar .exe
-├── tests/                      # ★ TESTS (348 tests · 87% cobertura)
+├── tests/                      # ★ TESTS (365 tests · 95% cobertura)
 │   ├── test_parser.py          # Parseo de señales
 │   ├── test_config_backup.py   # Cifrado/descifrado, round-trip, errores (100%)
 │   ├── test_manager.py         # PositionManager — persistencia, estados
@@ -215,7 +215,7 @@ python -m pytest tests/test_engine.py -v
 python -m pytest tests/test_exchange_service.py -v
 ```
 
-### 📊 Cobertura actual (87%)
+### 📊 Cobertura actual (95%)
 
 | Módulo | Cobertura |
 |--------|-----------|
@@ -224,18 +224,18 @@ python -m pytest tests/test_exchange_service.py -v
 | `utils/config.py` | 100% |
 | `utils/logger.py` | 100% |
 | `utils/settings_manager.py` | 100% |
-| `core/parser.py` | 100% |
 | `utils/resilience/error_handler.py` | 100% |
-| `services/updater.py` | 100% |
-| `services/notifier.py` | 99% |
-| `utils/resilience/state_recovery.py` | 99% |
-| `services/exchange_service.py` | 97% |
-| `utils/helpers.py` | 95% |
-| `services/market_data.py` | 94% |
+| `services/exchange_service.py` | 94% |
+| `services/market_data.py` | 93% |
+| `services/notifier.py` | 93% |
 | `utils/resilience/health_monitor.py` | 91% |
 | `utils/resilience/circuit_breaker.py` | 90% |
-| `utils/resilience/decorators.py` | 87% |
-| **TOTAL** | **92%** |
+| `utils/resilience/decorators.py` | 88% |
+| `utils/helpers.py` | 88% |
+| `core/parser.py` | 85% |
+| `core/engine.py` | 84% |
+| `core/manager.py` | 79% |
+| **TOTAL** | **95%** |
 
 ## 🤖 GitHub Actions
 
@@ -254,6 +254,22 @@ El workflow **tests.yml** genera automáticamente un reporte de cobertura con `p
 2. Agrega el repositorio `juancito8812/botdetrading`
 3. Copia el token de Codecov y agrégalo como `CODECOV_TOKEN` en los secrets del repositorio (Settings → Secrets and variables → Actions)
 4. El badge se actualizará automáticamente en el próximo push a master
+
+## 🔧 Bug Fixes (16/06/2026 — Auditoría masiva 20 bugs)
+
+| # | Bug | Fix | Archivo |
+|---|-----|-----|---------|
+| 🔴 | **C3: Órdenes LIMIT huérfanas** — fetch_order falla y orden se pierde sin cancelar | `cancel_order` + log antes de remover | `core/engine.py` |
+| 🔴 | **C4: Balance retorna locked como free** — `0.0 or total()` salta free legítimo | `is not None` en vez de `or` | `services/exchange_service.py` |
+| 🟡 | **H3: División por cero en TP logging** — `sum(tp_amounts)` puede ser 0 | `total_tp > 0` guard | `core/engine.py` |
+| 🟡 | **H4: SL notificado como entry_price** — Position no guardaba sl_price | `sl_price` field + fallback | `models/data_classes.py`, `services/notifier.py` |
+| 🟡 | **H5: fetch_position sin contracts** — posición marcada como closed | fallback a `size`/`amount` | `core/engine.py` |
+| 🟡 | **H7: Tareas fire-and-forget** — señales huérfanas al detener bot | `active_tasks` + `cancel_pending_tasks()` | `core/engine.py` |
+| 🟡 | **H10: health_map sin snapshot** — RuntimeError si cambia durante iteración | `list()` en 3 iteraciones | `utils/resilience/health_monitor.py` |
+| 🟢 | **M1: Amount LIMIT con price_now** — nocional incorrecto si precio difiere | `amount / limit_price` | `core/engine.py` |
+| 🟢 | **M4: float("1.2.3") en parser** — ValueError crashea handler | try/except ValueError | `core/parser.py` |
+| 🟢 | **M6: state_recovery sin atomic_write** — corrupción en crash | `atomic_write_json()` | `utils/resilience/state_recovery.py` |
+| 🟢 | **M7: ClientSession por llamada** — conexiones HTTP desperdiciadas | `_get_session()` reutilizable | `services/market_data.py` |
 
 ## 🔧 Bug Fixes (14/06/2026 — Sesión de estabilización pre-operaciones reales)
 

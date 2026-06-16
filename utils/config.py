@@ -4,6 +4,8 @@ import logging
 from dotenv import load_dotenv, set_key
 from utils.helpers import atomic_write_json, BASE_DIR, DATA_DIR
 
+logger = logging.getLogger("TradingBot")
+
 # Archivos de configuración (se leen desde BASE_DIR, junto al .exe)
 ENV_FILE = BASE_DIR / ".env"
 CONFIG_FILE = BASE_DIR / "config.json"
@@ -80,7 +82,8 @@ def load_risk_config():
                 if k not in data:
                     data[k] = v
             return data
-    except Exception:
+    except Exception as e:
+        logger.warning(f"⚠️ Error cargando config.json, usando defaults: {e}")
         return _get_default_risk_config()
 
 def _get_default_risk_config():

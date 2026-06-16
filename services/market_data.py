@@ -4,6 +4,7 @@ import aiohttp
 from aiohttp import ClientTimeout
 import logging
 import time
+from typing import Optional
 
 logger = logging.getLogger("TradingBot")
 
@@ -13,6 +14,16 @@ TIMEOUT = ClientTimeout(total=15)
 # Cache simple con TTL de 60s para evitar rate limiting (429)
 _cache = {}
 _cache_ttl = 60
+
+# Sesión HTTP reutilizable para connection pooling
+_session: Optional[aiohttp.ClientSession] = None
+
+
+async def _get_session() -> aiohttp.ClientSession:
+    global _session
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession()
+    return _session
 
 
 def invalidate_cache():
@@ -53,31 +64,30 @@ async def fetch_top20() -> list:
         return cached
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, timeout=TIMEOUT) as resp:
-                if resp.status == 429:
-                    logger.warning("CoinGecko rate limited (429), usando caché")
-                    return _get_from_cache("top20") or []
-                if resp.status != 200:
-                    logger.error(f"CoinGecko error {resp.status}")
-                    return []
-                data = await resp.json()
-                
-                results = []
-                for coin in data:
-                    symbol = coin.get("symbol", "").upper()
-                    change = coin.get("price_change_percentage_24h")
-                    results.append({
-                        "symbol": symbol,
-                        "name": coin.get("name", symbol),
-                        "price": coin.get("current_price", 0) or 0,
-                        "change_24h": change if change is not None else 0,
-                        "volume": coin.get("total_volume", 0) or 0,
-                        "market_cap": coin.get("market_cap", 0) or 0,
-                        "image": coin.get("image", ""),
-                    })
-                _set_cache("top20", results)
-                return results
+        session = await _get_session()
+        async with session.get(url, params=params, timeout=TIMEOUT) as resp:
+            if resp.status == 429:
+                logger.warning("CoinGecko rate limited (429), usando caché")
+                return _get_from_cache("top20") or []
+            if resp.status != 200:
+                logger.error(f"CoinGecko error {resp.status}")
+                return []
+            data = await resp.json()
+            results = []
+            for coin in data:
+                symbol = coin.get("symbol", "").upper()
+                change = coin.get("price_change_percentage_24h")
+                results.append({
+                    "symbol": symbol,
+                    "name": coin.get("name", symbol),
+                    "price": coin.get("current_price", 0) or 0,
+                    "change_24h": change if change is not None else 0,
+                    "volume": coin.get("total_volume", 0) or 0,
+                    "market_cap": coin.get("market_cap", 0) or 0,
+                    "image": coin.get("image", ""),
+                })
+            _set_cache("top20", results)
+            return results
     except asyncio.TimeoutError:
         logger.warning("CoinGecko timeout, usando caché")
         return _get_from_cache("top20") or []
@@ -108,38 +118,39 @@ async def fetch_market_indices() -> dict:
     
     try:
         # Global data de CoinGecko
-        async with aiohttp.ClientSession() as session:
-            url = f"{COINGECKO_BASE}/global"
-            async with session.get(url, timeout=TIMEOUT) as resp:
-                if resp.status == 429:
-                    logger.warning("CoinGecko rate limited (429) en global data")
-                    return _get_from_cache("indices") or indices
-                if resp.status == 200:
-                    data = await resp.json()
-                    gdata = data.get("data", {})
-                    indices["total_market_cap"] = gdata.get("total_market_cap", {}).get("usd", 0) or 0
-                    indices["total_volume_24h"] = gdata.get("total_volume", {}).get("usd", 0) or 0
-                    indices["btc_dominance"] = gdata.get("market_cap_percentage", {}).get("btc", 0) or 0
-                    indices["eth_dominance"] = gdata.get("market_cap_percentage", {}).get("eth", 0) or 0
-                    indices["market_cap_change_24h"] = gdata.get("market_cap_change_percentage_24h_usd", 0) or 0
+        session = await _get_session()
+        url = f"{COINGECKO_BASE}/global"
+        async with session.get(url, timeout=TIMEOUT) as resp:
+            if resp.status == 429:
+                logger.warning("CoinGecko rate limited (429) en global data")
+                return _get_from_cache("indices") or indices
+            if resp.status == 200:
+                data = await resp.json()
+                gdata = data.get("data", {})
+                indices["total_market_cap"] = gdata.get("total_market_cap", {}).get("usd", 0) or 0
+                indices["total_volume_24h"] = gdata.get("total_volume", {}).get("usd", 0) or 0
+                indices["btc_dominance"] = gdata.get("market_cap_percentage", {}).get("btc", 0) or 0
+                indices["eth_dominance"] = gdata.get("market_cap_percentage", {}).get("eth", 0) or 0
+                indices["market_cap_change_24h"] = gdata.get("market_cap_change_percentage_24h_usd", 0) or 0
     except asyncio.TimeoutError:
         logger.warning("CoinGecko timeout en global data")
         return _get_from_cache("indices") or indices
     except Exception as e:
         logger.error(f"Error fetching global data: {e}")
+        return _get_from_cache("indices") or indices
 
     # Obtener precios de BTC y ETH para referencia
     try:
-        async with aiohttp.ClientSession() as session:
-            url = f"{COINGECKO_BASE}/simple/price"
-            params = {"ids": "bitcoin,ethereum", "vs_currencies": "usd", "include_24hr_change": "true"}
-            async with session.get(url, params=params, timeout=TIMEOUT) as resp:
-                if resp.status == 429:
-                    logger.warning("CoinGecko rate limited (429) en precios")
-                elif resp.status == 200:
-                    data = await resp.json()
-                    indices["btc_price"] = data.get("bitcoin", {}).get("usd", 0) or 0
-                    indices["eth_price"] = data.get("ethereum", {}).get("usd", 0) or 0
+        session = await _get_session()
+        url = f"{COINGECKO_BASE}/simple/price"
+        params = {"ids": "bitcoin,ethereum", "vs_currencies": "usd", "include_24hr_change": "true"}
+        async with session.get(url, params=params, timeout=TIMEOUT) as resp:
+            if resp.status == 429:
+                logger.warning("CoinGecko rate limited (429) en precios")
+            elif resp.status == 200:
+                data = await resp.json()
+                indices["btc_price"] = data.get("bitcoin", {}).get("usd", 0) or 0
+                indices["eth_price"] = data.get("ethereum", {}).get("usd", 0) or 0
     except asyncio.TimeoutError:
         logger.warning("CoinGecko timeout en precios BTC/ETH")
     except Exception as e:

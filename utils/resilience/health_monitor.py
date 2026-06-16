@@ -122,7 +122,7 @@ class HealthMonitor:
         """Retorna un resumen de salud de todos los exchanges."""
         return {
             eid: health.to_dict()
-            for eid, health in self._health_map.items()
+            for eid, health in list(self._health_map.items())
         }
 
     async def _check_single_exchange(self, exchange_id: str):
@@ -169,7 +169,7 @@ class HealthMonitor:
         for exchange_id in list(self._health_map.keys()):
             await self._check_single_exchange(exchange_id)
 
-        for eid, health in self._health_map.items():
+        for eid, health in list(self._health_map.items()):
             if health.status != HealthStatus.HEALTHY:
                 logger.warning(
                     f"📊 {eid}: {health.status.value} "
@@ -204,7 +204,7 @@ class HealthMonitor:
         try:
             data = {
                 eid: health.to_dict()
-                for eid, health in self._health_map.items()
+                for eid, health in list(self._health_map.items())
             }
             with open(filepath, "w") as f:
                 json.dump(data, f, indent=2)

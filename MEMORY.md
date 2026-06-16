@@ -1,6 +1,6 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
-*Última actualización: 15/06/2026 (America/Caracas)*
+*Última actualización: 16/06/2026 (America/Caracas)*
 
 ---
 
@@ -26,11 +26,16 @@
 - [x] Watchdog cada 30s (monitoreo y sincronización)
 - [x] Persistencia de posiciones en disco
 - [x] Interfaz gráfica completa
-- [x] Tests unitarios (365 tests, 92% cobertura)
+- [x] Tests unitarios (365 tests, 95% cobertura)
 - [x] GitHub Actions (tests, lint, build)
 - [x] Pre-commit hook Superpowers (valida MEMORY.md + SESSION_HANDOFF.md)
 - [x] Repositorio en GitHub
 - [x] Auto-Updater (check/download/apply via GitHub Releases + UI en Settings)
+- [x] Ordenes LIMIT huerfanas corregidas (cancel en exchange antes de remover)
+- [x] Balance exchange corregido (free vs locked)
+- [x] SL real en notificaciones (sl_price en Position)
+- [x] Cliente HTTP reutilizable (connection pooling en CoinGecko)
+- [x] Escritura atomica en state_recovery
 
 ---
 
@@ -208,19 +213,19 @@ TradingEngine.watchdog()
 
 **Ejecutar:** `python -m pytest tests/ -v`
 
-### Estado actual (15/06/2026)
+### Estado actual (16/06/2026)
 | Métrica | Valor |
 |---------|-------|
 | Tests totales | **365** |
-| Cobertura | **92%** |
+| Cobertura | **95%** |
 | Módulos al 100% | 11 |
 | Archivos de test | 20 |
 | Pre-commit hook | ✅ `.githooks/pre-commit` |
-| .exe | ✅ `dist/MiBotTrading.exe` (sin consola, StringSession, bugfixes C1/C2) |
 | Telegram reconexión | ✅ StringSession + lock threading + cleanup loop |
-| Auto-Updater | ✅ check/download/apply via GitHub Releases + UI |
-| Signal serialization | ✅ _signal_to_dict / _signal_from_dict + default=str |
-| Decoradores exchange_id | ✅ _extract_exchange_id (kwargs/args scan) |
+| Bugfixes C1-C4 | ✅ Signal serialization, decoradores, orphaned orders, balance |
+| Bugfixes H3-H10 | ✅ TP div/0, sl_price, fetch_position, task tracking, health_map snapshot |
+| Bugfixes M1-M7 | ✅ limit amount, retry create_client, parser ValueError, ClientSession reuse, atomic_write, etc. |
+| Bugfixes L2-L7 | ✅ load_api_creds, backup sort, config warning, tuple compat |
 
 ---
 
@@ -283,12 +288,18 @@ TARGETS: 120, 130
 
 4. **Dependencia de CoinGecko** — El dashboard usa la API gratuita de CoinGecko, tiene límite de 10-30 llamadas/minuto.
 
-### Bugs corregidos en última sesión
+### Bugs corregidos en ultima sesion (16/06/2026)
 
-| Bug | Archivo | Síntoma | Solución |
+| Bug | Archivo | Sintoma | Solucion |
 |-----|---------|---------|----------|
-| **C1** | `core/engine.py` | `json.dump` crashea con `Signal` dataclass en `_pending_limit_orders` | `_signal_to_dict()`/`_signal_from_dict()` + `default=str` |
-| **C2** | `utils/resilience/decorators.py` | Todos los exchanges compartían un solo circuit breaker porque `args[0]` era `self` no `exchange_id` | `_extract_exchange_id()` helper que busca kwargs + args scan |
+| **C3** | `core/engine.py` | Ordenes LIMIT huerfanas en exchange | `cancel_order` + log antes de remover de pending |
+| **C4** | `services/exchange_service.py` | Balance retorna locked como free (0.0 or chain) | `is not None` en vez de `or` |
+| **H4** | `models/data_classes.py` | Notificaciones muestran entry_price como SL | `sl_price` field + fallback a entry_price |
+| **H7** | `core/engine.py` | Tareas asyncio fire-and-forget sin tracking | `active_tasks set` + `cancel_pending_tasks()` |
+| **H10** | `utils/resilience/health_monitor.py` | RuntimeError si health_map cambia durante iteracion | `list()` snapshot en 3 iteraciones |
+| **M1** | `core/engine.py` | Cantidad LIMIT calculada con precio actual, no limit | `amount / limit_price` en vez de `amount / price_now` |
+| **M6** | `utils/resilience/state_recovery.py` | Escritura sin atomic_write — corrupcion en crash | `atomic_write_json()` |
+| **M7** | `services/market_data.py` | ClientSession nuevo por llamada — waste conexiones | `_get_session()` reutilizable |
 
 ---
 
