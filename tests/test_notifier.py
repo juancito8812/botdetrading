@@ -150,12 +150,19 @@ async def test_send_message_error(notifier, mock_telegram):
 
 @pytest.mark.asyncio
 async def test_notify_tp_hit(notifier, mock_telegram):
-    """Notificación de TP alcanzado."""
+    """Notificación de TP alcanzado (batching)."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
     pos = Position(
         exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
         side="Buy", entry_price=67000, amount=0.1, leverage=5,
     )
-    await notifier.notify_tp_hit(pos, 1)
+    mock_entity = AsyncMock()
+    mock_telegram.get_entity.return_value = mock_entity
+    with patch('services.notifier.asyncio.sleep', AsyncMock()):
+        await notifier.notify_tp_hit(pos, 1, tp_price=68000, tp_pnl=150.0)
+        if notifier._batch_task:
+            await notifier._batch_task
     args = mock_telegram.send_message.call_args[0]
     assert "TP1" in args[1] or "tp1" in args[1]
     assert "BTC/USDT" in args[1]

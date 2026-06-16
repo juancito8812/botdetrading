@@ -2,6 +2,7 @@ import asyncio
 import os
 import threading
 import time
+from datetime import datetime
 import tkinter as tk
 from telethon import TelegramClient, events
 from telethon.errors.rpcerrorlist import AuthKeyDuplicatedError
@@ -52,6 +53,7 @@ class TradingBotApp:
         # Cache de config para evitar IO en cada mensaje
         self._cached_config = {}
         self._last_config_refresh = 0.0
+        self._was_disconnected = False
 
         # Configurar parche DNS
         patch_aiohttp_dns()
@@ -377,6 +379,10 @@ class TradingBotApp:
                     continue
 
                 logger.info("✅ Bot conectado a Telegram con éxito.")
+                if self._was_disconnected:
+                    if trading_engine.notifier:
+                        await trading_engine.notifier.send_message("🔗 Bot reconectado a Telegram")
+                    self._was_disconnected = False
                 self._save_telegram_session()
                 me = await tc.get_me()
                 user_first = getattr(me, 'first_name', '?')
@@ -420,6 +426,11 @@ class TradingBotApp:
                 break
             except Exception as e:
                 logger.error(f"Error en bucle de Telegram: {e}", exc_info=True)
+                if trading_engine.notifier:
+                    await trading_engine.notifier.send_message(
+                        f"🔌 Bot desconectado de Telegram\nReintentando en 30 segundos..."
+                    )
+                self._was_disconnected = True
                 if self.bot_running.is_set():
                     logger.warning("🔄 Reintentando conexión en 30 segundos...")
                     await asyncio.sleep(30)
@@ -469,6 +480,8 @@ class TradingBotApp:
                     except Exception as e:
                         logger.warning(f"⚠️ {ex_id}: Error conectando: {e}")
         asyncio.create_task(_init_exchanges())
+
+        asyncio.create_task(self._alive_loop())
 
         # 3. Ejecutar el bucle de reconexión de Telegram
         logger.info("Iniciando bucle de reconexión de Telegram...")
@@ -548,6 +561,24 @@ class TradingBotApp:
         # Ejecutar en un hilo separado para no bloquear la UI
         thread = threading.Thread(target=_do_check, daemon=True)
         thread.start()
+
+    async def _alive_loop(self):
+        while self.bot_running.is_set():
+            notifier = trading_engine.notifier
+            if notifier:
+                now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+                from core.manager import pos_manager
+                open_positions = pos_manager.get_open_positions()
+                total_pnl = sum(p.pnl or 0.0 for p in open_positions)
+                exchanges = list(exchange_service.clients.keys())
+                msg = (
+                    f"💓 Bot activo — {now_str}\n"
+                    f"Exchanges: {', '.join(exchanges) if exchanges else 'Ninguno'}\n"
+                    f"Posiciones abiertas: {len(open_positions)}\n"
+                    f"PnL flotante: ${total_pnl:+.2f}"
+                )
+                await notifier.send_message(msg)
+            await asyncio.sleep(14400)
 
 
 if __name__ == "__main__":

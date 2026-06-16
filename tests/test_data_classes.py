@@ -159,6 +159,26 @@ def test_position_entry_order_ids():
     assert "order_1" in p.entry_order_ids
 
 
+def test_position_exit_fields_default_none():
+    """exit_price y close_time son None por defecto."""
+    p = Position(
+        exchange_id="bitget",
+        symbol="BTC/USDT",
+        market_symbol="BTC/USDT:USDT",
+        side="Buy",
+        entry_price=67000.0,
+        amount=0.01,
+        leverage=5,
+    )
+    assert p.exit_price is None
+    assert p.close_time is None
+    # también se pueden setear explícitamente
+    p.exit_price = 68000.0
+    p.close_time = 1234567890.0
+    assert p.exit_price == 68000.0
+    assert p.close_time == 1234567890.0
+
+
 def test_position_open_time_generated():
     """open_time se genera automáticamente si no se especifica."""
     before = time.time()

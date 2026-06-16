@@ -21,6 +21,9 @@ DEFAULT_NOTIFICATION_PREFS = {
     "circuit_breaker": True,
     "system_error": True,
     "daily_report": True,
+    "sl_hit": True,
+    "signal_received": True,
+    "limit_filled": True,
 }
 
 
@@ -58,6 +61,8 @@ class TelegramNotifier:
         self._resolved_entity = None  # Cache de entidad resuelta
         self._last_send_time = 0.0  # Para rate limiting
         self._cached_chat_id: Optional[str] = None  # chat_id con el que se resolvió la entidad
+        self._pending_tp_batch: List[Dict] = []
+        self._batch_task: Optional[asyncio.Task] = None
 
     def is_notification_enabled(self, notif_type: str) -> bool:
         """Verifica si un tipo de notificación está habilitado."""
@@ -81,6 +86,22 @@ class TelegramNotifier:
     def get_recent(self, count: int = 20) -> List[str]:
         """Retorna las últimas N notificaciones."""
         return self.history[-count:]
+
+
+    async def _flush_tp_batch(self):
+        await asyncio.sleep(5)
+        if not self._pending_tp_batch:
+            return
+        symbol = self._pending_tp_batch[0].get("symbol", "")
+        lines = [f"🎯 TPs alcanzados — {symbol}"]
+        for tp in self._pending_tp_batch:
+            num = tp.get("number", "")
+            price = tp.get("price", 0)
+            pnl = tp.get("pnl")
+            pnl_str = f" (${pnl:+.2f})" if pnl is not None else ""
+            lines.append(f"  TP{num}: ${price:,.2f}{pnl_str}")
+        await self.send_message("\n".join(lines))
+        self._pending_tp_batch = []
 
     async def _resolve_chat_id(self) -> Any:
         """
@@ -164,12 +185,17 @@ class TelegramNotifier:
             return False
 
     async def notify_trade_open(self, position: Position):
-        """Notifica apertura de una posición."""
         if not self.is_notification_enabled("trade_open"):
             return
         side_emoji = "🚀" if position.side.lower() == "buy" else "🔻"
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
-        sl_text = f"${position.sl_price:,.2f}" if position.sl_price > 0 else f"${position.entry_price:,.2f}" if position.sl_order_id else "Sin SL"
+        size_usdt = position.amount * position.entry_price * position.leverage
+        if position.sl_price and position.sl_price > 0:
+            sl_text = f"${position.sl_price:,.2f}"
+        elif position.sl_order_id:
+            sl_text = "Colocado"
+        else:
+            sl_text = "Sin SL"
         tp_count = len(position.tp_order_ids) if position.tp_order_ids else 0
 
         msg = (
@@ -177,7 +203,7 @@ class TelegramNotifier:
             f"Exchange: {position.exchange_id}\n"
             f"Símbolo: {position.symbol}\n"
             f"Entrada: ${position.entry_price:,.2f}\n"
-            f"Cantidad: {position.amount}\n"
+            f"Tamaño: ${size_usdt:,.2f}\n"
             f"Apalancamiento: {position.leverage}x\n"
             f"SL: {sl_text}\n"
             f"TPs: {tp_count} niveles"
@@ -186,13 +212,23 @@ class TelegramNotifier:
         self._add_to_history(f"{side_emoji} {side_text} ABIERTA {position.symbol}")
 
     async def notify_trade_closed(self, position: Position):
-        """Notifica cierre de una posición."""
         if not self.is_notification_enabled("trade_closed"):
             return
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
         pnl_val = position.pnl if position.pnl is not None else 0.0
-        pnl_str = f"{pnl_val:+.2f}"
+        entry_val = position.entry_price * position.amount if position.entry_price and position.amount > 0 else 0
+        pnl_pct = (pnl_val / entry_val) * 100 if entry_val > 0 else 0.0
         emoji = "✅" if pnl_val >= 0 else "❌"
+        exit_p = position.exit_price if position.exit_price else position.entry_price
+        duration = ""
+        if position.close_time and position.open_time:
+            mins = int((position.close_time - position.open_time) / 60)
+            hours = mins // 60
+            mins = mins % 60
+            if hours > 0:
+                duration = f"Duración: {hours}h {mins}min\n"
+            else:
+                duration = f"Duración: {mins}min\n"
 
         msg = (
             f"{emoji} POSICIÓN CERRADA\n"
@@ -200,23 +236,69 @@ class TelegramNotifier:
             f"Símbolo: {position.symbol}\n"
             f"Side: {side_text}\n"
             f"Entrada: ${position.entry_price:,.2f}\n"
-            f"PnL: ${pnl_str}"
+            f"Salida: ${exit_p:,.2f}\n"
+            f"PnL: ${pnl_val:+.2f} ({pnl_pct:+.2f}%)\n"
+            f"{duration}"
         )
         await self.send_message(msg)
-        self._add_to_history(f"{emoji} CERRADA {position.symbol} ${pnl_str}")
+        self._add_to_history(f"{emoji} CERRADA {position.symbol} ${pnl_val:+.2f}")
 
-    async def notify_tp_hit(self, position: Position, tp_number: int):
-        """Notifica que se alcanzó un Take Profit."""
+    async def notify_tp_hit(self, position: Position, tp_number: int, tp_price: float = None, tp_pnl: float = None):
         if not self.is_notification_enabled("tp_hit"):
             return
+        self._pending_tp_batch.append({
+            "symbol": position.symbol,
+            "number": tp_number,
+            "price": tp_price or 0,
+            "pnl": tp_pnl,
+        })
+        if self._batch_task is None or self._batch_task.done():
+            self._batch_task = asyncio.create_task(self._flush_tp_batch())
+
+    async def notify_sl_hit(self, position: Position):
+        if not self.is_notification_enabled("sl_hit"):
+            return
+        loss = position.pnl if position.pnl is not None else 0.0
+        exit_p = position.exit_price if position.exit_price else position.entry_price
         msg = (
-            f"🎯 TP{tp_number} alcanzado\n"
-            f"Símbolo: {position.symbol}\n"
+            f"🛑 STOP LOSS EJECUTADO\n"
             f"Exchange: {position.exchange_id}\n"
-            f"Precio entrada: ${position.entry_price:,.2f}"
+            f"Símbolo: {position.symbol}\n"
+            f"Entrada: ${position.entry_price:,.2f}\n"
+            f"Salida: ${exit_p:,.2f}\n"
+            f"Pérdida: ${loss:+.2f}"
         )
         await self.send_message(msg)
-        self._add_to_history(f"🎯 TP{tp_number} {position.symbol}")
+        self._add_to_history(f"🛑 SL {position.symbol} ${loss:+.2f}")
+
+
+    async def notify_signal_received(self, signal, exchange_id: str, action: str):
+        if not self.is_notification_enabled("signal_received"):
+            return
+        msg = (
+            f"📡 Señal recibida\n"
+            f"Símbolo: {signal.symbol}\n"
+            f"Dirección: {signal.direccion}\n"
+            f"Exchange: {exchange_id}\n"
+            f"Acción: {action}"
+        )
+        await self.send_message(msg)
+        self._add_to_history(f"📡 {signal.symbol} {action}")
+
+
+    async def notify_limit_filled(self, position: Position):
+        if not self.is_notification_enabled("limit_filled"):
+            return
+        msg = (
+            f"✅ Orden LIMIT llenada\n"
+            f"Exchange: {position.exchange_id}\n"
+            f"Símbolo: {position.symbol}\n"
+            f"Entrada: ${position.entry_price:,.2f}\n"
+            f"Cantidad: {position.amount}"
+        )
+        await self.send_message(msg)
+        self._add_to_history(f"✅ LIMIT {position.symbol}")
+
 
     async def notify_trailing_activated(self, position: Position):
         """Notifica que el trailing stop se activó."""
@@ -246,8 +328,7 @@ class TelegramNotifier:
             f"Latencia: {avg_latency_ms:.0f}ms"
         )
         await self.send_message(msg)
-        emoji_h = "✅" if status == "healthy" else ("⚠️" if status == "degraded" else "🔴")
-        self._add_to_history(f"{emoji_h} {exchange}: {status.upper()}")
+        self._add_to_history(f"{emoji} {exchange}: {status.upper()}")
 
     async def notify_circuit_breaker(
         self, exchange: str, state: str, retry_after: float = 0.0,

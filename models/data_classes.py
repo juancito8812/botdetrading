@@ -34,6 +34,8 @@ class Position:
     lowest_price: float = 0.0
     trailing_activated: bool = False
     entry_filled_amount: float = 0.0
+    exit_price: Optional[float] = None
+    close_time: Optional[float] = None
 
     def __post_init__(self):
         if self.open_time == 0.0:

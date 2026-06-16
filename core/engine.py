@@ -179,11 +179,17 @@ class TradingEngine:
         cooldown = config.get("cooldown_segundos", 30)
         if await self._is_duplicate(signal.symbol, signal.direccion, exchange_id, cooldown):
             logger.info(f"⏭️ Señal duplicada ignorada en {exchange_id}: {signal.symbol} {signal.direccion}")
+            if self.notifier:
+                action = "Rechazada"
+                await self.notifier.notify_signal_received(signal, exchange_id, action)
             return
 
         # Validación: rechazar señales sin Stop Loss si está configurado
         if config.get("requerir_stop_loss", True) and signal.stop_loss is None:
             logger.warning(f"⛔ Señal {signal.symbol} rechazada: SL requerido pero no encontrado")
+            if self.notifier:
+                action = "Rechazada"
+                await self.notifier.notify_signal_received(signal, exchange_id, action)
             return
 
         client = exchange_service.clients.get(exchange_id)
@@ -263,6 +269,9 @@ class TradingEngine:
             # Notificar apertura de posición
             if self.notifier:
                 await self.notifier.notify_trade_open(new_pos)
+            if self.notifier:
+                action = "Ejecutada"
+                await self.notifier.notify_signal_received(signal, exchange_id, action)
 
         except Exception as e:
             logger.error(f"Error fatal ejecutando señal en {exchange_id}: {e}", exc_info=True)
@@ -632,6 +641,8 @@ class TradingEngine:
             await self._place_take_profits(client, exchange_id, market_symbol, signal, tp_amounts, side_upper, new_pos)
 
         pos_manager.add_position(new_pos)
+        if self.notifier:
+            await self.notifier.notify_limit_filled(new_pos)
         logger.info(f"✅ Posición creada desde orden LIMIT en {exchange_id}")
 
         # Notificar si fue una orden DCA que se ejecutó
@@ -709,7 +720,13 @@ class TradingEngine:
                 else:
                     continue
 
+                exit_price = float(position_data.get('markPrice', 0)) or pos.entry_price
+
                 if contracts == 0:
+                    pos.exit_price = exit_price
+                    pos.close_time = time.time()
+                    if self.notifier and pos.sl_order_id:
+                        await self.notifier.notify_sl_hit(pos)
                     pos.status = PositionStatus.CLOSED
                     pos_manager.save()
                     logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
