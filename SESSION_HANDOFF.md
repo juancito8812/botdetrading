@@ -1,7 +1,7 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 16/06/2026 (v20 - Notificaciones v2: SL hit, alive, batching, formatos mejorados)
+> **Ultima actualizacion:** 16/06/2026 (v21 - Fixes: DCA min, event loop, daily report, Superpowers oficial)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 
 ---
@@ -28,7 +28,6 @@
 7. 👀 CODE REVIEW             → Revisar cambios antes de finalizar (usar /ponytail-review)
 8. ✅ VERIFICATION            → Tests + cobertura + calidad
 9. 📝 ACTUALIZAR docs         → MEMORY.md + SESSION_HANDOFF.md + README si aplica
-```
 ```
 
 > **🔴 Esto aplica a: Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini, y cualquier otro agente/IA que toque este proyecto. La metodologia Superpowers es el contrato de calidad del proyecto. Ignorarla = cambios inconsistentes y perdida de contexto entre sesiones.**
@@ -604,13 +603,17 @@ git log --oneline -5
 
 ## Superpowers Framework
 
-Framework de metodologia de desarrollo instalado (14 skills). Los skills estan en `.agents/skills/` y se activan automaticamente.
-
-**Flujo de trabajo:** brainstorming -> writing-plans -> subagent-driven-development (con revision spec + code quality)
+Framework de metodologia de desarrollo instalado via plugin oficial en `opencode.json`:
+```json
+{
+  "plugin": [
+    "superpowers@git+https://github.com/obra/superpowers.git",
+    "./.opencode/plugins/ponytail.mjs"
+  ]
+}
+```
 
 **Documentos de diseno y plan en:** `docs/superpowers/specs/` y `docs/superpowers/plans/`
-
-**Instalacion:** Superpowers se instala via plugin en `opencode.json` desde el repo oficial `obra/superpowers`:
 
 ## Ponytail - Lazy Senior Dev Mode
 

@@ -82,9 +82,23 @@ MiBotTrading/
 │   └── pre-commit                 # Hook Superpowers: valida docs al commitear código
 │
 ├── .agents/
-│   ├── MEMORY.md                  # Memoria para skills de IA (Cline/Codebuff)
-│   └── skills/
-│       └── ponytail/SKILL.md      # Ponytail lazy senior dev mode
+│   ├── MEMORY.md                  # Memoria para skills de IA
+│   └── skills/                    # 14 skills de Superpowers + Ponytail
+│       ├── brainstorming/
+│       ├── writing-plans/
+│       ├── test-driven-development/
+│       ├── systematic-debugging/
+│       ├── subagent-driven-development/
+│       ├── executing-plans/
+│       ├── dispatching-parallel-agents/
+│       ├── requesting-code-review/
+│       ├── receiving-code-review/
+│       ├── verification-before-completion/
+│       ├── finishing-a-development-branch/
+│       ├── using-git-worktrees/
+│       ├── using-superpowers/
+│       ├── writing-skills/
+│       └── ponytail/              # Ponytail lazy senior dev mode
 │
 ├── .opencode/
 │   └── plugins/
@@ -94,7 +108,7 @@ MiBotTrading/
 │   ├── ponytail-config.js         # Config de niveles Ponytail
 │   └── ponytail-instructions.js   # Builder de reglas por nivel
 │
-├── opencode.json                  # Plugin Ponytail registrado
+├── opencode.json                  # Superpowers (oficial) + Ponytail plugins
 │
 ├── docs/
 │   └── superpowers/               # Especificaciones y planes de diseño
@@ -378,28 +392,43 @@ Se corrigieron **22 bugs críticos** (más ~15 de prioridad menor) en una sesió
 
 ### Flujo obligatorio para TODA IA en TODA sesión:
 
-| # | Paso | Descripción |
-|---|------|-------------|
-| 1 | 🦸 **Cargar Superpowers** | Al INICIAR cualquier sesión con cualquier IA — cargar skill `using-superpowers` |
-| 2 | 📖 **Leer contexto** | `MEMORY.md` + `SESSION_HANDOFF.md` + `git log --oneline -5` |
-| 3 | 🧠 **Brainstorming** | Antes de cualquier cambio creativo o implementación |
-| 4 | 📄 **Writing Specs** | Documentar lo que se va a hacer en `docs/superpowers/specs/` |
-| 5 | 📋 **Writing Plans** | Para tareas de 3+ pasos, plan detallado en `docs/superpowers/plans/` |
-| 6 | ⚡ **Subagent Development** | Ejecutar con agentes especializados (file-picker, basher, code-searcher, etc.) |
-| 7 | 👀 **Code Review** | Revisar cambios con code-reviewer antes de finalizar |
-| 8 | ✅ **Verification** | Tests + cobertura + calidad antes de afirmar completitud |
-| 9 | 📝 **Actualizar docs** | Este archivo + `SESSION_HANDOFF.md` + `README.md` si aplica |
+```
+0. 🦊 PONYTAIL                → ✅ SIEMPRE ACTIVO (default: full). Capa transversal.
+                                 ¿stdlib? ¿nativo? ¿dep existente? ¿una linea?
+                                 Minimo codigo que funciona. YAGNI.
+1. 🦸 CARGAR Superpowers      → Al INICIAR cualquier sesion con cualquier IA
+                                 (skill: using-superpowers). Instalado via plugin
+                                 oficial `obra/superpowers` en opencode.json
+2. 📖 LEER contexto           → MEMORY.md + SESSION_HANDOFF.md + git log --oneline -5
+3. 🧠 BRAINSTORMING           → Antes de cualquier cambio creativo o implementacion
+4. 📄 WRITING SPECS           → Documentar en docs/superpowers/specs/
+5. 📋 WRITING PLANS           → Para tareas de 3+ pasos en docs/superpowers/plans/
+6. ⚡ SUBAGENT DEVELOPMENT    → Ejecutar con agentes especializados
+7. 👀 CODE REVIEW             → Revisar cambios antes de finalizar (usar /ponytail-review)
+8. ✅ VERIFICATION            → Tests + cobertura + calidad
+9. 📝 ACTUALIZAR docs         → MEMORY.md + SESSION_HANDOFF.md + README si aplica
+```
 
 > **🔴 Esto aplica a: Claude, ChatGPT, Codebuff, Cline, Copilot, Gemini, y cualquier otro agente/IA que toque este proyecto. La metodología Superpowers es el contrato de calidad del proyecto. Ignorarla = cambios inconsistentes y pérdida de contexto.**
 
-### Skills disponibles:
-Los skills están en `.agents/skills/`. Los principales:
-- `using-superpowers` — Skill base que activa toda la metodología
-- `brainstorming` — Análisis y exploración de opciones
-- `writing-plans` — Planificación estructurada
-- `subagent-driven-development` — Desarrollo con agentes especializados
-- `requesting-code-review` — Revisión de calidad
-- `verification-before-completion` — Validación final
+### Skills disponibles (14 skills en `.agents/skills/`):
+
+| Skill | Propósito |
+|-------|-----------|
+| `using-superpowers` | Skill base que activa toda la metodología |
+| `brainstorming` | Análisis, preguntas y diseño colaborativo |
+| `writing-plans` | Planificación estructurada con TDD |
+| `test-driven-development` | Ciclo RED-GREEN-REFACTOR |
+| `systematic-debugging` | Debugging de 4 fases con root cause |
+| `subagent-driven-development` | Desarrollo con agentes + 2-stage review |
+| `executing-plans` | Ejecución por lotes con checkpoints |
+| `dispatching-parallel-agents` | Múltiples subagentes en paralelo |
+| `requesting-code-review` | Pre-review checklist |
+| `receiving-code-review` | Responder a feedback |
+| `verification-before-completion` | Validación final antes de afirmar éxito |
+| `using-git-worktrees` | Ramas de desarrollo aisladas |
+| `finishing-a-development-branch` | Merge/PR workflow |
+| `writing-skills` | Crear nuevos skills |
 
 ### Archivos de diseño:
 - `docs/superpowers/specs/` — Especificaciones detalladas de features
