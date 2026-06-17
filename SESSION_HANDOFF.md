@@ -1,15 +1,15 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 16/06/2026 (v22 - CHECKPOINT: v1.4.0 estable + notificaciones v2)
+> **Ultima actualizacion:** 17/06/2026 (v23 - CHECKPOINT v2.0.0: Ponytail sweep -1508 lines)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
 >
 > ╔══════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v1.4.0 — 16/06/2026 22:30 UTC              ║
-> ║  Estado: ✅ FUNCIONAL Y OPERATIVO                          ║
-> ║  Tests: 366/366 pasando                                    ║
-> ║  .exe: dist/MiBotTrading.exe compilado                     ║
-> ║  Proximo paso: barrido Ponytail en branch aparte           ║
+> ║  🟢 CHECKPOINT v2.0.0 — 17/06/2026                       ║
+> ║  Estado: ✅ FUNCIONAL Y SIMPLIFICADO                      ║
+> ║  Tests: 301/301 pasando                                   ║
+> ║  .exe: dist/MiBotTrading.exe compilado                    ║
+> ║  Ponytail sweep: -1508 lines, 24 archivos                 ║
 > ╚══════════════════════════════════════════════════════════════╝
 
 ---
