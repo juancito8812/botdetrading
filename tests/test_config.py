@@ -56,7 +56,7 @@ def test_default_risk_config_values():
     config = _get_default_risk_config()
     assert config["apalancamiento"] == 10
     assert config["cooldown_segundos"] == 30
-    assert config["cantidad_minima_usdt"] == 10.0
+    assert config["cantidad_minima_usdt"] == 1.0
     assert config["dca_habilitado"] is True
     assert config["tp_distribucion"] == "progresivo"
     assert config["tp_pesos"] == [50, 25, 15, 10]

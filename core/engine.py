@@ -228,7 +228,9 @@ class TradingEngine:
             # Si la decisión fue una orden LIMIT, la ejecutó _decide_entry_type
             # y estamos esperando que se llene (posición pending)
             if decision == "limit_placed":
-                logger.info(f"⏳ Orden LIMIT colocada en {exchange_id}, esperando llenado...")
+                logger.info(f"⏳ Orden LIMIT/DCA colocada en {exchange_id}, esperando llenado...")
+                if self.notifier:
+                    await self.notifier.notify_signal_received(signal, exchange_id, "LIMIT colocada")
                 return
 
             # Si llegamos aquí, fue MARKET, continuar con SL/TP
@@ -365,9 +367,10 @@ class TradingEngine:
             risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
         else:
             risk_pct = float(pct_por_exchange)
-        min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
+        min_usdt = float(config.get("cantidad_minima_usdt", 1.0))
 
         usdt_to_use, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
+        logger.info(f"📐 {exchange_id}: balance={balance:.2f}, risk={risk_pct}%, usdt={usdt_to_use:.2f}")
         if err:
             return False, err
 
@@ -408,7 +411,7 @@ class TradingEngine:
             risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
         else:
             risk_pct = float(pct_por_exchange)
-        min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
+        min_usdt = float(config.get("cantidad_minima_usdt", 1.0))
 
         usdt_to_use, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
         if err:
@@ -471,9 +474,10 @@ class TradingEngine:
             risk_pct = float(pct_por_exchange.get(exchange_id, 5.0))
         else:
             risk_pct = float(pct_por_exchange)
-        min_usdt = float(config.get("cantidad_minima_usdt", 10.0))
+        min_usdt = float(config.get("cantidad_minima_usdt", 1.0))
 
         total_usdt, err = self._calculate_usdt_amount(balance, risk_pct, min_usdt, exchange_id)
+        logger.info(f"📐 DCA {exchange_id}: balance={balance:.2f}, risk={risk_pct}%, total={total_usdt:.2f} USDT, min={min_usdt}")
         if err:
             return False, f"Saldo insuficiente para DCA"
         usdt_per_order = total_usdt / dca_parts
@@ -482,7 +486,7 @@ class TradingEngine:
             if total_usdt >= min_usdt * dca_parts:
                 usdt_per_order = min_usdt
             else:
-                return False, f"Saldo insuficiente para DCA"
+                logger.warning(f"DCA: {total_usdt:.2f} USDT total < mínimo {min_usdt}x{dca_parts}, usando {usdt_per_order:.2f}/orden")
 
         price_now = await exchange_service.get_ticker_price(exchange_id, market_symbol)
         base_amount = (usdt_per_order * leverage) / price_now
@@ -863,8 +867,8 @@ class TradingEngine:
         # 4. Limpiar señales procesadas antiguas
         self._clean_old_signals(now)
 
-        # 5. Reporte diario (cada 24h)
-        if self.notifier and now - self._last_daily_report > 86400:
+        # 5. Reporte diario (cada 24h, solo si pasó 24h desde el último envío)
+        if self.notifier and self._last_daily_report > 0 and now - self._last_daily_report > 86400:
             self._last_daily_report = now
             all_positions = pos_manager.get_all_positions()
             balances = {}

@@ -379,8 +379,11 @@ class TelegramNotifier:
             lines.append("")
 
         lines.append("Balances:")
-        for ex, bal in balances.items():
-            lines.append(f"  {ex}: ${bal:.2f}")
+        if balances:
+            for ex, bal in balances.items():
+                lines.append(f"  {ex}: ${bal:.2f}")
+        else:
+            lines.append("  (sin datos - exchanges no conectados)")
 
         await self.send_message("\n".join(lines))
         self._add_to_history("📊 Reporte diario enviado")

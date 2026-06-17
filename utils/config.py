@@ -106,7 +106,7 @@ def _get_default_risk_config():
         "apalancamiento": 10,
         "porcentaje_capital": {ex: 5.0 for ex in EXCHANGES_DEFAULTS},
         "cooldown_segundos": 30,
-        "cantidad_minima_usdt": 10.0,
+        "cantidad_minima_usdt": 1.0,
         "exchanges_activos": [],
         "limite_posiciones": 0,
         "modo_margen": "cross",

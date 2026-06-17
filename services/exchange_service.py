@@ -173,24 +173,20 @@ class ExchangeService:
             return float(ticker['last'])
         except RuntimeError as e:
             if "Event loop is closed" in str(e) or "event loop" in str(e).lower():
-                logger.warning("Event loop error en %s, reintentando...", exchange_id)
+                logger.warning("Event loop error en %s, eliminando y recreando...", exchange_id)
+                with self._clients_lock:
+                    self.clients.pop(exchange_id, None)
                 for _ in range(3):
-                    with self._clients_lock:
-                        if exchange_id in self.clients:
-                            client = self.clients.get(exchange_id)
-                            break
-                        creds = load_api_creds()
-                        ex_creds = creds["exchanges"].get(exchange_id, {})
-                        needs_create = ex_creds.get("enabled")
-                    if needs_create:
-                        new_client = await self._create_client_impl(exchange_id, ex_creds)
+                    creds = load_api_creds()
+                    ex_creds = creds["exchanges"].get(exchange_id, {})
+                    if not ex_creds.get("enabled"):
+                        break
+                    new_client = await self._create_client_impl(exchange_id, ex_creds)
+                    if new_client:
                         with self._clients_lock:
-                            if new_client:
-                                self.clients[exchange_id] = new_client
-                            client = self.clients.get(exchange_id)
-                    if client:
+                            self.clients[exchange_id] = new_client
                         try:
-                            ticker = await client.fetch_ticker(market_symbol)
+                            ticker = await new_client.fetch_ticker(market_symbol)
                             return float(ticker['last'])
                         except RuntimeError:
                             continue
