@@ -32,3 +32,6 @@ def check_latest_version() -> Optional[dict]:
 
 async def download_update(download_url: str, dest_dir=None) -> Optional[Path]:
     return None
+
+def apply_update(downloaded_path) -> bool:
+    return False
