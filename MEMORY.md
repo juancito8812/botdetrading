@@ -55,6 +55,11 @@
 - [x] Mensajes mejorados: PnL %, duración, precio de salida, tamaño USDT
 - [x] Notificaciones de conexión/desconexión de Telegram
 - [x] Heartbeat cada 4h con estado del bot
+- [x] Fix: DCA sin mínimo obligatorio (órdenes pequeñas permitidas)
+- [x] Fix: reporte diario solo tras 24h
+- [x] Fix: event loop recovery elimina cliente roto antes de recrear
+- [x] Logs de cálculo DCA/MARKET (balance, risk%, usdt)
+- [x] Superpowers desde repo oficial obra/superpowers
 
 ---
 
