@@ -1,6 +1,14 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
-*Última actualización: 16/06/2026 (America/Caracas) — Notificaciones v2: SL hit, alive, batching, formatos mejorados*
+> ╔══════════════════════════════════════════════════════════════════╗
+> ║  🟢 CHECKPOINT v1.4.0 — 16/06/2026                            ║
+> ║  Estado: ✅ FUNCIONAL Y OPERATIVO                              ║
+> ║  Tests: 366/366 pasando                                       ║
+> ║  .exe: dist/MiBotTrading.exe compilado                        ║
+> ║  Proximo: barrido Ponytail en branch aparte (no romper master)║
+> ╚══════════════════════════════════════════════════════════════════╝
+
+*Última actualización: 16/06/2026 (America/Caracas) — CHECKPOINT v1.4.0: estable, notificaciones v2*
 
 ---
 

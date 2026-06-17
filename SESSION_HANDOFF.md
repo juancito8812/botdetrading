@@ -1,8 +1,16 @@
 # Session Handoff -- MiBotTrading
 
 > **Creado:** 13/06/2026
-> **Ultima actualizacion:** 16/06/2026 (v21 - Fixes: DCA min, event loop, daily report, Superpowers oficial)
+> **Ultima actualizacion:** 16/06/2026 (v22 - CHECKPOINT: v1.4.0 estable + notificaciones v2)
 > **Proposito:** Documento de continuidad para que cualquier IA o agente retome el proyecto exactamente donde lo dejamos. **LEER ESTE ARCHIVO ES OBLIGATORIO AL INICIAR UNA NUEVA SESION.**
+>
+> ╔══════════════════════════════════════════════════════════════╗
+> ║  🟢 CHECKPOINT v1.4.0 — 16/06/2026 22:30 UTC              ║
+> ║  Estado: ✅ FUNCIONAL Y OPERATIVO                          ║
+> ║  Tests: 366/366 pasando                                    ║
+> ║  .exe: dist/MiBotTrading.exe compilado                     ║
+> ║  Proximo paso: barrido Ponytail en branch aparte           ║
+> ╚══════════════════════════════════════════════════════════════╝
 
 ---
 
@@ -644,3 +652,4 @@ Integrado como capa transversal en Superpowers. Inyecta la escalera YAGNI en cad
 - **Dashboard auto-refresh:** Carga datos a los 1s de abrir, luego refresca cada 60s
 - **Para activar notificaciones:** Configurar desde UI en pestana Telegram -> Chat ID / checkboxes
 - **Para empezar una nueva sesion:** Leer este archivo + `.agents/MEMORY.md` + `git log --oneline -3`
+- **CHECKPOINT v1.4.0:** Estado actual funcional y operativo. Próximo barrido Ponytail en branch separado.
