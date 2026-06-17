@@ -58,11 +58,9 @@ class TelegramNotifier:
             notification_prefs if notification_prefs else dict(DEFAULT_NOTIFICATION_PREFS)
         )
         self.history: List[str] = []
-        self._resolved_entity = None  # Cache de entidad resuelta
-        self._last_send_time = 0.0  # Para rate limiting
-        self._cached_chat_id: Optional[str] = None  # chat_id con el que se resolvió la entidad
-        self._pending_tp_batch: List[Dict] = []
-        self._batch_task: Optional[asyncio.Task] = None
+        self._resolved_entity = None
+        self._last_send_time = 0.0
+        self._cached_chat_id: Optional[str] = None
 
     def is_notification_enabled(self, notif_type: str) -> bool:
         """Verifica si un tipo de notificación está habilitado."""
@@ -87,21 +85,6 @@ class TelegramNotifier:
         """Retorna las últimas N notificaciones."""
         return self.history[-count:]
 
-
-    async def _flush_tp_batch(self):
-        await asyncio.sleep(5)
-        if not self._pending_tp_batch:
-            return
-        symbol = self._pending_tp_batch[0].get("symbol", "")
-        lines = [f"🎯 TPs alcanzados — {symbol}"]
-        for tp in self._pending_tp_batch:
-            num = tp.get("number", "")
-            price = tp.get("price", 0)
-            pnl = tp.get("pnl")
-            pnl_str = f" (${pnl:+.2f})" if pnl is not None else ""
-            lines.append(f"  TP{num}: ${price:,.2f}{pnl_str}")
-        await self.send_message("\n".join(lines))
-        self._pending_tp_batch = []
 
     async def _resolve_chat_id(self) -> Any:
         """
@@ -246,14 +229,15 @@ class TelegramNotifier:
     async def notify_tp_hit(self, position: Position, tp_number: int, tp_price: float = None, tp_pnl: float = None):
         if not self.is_notification_enabled("tp_hit"):
             return
-        self._pending_tp_batch.append({
-            "symbol": position.symbol,
-            "number": tp_number,
-            "price": tp_price or 0,
-            "pnl": tp_pnl,
-        })
-        if self._batch_task is None or self._batch_task.done():
-            self._batch_task = asyncio.create_task(self._flush_tp_batch())
+        price_str = f" a ${tp_price:,.2f}" if tp_price else ""
+        pnl_line = f"\nPnL: ${tp_pnl:+.2f}" if tp_pnl is not None else ""
+        msg = (
+            f"🎯 TP{tp_number} alcanzado{price_str}\n"
+            f"Símbolo: {position.symbol}\n"
+            f"Exchange: {position.exchange_id}{pnl_line}"
+        )
+        await self.send_message(msg)
+        self._add_to_history(f"🎯 TP{tp_number} {position.symbol}")
 
     async def notify_sl_hit(self, position: Position):
         if not self.is_notification_enabled("sl_hit"):

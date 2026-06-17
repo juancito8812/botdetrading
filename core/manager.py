@@ -1,52 +1,18 @@
 import json
 import logging
-import os
 from typing import List, Optional
 from models.data_classes import Position, PositionStatus
-from utils.config import POSICIONES_FILE, DATA_DIR
+from utils.config import POSICIONES_FILE
 from utils.helpers import atomic_write_json
-from utils.resilience.state_recovery import StateRecovery
-from utils.resilience.backup_manager import BackupManager
 
 logger = logging.getLogger("TradingBot")
 
-# Instancias globales de resiliencia
-RECOVERY_DIR = DATA_DIR / "recovery"
-state_recovery = StateRecovery(max_checkpoints=50)
-backup_manager = BackupManager(
-    backup_dir=str(RECOVERY_DIR / "backups"),
-    max_backups=24,
-    interval_minutes=15,
-)
 class PositionManager:
     def __init__(self):
-        os.makedirs(RECOVERY_DIR, exist_ok=True)
         self.positions: List[Position] = []
-        self._backup_counter = 0
         self.load()
-        self._check_pending_recovery()
-
-    def _check_pending_recovery(self):
-        """Verifica checkpoints pendientes al iniciar."""
-        recovery_file = RECOVERY_DIR / "checkpoints.json"
-        if recovery_file.exists():
-            state_recovery.load(str(recovery_file))
-            pending = state_recovery.get_pending()
-            if pending:
-                logger.warning(
-                    f"⚠️ {len(pending)} operaciones pendientes encontradas "
-                    f"al cargar"
-                )
-
-    def _create_save_checkpoint(self):
-        """Crea checkpoint antes de guardar. Retorna el checkpoint."""
-        return state_recovery.create_checkpoint(
-            operation="save_positions",
-            data={"count": len(self.positions)},
-        )
 
     def _write_positions(self):
-        """Escribe posiciones a disco con escritura atómica."""
         def _serialize(obj):
             if isinstance(obj, PositionStatus):
                 return obj.value
@@ -54,18 +20,7 @@ class PositionManager:
         data = [p.__dict__ for p in self.positions]
         atomic_write_json(POSICIONES_FILE, data, indent=2, default=_serialize)
 
-    def _finalize_save(self, cp):
-        """Completa checkpoint, persiste recovery y hace backup si toca."""
-        state_recovery.complete_checkpoint(cp.id)
-        state_recovery.persist(str(RECOVERY_DIR / "checkpoints.json"))
-
-        self._backup_counter += 1
-        if self._backup_counter >= 15:
-            self._backup_counter = 0
-            backup_manager.create_backup(str(POSICIONES_FILE), "posiciones")
-
     def _load_positions_from_data(self, data):
-        """Convierte datos JSON a lista de Position."""
         result = []
         for p in data:
             if not isinstance(p, dict):
@@ -77,7 +32,6 @@ class PositionManager:
         return result
 
     def load(self):
-        """Carga posiciones, con restauración desde backup si es necesario."""
         if not POSICIONES_FILE.exists():
             self.positions = []
             return
@@ -85,38 +39,15 @@ class PositionManager:
             with open(POSICIONES_FILE, "r") as f:
                 data = json.load(f)
                 self.positions = self._load_positions_from_data(data)
-        except json.JSONDecodeError as e:
-            logger.error(f"Error cargando posiciones: {e}. Intentando restaurar backup...")
-            restored = backup_manager.restore_latest(str(POSICIONES_FILE), "posiciones")
-            if restored:
-                try:
-                    with open(POSICIONES_FILE, "r") as f:
-                        data = json.load(f)
-                        self.positions = self._load_positions_from_data(data)
-                except Exception:
-                    self.positions = []
-            else:
-                self.positions = []
-                logger.error("No se pudo restaurar el archivo de posiciones")
-
-        if not self.positions:
-            logger.warning("No se cargaron posiciones desde disco (archivo vacío o corrupto)")
+        except Exception:
+            self.positions = []
+            logger.warning("No se pudieron cargar posiciones desde disco")
 
     def save(self):
-        """Guarda posiciones con checkpoint y backup automático."""
-        max_attempts = 2
-        for attempt in range(max_attempts):
-            try:
-                cp = self._create_save_checkpoint()
-                self._write_positions()
-                self._finalize_save(cp)
-                break
-            except Exception as e:
-                logger.error(
-                    f"Error guardando posiciones (intento {attempt + 1}/{max_attempts}): {e}"
-                )
-                if attempt == max_attempts - 1:
-                    logger.error(f"❌ No se pudo guardar posiciones tras {max_attempts} intentos")
+        try:
+            self._write_positions()
+        except Exception as e:
+            logger.error(f"Error guardando posiciones: {e}")
 
     def add_position(self, position: Position):
         self.positions.append(position)

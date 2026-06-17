@@ -105,11 +105,6 @@ class ExchangeService:
             return None
 
     async def close_all(self):
-        from utils.config import DATA_DIR
-        cb_dir = DATA_DIR / "resilience"
-        cb_dir.mkdir(parents=True, exist_ok=True)
-        for ex_id, cb in _circuit_breakers.items():
-            cb.persist(str(cb_dir / f"cb_{ex_id}.json"))
         with self._clients_lock:
             clients = list(self.clients.items())
         for ex_id, client in clients:

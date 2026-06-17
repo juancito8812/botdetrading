@@ -1,12 +1,9 @@
 """Circuit breaker con estados closed/open/half-open."""
 
 import time
-import json
 import logging
 from enum import Enum
 from typing import Optional
-
-from utils.helpers import atomic_write_json
 
 
 class CircuitBreakerOpenError(Exception):
@@ -105,29 +102,4 @@ class CircuitBreaker:
             )
             self._state = CircuitState.OPEN
 
-    def persist(self, filepath: str):
-        """Guarda el estado actual a un archivo JSON."""
-        data = {
-            "name": self.name,
-            "state": self._state.value,
-            "failure_count": self.failure_count,
-            "last_failure_time": self.last_failure_time,
-            "half_open_requests": self.half_open_requests,
-        }
-        try:
-            atomic_write_json(filepath, data)
-        except Exception as e:
-            logger.error(f"Error persistiendo circuit breaker {self.name}: {e}")
 
-    def load(self, filepath: str):
-        """Carga el estado desde un archivo JSON."""
-        try:
-            with open(filepath, "r", encoding='utf-8') as f:
-                data = json.load(f)
-            self.name = data.get("name", self.name)
-            self._state = CircuitState(data.get("state", "closed"))
-            self.failure_count = data.get("failure_count", 0)
-            self.last_failure_time = data.get("last_failure_time", 0.0)
-            self.half_open_requests = data.get("half_open_requests", 0)
-        except Exception as e:
-            logger.error(f"Error cargando circuit breaker {self.name}: {e}")

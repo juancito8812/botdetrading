@@ -301,18 +301,10 @@ async def test_close_all_client_close_error_graceful(svc):
 
 @pytest.mark.asyncio
 async def test_close_all_persists_circuit_breakers(svc):
-    """close_all persiste el estado de circuit breakers."""
-    # Primero poblar circuit breakers
-    cb_bitget = _get_circuit_breaker("bitget")
-    cb_bingx = _get_circuit_breaker("bingx")
-
-    with patch.object(cb_bitget, "persist") as mock_persist_1, \
-         patch.object(cb_bingx, "persist") as mock_persist_2:
-        svc.clients["bitget"] = _mock_client()
-        await svc.close_all()
-
-        mock_persist_1.assert_called_once()
-        mock_persist_2.assert_called_once()
+    """close_all cierra clientes sin persistir CB (Ponytail)."""
+    svc.clients["bitget"] = _mock_client()
+    await svc.close_all()
+    assert "bitget" not in svc.clients
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

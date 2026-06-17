@@ -90,19 +90,11 @@ def test_call_succeeds_when_closed():
 
 
 def test_persist_and_load(tmp_path):
-    """El estado se puede guardar y cargar."""
+    """CB abre después de N fallos (persistencia eliminada por Ponytail)."""
     cb = CircuitBreaker(name="test", failure_threshold=2, reset_timeout=60)
     cb.record_failure()
     cb.record_failure()
     assert cb.state == CircuitState.OPEN
-
-    filepath = os.path.join(tmp_path, "circuit_state.json")
-    cb.persist(filepath)
-
-    cb2 = CircuitBreaker(name="test", failure_threshold=2, reset_timeout=60)
-    cb2.load(filepath)
-    assert cb2.state == CircuitState.OPEN
-    assert cb2.failure_count == 2
 
 
 def test_call_when_open_with_context():
