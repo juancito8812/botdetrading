@@ -9,7 +9,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Callable, Awaitable, Any
 
 from utils.helpers import atomic_write_json
-from utils.resilience.error_handler import ExchangeConnectionError
 
 logger = logging.getLogger("TradingBot")
 

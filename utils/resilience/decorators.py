@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Type
 
 from utils.resilience.retry_service import RetryService
 from utils.resilience.circuit_breaker import CircuitBreaker
-from utils.resilience.error_handler import MaxRetriesExceeded
+from utils.resilience.retry_service import MaxRetriesExceeded
 
 logger = logging.getLogger("TradingBot")
 

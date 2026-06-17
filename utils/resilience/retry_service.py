@@ -7,9 +7,15 @@ from typing import (
     Awaitable, Callable, Optional, Tuple, Type,
 )
 
-from utils.resilience.error_handler import (
-    MaxRetriesExceeded, RateLimitExceeded, ExchangeConnectionError,
-)
+class MaxRetriesExceeded(Exception):
+    """Se agotaron los reintentos."""
+    def __init__(self, exchange_id: str, operation: str, cause: Exception = None):
+        self.exchange_id = exchange_id
+        self.operation = operation
+        msg = f"[{exchange_id}] Max retries exceeded for {operation}"
+        super().__init__(msg)
+        if cause:
+            self.__cause__ = cause
 
 logger = logging.getLogger("TradingBot")
 
@@ -59,7 +65,6 @@ class RetryService:
         self.jitter = jitter
         self.retry_on = retry_on or (
             ConnectionError, TimeoutError, asyncio.TimeoutError,
-            ExchangeConnectionError, RateLimitExceeded,
         )
         # Excepciones que NUNCA se reintentan (fallo fatal)
         self._never_retry = (RuntimeError, asyncio.CancelledError)

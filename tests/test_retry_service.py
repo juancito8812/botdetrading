@@ -1,7 +1,6 @@
 import asyncio
 import pytest
-from utils.resilience.retry_service import RetryService, calculate_backoff
-from utils.resilience.error_handler import MaxRetriesExceeded, RateLimitExceeded
+from utils.resilience.retry_service import RetryService, calculate_backoff, MaxRetriesExceeded
 
 
 @pytest.mark.asyncio
@@ -65,7 +64,7 @@ async def test_retry_on_specific_exceptions():
 
 @pytest.mark.asyncio
 async def test_retry_rate_limit():
-    """Reintenta en RateLimitExceeded."""
+    """Reintenta en excepción temporal."""
     retry = RetryService(max_retries=2, base_delay=0.01)
     call_count = 0
 
@@ -73,7 +72,7 @@ async def test_retry_rate_limit():
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            raise RateLimitExceeded("test", "rate limited")
+            raise ConnectionError("rate limited")
         return "ok"
 
     result = await retry.execute(rate_limited)

@@ -7,7 +7,14 @@ from enum import Enum
 from typing import Optional
 
 from utils.helpers import atomic_write_json
-from utils.resilience.error_handler import CircuitBreakerOpenError
+
+
+class CircuitBreakerOpenError(Exception):
+    """Circuit breaker bloqueando requests."""
+    def __init__(self, exchange_id: str, retry_after: float = 0.0):
+        self.exchange_id = exchange_id
+        self.retry_after = retry_after
+        super().__init__(f"[{exchange_id}] Circuit breaker OPEN, retry after {retry_after}s")
 
 logger = logging.getLogger("TradingBot")
 

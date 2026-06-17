@@ -5,7 +5,7 @@ import os
 from utils.resilience.circuit_breaker import (
     CircuitBreaker, CircuitState,
 )
-from utils.resilience.error_handler import CircuitBreakerOpenError
+from utils.resilience.circuit_breaker import CircuitBreakerOpenError
 
 
 def test_initial_state():

@@ -6,10 +6,8 @@ from utils.resilience.decorators import (
     timeout_decorator, retry_decorator, log_errors_decorator,
     circuit_breaker_decorator, circuit_breaker_decorator_dynamic,
 )
-from utils.resilience.error_handler import (
-    MaxRetriesExceeded, CircuitBreakerOpenError,
-)
-from utils.resilience.circuit_breaker import CircuitBreaker
+from utils.resilience.retry_service import MaxRetriesExceeded
+from utils.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 
 
 @pytest.mark.asyncio
