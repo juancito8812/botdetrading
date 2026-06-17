@@ -184,13 +184,14 @@ class TradingBotApp:
         )
 
         # Registrar handler de senales UNA SOLA VEZ (no se pierde al reconectar)
-        # Filtra solo mensajes de los canales configurados
+        logger.info(f"📡 Registrando handler para {len(channels)} canales: {list(channels)[:3]}...")
         @self.telegram_client.on(events.NewMessage(chats=list(channels)))
         async def handler(event):
             if not self.bot_running.is_set():
                 return
             text = event.raw_text
-            logger.info(f"📥 Mensaje recibido: {text[:50]}...")
+            chat_id = event.chat_id
+            logger.info(f"📥 Mensaje recibido [chat:{chat_id}]: {text[:80]}...")
 
             now = time.time()
             if now - self._last_config_refresh > 30:
@@ -401,6 +402,13 @@ class TradingBotApp:
                             exchange, status, failures, latency
                         )
                     health_monitor.on_status_change = health_callback
+                    # Mensaje de inicio cuando el bot conecta
+                    await notifier.send_message(
+                        f"🤖 Bot iniciado\n"
+                        f"Usuario: {user_first} (@{user_username})\n"
+                        f"Canales: {len(channels)}\n"
+                        f"Exchanges: {list(exchange_service.clients.keys()) or 'Conectando...'}"
+                    )
 
                 # Asegurar que el watchdog se esté ejecutando (solo uno a la vez)
                 trading_engine.stop_watchdog()
@@ -563,7 +571,13 @@ class TradingBotApp:
         thread.start()
 
     async def _alive_loop(self):
+        first = True
         while self.bot_running.is_set():
+            if not first:
+                await asyncio.sleep(14400)
+            else:
+                first = False
+                await asyncio.sleep(300)  # primer heartbeat a los 5 min
             notifier = trading_engine.notifier
             if notifier:
                 now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -578,7 +592,6 @@ class TradingBotApp:
                     f"PnL flotante: ${total_pnl:+.2f}"
                 )
                 await notifier.send_message(msg)
-            await asyncio.sleep(14400)
 
 
 if __name__ == "__main__":
