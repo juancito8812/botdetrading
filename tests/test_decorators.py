@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from utils.resilience.decorators import (
     timeout_decorator, retry_decorator, log_errors_decorator,
-    circuit_breaker_decorator, circuit_breaker_decorator_dynamic,
+    circuit_breaker_decorator_dynamic,
 )
 from utils.resilience.retry_service import MaxRetriesExceeded
 from utils.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
@@ -50,14 +50,17 @@ async def test_retry_decorator_exhausted():
 
 
 @pytest.mark.asyncio
-async def test_circuit_breaker_decorator():
-    """@circuit_breaker_decorator lanza CircuitBreakerOpenError cuando está abierto."""
-    cb = CircuitBreaker(name="test_cb", failure_threshold=2, reset_timeout=0.05)
-    cb.record_failure()
-    cb.record_failure()
+async def test_circuit_breaker_decorator_dynamic():
+    """@circuit_breaker_decorator_dynamic lanza error cuando está abierto."""
+    cbs = {"test_cb": CircuitBreaker(name="test_cb", failure_threshold=2, reset_timeout=0.05)}
+    cbs["test_cb"].record_failure()
+    cbs["test_cb"].record_failure()
+
+    def resolver(eid):
+        return cbs[eid]
 
     mock_func = AsyncMock(return_value="ok")
-    decorated = circuit_breaker_decorator(circuit_breaker=cb)(mock_func)
+    decorated = circuit_breaker_decorator_dynamic(resolver=resolver)(mock_func)
 
     with pytest.raises(CircuitBreakerOpenError):
         await decorated("test_exchange")

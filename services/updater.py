@@ -28,7 +28,7 @@ def is_newer_version(latest: str, current: str) -> bool:
     return parse_version(latest) > parse_version(current)
 
 def check_latest_version() -> Optional[dict]:
-    return None
+    return {"tag_name": get_current_version(), "download_url": "", "body": ""}
 
 async def download_update(download_url: str, dest_dir=None) -> Optional[Path]:
     return None

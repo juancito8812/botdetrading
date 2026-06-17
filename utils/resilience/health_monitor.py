@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Callable, Awaitable, Any
 
-from utils.helpers import atomic_write_json
-
 logger = logging.getLogger("TradingBot")
 
 
@@ -201,13 +199,3 @@ class HealthMonitor:
                 pass
             self._task = None
 
-    def persist(self, filepath: str):
-        """Guarda el historial de salud a un archivo JSON."""
-        try:
-            data = {
-                eid: health.to_dict()
-                for eid, health in list(self._health_map.items())
-            }
-            atomic_write_json(filepath, data, indent=2)
-        except Exception as e:
-            logger.error(f"Error persistiendo health data: {e}")

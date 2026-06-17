@@ -18,7 +18,6 @@ from core.engine import trading_engine, health_monitor
 from core.parser import parse_trading_signal
 from ui.main_window import TradingBotGUI
 from utils.settings_manager import load_settings, enable_autostart
-from services.updater import get_current_version, check_latest_version, is_newer_version
 
 
 class AsyncWorker:
@@ -525,50 +524,7 @@ class TradingBotApp:
             self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
             self.root.after(500, self.start_bot)
 
-        # Auto-check de actualizaciones al iniciar
-        self.root.after(3000, self._auto_check_updates)
-
         self.root.mainloop()
-
-    def _auto_check_updates(self):
-        """Verifica actualizaciones al iniciar si está habilitado en settings."""
-        settings = load_settings()
-        if not settings.get("auto_check_updates", True):
-            return
-
-        def _do_check():
-            try:
-                info = check_latest_version()
-                if not info:
-                    return
-                current = get_current_version()
-                latest = info["tag_name"]
-                if is_newer_version(latest, current):
-                    logger.info(
-                        f"📥 Nueva versión disponible: {latest} "
-                        f"(actual: {current})"
-                    )
-                    # Actualizar la UI si la pestaña de ajustes ya se cargó
-                    download_url = info.get("download_url", "")
-                    body = info.get("body", "")
-                    if download_url:
-                        self.root.after(0, lambda: self.gui.upd_status_label.config(
-                            text=f"📥 {latest} disponible. Ve a Ajustes > Actualizaciones",
-                            foreground="#ffaa00"
-                        ))
-                        # Configurar el botón de descarga
-                        self.root.after(0, lambda: (
-                            setattr(self.gui, '_upd_latest_info', info),
-                            self.gui.upd_download_btn.config(state='normal'),
-                        ))
-                else:
-                    logger.debug(f"Bot actualizado: {current}")
-            except Exception as e:
-                logger.debug(f"Auto-check de actualizaciones: {e}")
-
-        # Ejecutar en un hilo separado para no bloquear la UI
-        thread = threading.Thread(target=_do_check, daemon=True)
-        thread.start()
 
     async def _alive_loop(self):
         first = True

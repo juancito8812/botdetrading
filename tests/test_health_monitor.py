@@ -317,26 +317,7 @@ async def test_start_already_running():
     assert monitor._running is True
 
 
-def test_persist(tmp_path):
-    """persist guarda health data a JSON."""
-    monitor = HealthMonitor(check_interval=0.1)
-    monitor.add_exchange("bitget")
-    monitor.get_health("bitget").record_success(latency_ms=100.0)
 
-    filepath = os.path.join(tmp_path, "health.json")
-    monitor.persist(filepath)
-
-    with open(filepath) as f:
-        data = json.load(f)
-    assert "bitget" in data
-    assert data["bitget"]["status"] == "healthy"
-
-
-def test_persist_empty():
-    """persist con health_map vacío no falla."""
-    monitor = HealthMonitor(check_interval=0.1)
-    with patch("builtins.open", MagicMock()):
-        monitor.persist("/fake/path.json")  # No debe lanzar
 
 
 @pytest.mark.asyncio

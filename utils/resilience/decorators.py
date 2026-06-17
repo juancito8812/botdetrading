@@ -109,40 +109,7 @@ def retry_decorator(
     return decorator
 
 
-# ─── CIRCUIT BREAKER DECORATOR (estático) ────────────────────────────
-
-def circuit_breaker_decorator(
-    circuit_breaker: CircuitBreaker,
-):
-    """
-    Decorador que aplica un circuit breaker a una función async.
-
-    Uso:
-        cb = CircuitBreaker(name="bitget", failure_threshold=5, reset_timeout=60)
-
-        @circuit_breaker_decorator(circuit_breaker=cb)
-        async def some_func(exchange_id, ...):
-            ...
-    """
-    def decorator(func: Callable[..., Awaitable]) -> Callable[..., Awaitable]:
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            exchange_id = _extract_exchange_id(args, kwargs)
-
-            circuit_breaker.call(exchange_id)
-
-            try:
-                result = await func(*args, **kwargs)
-                circuit_breaker.record_success()
-                return result
-            except Exception as e:
-                circuit_breaker.record_failure()
-                raise
-        return wrapper
-    return decorator
-
-
-# ─── CIRCUIT BREAKER DECORATOR (dinámico por exchange_id) ────────────
+# ─── CIRCUIT BREAKER DECORATOR ────────────────────────────────────
 
 def circuit_breaker_decorator_dynamic(
     resolver: Callable[[str], CircuitBreaker],
