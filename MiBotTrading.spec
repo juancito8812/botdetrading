@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('.githooks', '.githooks')],
+    datas=[('.githooks', '.githooks'), ('VERSION', '.')],
     hiddenimports=['utils.config', 'utils.helpers', 'utils.translations', 'utils.logger', 'utils.settings_manager', 'utils.config_backup', 'services.exchange_service', 'services.market_data', 'services.notifier', 'services.updater', 'core.manager', 'core.engine', 'core.parser', 'models.data_classes', 'utils.resilience.retry_service', 'utils.resilience.circuit_breaker', 'utils.resilience.decorators', 'utils.resilience.health_monitor'],
     hookspath=[],
     hooksconfig={},

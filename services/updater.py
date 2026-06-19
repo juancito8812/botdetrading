@@ -20,12 +20,17 @@ from utils.helpers import BASE_DIR
 from utils.logger import logger
 
 VERSION_FILE = "VERSION"
+# Versión por defecto (fallback cuando VERSION no existe, ej: en otra PC sin el archivo)
+_CURRENT_VERSION = "v2.0.2"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
 
 
 def get_current_version() -> str:
-    """Lee la versión actual desde el archivo VERSION."""
+    """
+    Lee la versión actual desde el archivo VERSION.
+    Fallback a _CURRENT_VERSION si el archivo no existe.
+    """
     try:
         vf = Path(VERSION_FILE)
         if not vf.exists():
@@ -34,7 +39,7 @@ def get_current_version() -> str:
             return vf.read_text(encoding="utf-8").strip()
     except Exception as e:
         logger.debug(f"No se pudo leer VERSION: {e}")
-    return "v0.0.0"
+    return _CURRENT_VERSION
 
 
 def parse_version(version_str: str) -> tuple:
