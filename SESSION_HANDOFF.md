@@ -2,10 +2,10 @@
 
 > ╔══════════════════════════════════════════════════════════════════╗
 > ║  🟢 CHECKPOINT v2.0.2 — 18/06/2026                            ║
-> ║  Estado: ✅ FUNCIONAL, ESTABLE + Seguridad + Updater real      ║
+> ║  Estado: 🧪 PRUEBA DE 1 SEMANA INICIADA                       ║
 > ║  Tests: 324/324 pasando                                       ║
-> ║  .exe: dist/MiBotTrading.exe compilado y probado              ║
-> ║  Exchange activo: BingX (Bitget desactivado temporalmente)     ║
+> ║  .exe: v2.0.2 compilado + Release en GitHub                   ║
+> ║  Exchanges activos: BingX + Bitget (ambos operativos)         ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
 *Último commit: feat: seguridad + bug fixes + updater real + docs*
@@ -15,7 +15,7 @@
 
 ## 🧠 Resumen de la Sesión (v2.0.2)
 
-Sesión de **seguridad + bug fixes + updater real**.
+Sesión **final pre-prueba**: Bug fixes + Seguridad + Updater + Compilación + Verificación.
 
 ### 🔐 Seguridad (3 cambios)
 
@@ -53,6 +53,22 @@ Sesión de **seguridad + bug fixes + updater real**.
 - `logger.py`: Log adicional junto al .exe para monitoreo de pruebas
 - `main.py`: Heartbeat cada 2h (antes 4h)
 - `main.py`: Sync inmediato de posiciones al reconectar Telegram
+
+### ✅ Verificación pre-prueba
+
+- **Parser:** Simuladas 4 señales (LONG/SHORT/BUY, multi-línea, 1 línea, rango, sin rango) — todas reconocidas correctamente
+- **Bitget:** Reactivado con API keys nuevas
+- **.exe v2.0.2:** Compilado, Release en GitHub actualizado
+- **dist/:** Comprimido y copiado a la otra PC
+
+### 🧪 Prueba de 1 Semana
+
+- **Iniciada:** 18/06/2026
+- **Ubicación:** Otra PC (sin sesión de Windows, headless)
+- **Exchanges activos:** BingX + Bitget
+- **Monitoreo:** Heartbeats cada 2h a Telegram
+- **Logs:** log_bot.txt junto al .exe
+- **Auto-arranque:** Al encender el PC arranca solo
 
 ---
 
@@ -106,7 +122,7 @@ MiBotTrading/
 
 | Parámetro | Valor |
 |-----------|-------|
-| Exchanges activos | BingX (Bitget desactivado) |
+| Exchanges activos | BingX + Bitget (ambos operativos) |
 | Apalancamiento | 5x, Cross |
 | Mínimo | 2.0 USDT |
 | Entrada | Auto (desviación máx 3%) |
@@ -131,19 +147,18 @@ python -m pytest tests/ -v        # 324 tests, todos pasando
 
 ## 🐛 Deuda Técnica / Bugs Conocidos
 
-1. **Bitget desactivado** — esperando keys reales (API Key + Secret + Passphrase)
-2. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
-3. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
-4. **Faltan tests** para `utils/crypto.py` y `services/updater.py`
+1. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
+2. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
+3. **Faltan tests** para `utils/crypto.py` y `services/updater.py`
 
 ---
 
 ## 📋 Próximos Pasos Sugeridos
 
-- [ ] Obtener API keys reales de **Bitget** para reactivarlo
-- [ ] Compilar .exe v2.0.2 y crear release en GitHub
+- [ ] **Tras la prueba de 1 semana:** revisar logs, resultados, ajustar config
 - [ ] Tests para `utils/crypto.py` y `services/updater.py`
 - [ ] Activar más exchanges (Binance, Bybit, OKX)
+- [ ] Gráficos en pestaña Reportes (matplotlib)
 
 ---
 

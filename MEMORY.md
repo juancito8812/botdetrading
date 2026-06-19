@@ -2,29 +2,29 @@
 
 > ╔══════════════════════════════════════════════════════════════════╗
 > ║  🟢 CHECKPOINT v2.0.2 — 18/06/2026                            ║
-> ║  Estado: ✅ FUNCIONAL, ESTABLE + Seguridad + Updater real      ║
+> ║  Estado: 🧪 PRUEBA DE 1 SEMANA INICIADA                       ║
 > ║  Tests: 324/324 pasando                                       ║
-> ║  .exe: dist/MiBotTrading.exe compilado y probado              ║
-> ║  Exchange activo: BingX (Bitget desactivado temporalmente)     ║
+> ║  .exe: v2.0.2 compilado + Release en GitHub                   ║
+> ║  Exchanges activos: BingX + Bitget (ambos operativos)         ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Última actualización: 18/06/2026 (America/Caracas) — v2.0.2: seguridad + bug fixes + updater real*
+*Última actualización: 18/06/2026 (America/Caracas) — v2.0.2: inicio prueba 1 semana*
 
 ---
 
 ## 📋 Resumen Ejecutivo
 
-**MiBotTrading** es un bot de trading automatizado que escucha canales de Telegram en busca de señales de trading y ejecuta órdenes **LONG/SHORT** en exchanges de criptomonedas (actualmente **BingX** activo).
+**MiBotTrading** es un bot de trading automatizado que escucha canales de Telegram en busca de señales de trading y ejecuta órdenes **LONG/SHORT** en exchanges de criptomonedas (actualmente **BingX + Bitget** activos).
 
 ### Stack Tecnológico
 - **Lenguaje:** Python 3.10+
 - **GUI:** Tkinter (interfaz de escritorio con 9 pestañas)
-- **Exchanges:** CCXT (async) — BingX activo, Bitget desactivado (keys corruptas), Binance, Bybit, OKX, KuCoin, MEXC, Phemex, Blofin disponibles
+- **Exchanges:** CCXT (async) — **BingX + Bitget activos**, Binance, Bybit, OKX, KuCoin, MEXC, Phemex, Blofin disponibles
 - **Telegram:** Telethon (cliente de usuario, no bot)
 - **Async:** asyncio
 - **Build:** PyInstaller + Inno Setup
 
-### Estado Actual: ✅ Funcional y operativo
+### Estado Actual: 🧪 Prueba de 1 semana en curso
 - [x] Conexión a Telegram y escucha de canales (3 canales activos)
 - [x] Parseo de señales (símbolo, dirección, entradas, SL, targets)
 - [x] Ejecución MARKET/LIMIT/DCA
@@ -221,8 +221,8 @@ TradingEngine.watchdog()
 ### Exchanges
 | Exchange | Estado | Notas |
 |----------|--------|-------|
-| BingX | ✅ Activo | Conectado correctamente (18/06/2026) |
-| Bitget | ❌ Desactivado | Keys corruptas en el .env, esperando keys reales |
+| BingX | ✅ Activo | Conectado correctamente |
+| Bitget | ✅ Activo | Reactivado con API keys nuevas (18/06/2026) |
 | Binance | Deshabilitado | Sin credenciales |
 | Bybit | Deshabilitado | Sin credenciales |
 | OKX | Deshabilitado | Sin credenciales |
@@ -341,21 +341,28 @@ Se corrigieron **7 bugs** post-Ponytail sweep en una sesión de debugging + comp
 
 ---
 
+## 🧪 Prueba de 1 Semana
+
+- **Iniciada:** 18/06/2026
+- **Ubicación:** Otra PC (dist/ comprimido y copiado)
+- **Exchanges activos:** BingX + Bitget
+- **Auto-arranque:** Onstart + SYSTEM (sin sesión de Windows)
+- **Monitoreo:** Heartbeats cada 2h a Telegram
+- **Logs:** log_bot.txt junto al .exe
+
 ## 🐛 Deuda Técnica Pendiente
 
 1. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
 2. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
-3. **Bitget desactivado** — esperando API keys reales
-4. **Tests para updater.py** — faltan tests unitarios
+3. **Tests para updater.py y crypto.py** — faltan tests unitarios
 
 ---
 
 ## 📌 Próximos Pasos Sugeridos
 
-- [ ] Obtener API keys reales de **Bitget** para reactivarlo
+- [ ] Revisar resultados de la prueba de 1 semana
 - [ ] Activar más exchanges (Binance, Bybit, OKX)
-- [ ] Tests para updater.py
-- [ ] Tests para crypto.py
+- [ ] Tests para updater.py y crypto.py
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
 
 ---
