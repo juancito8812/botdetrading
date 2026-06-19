@@ -673,8 +673,10 @@ class TradingEngine:
                 order = await client.fetch_order(order_id, market_symbol)
                 status = order.get('status', '')
                 if status == 'closed':
+                    # Eliminar del dict ANTES de procesar para evitar duplicados
+                    self._pending_limit_orders.pop(order_id, None)
                     await self._process_filled_limit_order(exchange_id, market_symbol, order, pending)
-                    stale_orders.append(order_id)
+                    # No agregar a stale_orders — ya se eliminó arriba
                 elif status == 'canceled' or status == 'expired':
                     logger.info(f"❌ Orden LIMIT {order_id} cancelada/expirada en {exchange_id}")
                     stale_orders.append(order_id)
@@ -729,13 +731,15 @@ class TradingEngine:
                 if contracts == 0:
                     pos.exit_price = exit_price
                     pos.close_time = time.time()
-                    if self.notifier and pos.sl_order_id:
-                        await self.notifier.notify_sl_hit(pos)
                     pos.status = PositionStatus.CLOSED
                     pos_manager.save()
                     logger.info(f"🔒 Posición {pos.symbol} en {pos.exchange_id} cerrada")
                     if self.notifier:
-                        await self.notifier.notify_trade_closed(pos)
+                        # Solo notificar SL si realmente fue SL (no TP, no liquidación)
+                        if pos.sl_order_id and not pos.tp1_hit:
+                            await self.notifier.notify_sl_hit(pos)
+                        else:
+                            await self.notifier.notify_trade_closed(pos)
                     continue
 
                 if 0 < contracts < pos.amount:
@@ -776,7 +780,7 @@ class TradingEngine:
                     else:
                         pos.pnl = (pos.entry_price - mark_price) * contracts * contract_size
 
-                await self._check_trailing_stop(pos, config, client)
+                await self._check_tp1_hit(pos, client)
 
                 if config.get("auto_breakeven", True) and not pos.is_breakeven and pos.tp1_hit and not pos.trailing_activated:
                     logger.info(f"🔄 Moving SL to break-even for {pos.symbol}")
@@ -784,26 +788,25 @@ class TradingEngine:
                     pos.is_breakeven = True
                     pos_manager.save()
 
-                await self._check_tp1_hit(pos, client)
+                await self._check_trailing_stop(pos, config, client)
 
             except Exception as e:
                 logger.debug(f"Watchdog: Error verificando posición {pos.symbol}: {e}")
 
     async def _check_tp1_hit(self, pos, client):
-        """Verifica si TP1 fue alcanzado."""
+        """Verifica si TP1 fue alcanzado. Solo revisa el primer TP."""
         if not pos.tp1_hit and pos.tp_order_ids:
-            for tp_id in pos.tp_order_ids:
-                try:
-                    order = await client.fetch_order(tp_id, pos.market_symbol)
-                    if order.get('status') == 'closed' or order.get('filled', 0) > 0:
-                        pos.tp1_hit = True
-                        pos_manager.save()
-                        logger.info(f"🎯 TP1 alcanzado para {pos.symbol} en {pos.exchange_id}")
-                        if self.notifier:
-                            await self.notifier.notify_tp_hit(pos, 1)
-                        break
-                except Exception as e:
-                    logger.warning(f"⚠️ Error fetching TP1 order for {pos.symbol}: {e}")
+            tp1_id = pos.tp_order_ids[0]  # Solo TP1
+            try:
+                order = await client.fetch_order(tp1_id, pos.market_symbol)
+                if order.get('status') == 'closed' or order.get('filled', 0) > 0:
+                    pos.tp1_hit = True
+                    pos_manager.save()
+                    logger.info(f"🎯 TP1 alcanzado para {pos.symbol} en {pos.exchange_id}")
+                    if self.notifier:
+                        await self.notifier.notify_tp_hit(pos, 1)
+            except Exception as e:
+                logger.warning(f"⚠️ Error fetching TP1 order for {pos.symbol}: {e}")
 
     async def _sync_failed_exchanges(self):
         """Reintenta conexión con exchanges fallidos."""

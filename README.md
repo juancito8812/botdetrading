@@ -27,11 +27,13 @@ Bot de trading automatizado para criptomonedas con señales vía Telegram. Ejecu
 - **📊 Reportes**: Resumen de trading, performance por exchange e historial de trades
 - **📱 Telegram Unificado**: Conexión, credenciales, canales, historial de notificaciones y **Chat ID configurable desde la UI** en una pestaña
 - **📊 PnL en Tiempo Real**: Cálculo de ganancia/pérdida desde el exchange en cada ciclo del watchdog
-- **💾 Backup**: Export/Import de toda la configuración en archivo .botconfig
 - **🛡️ Sistema de Resiliencia**: Circuit breaker, health monitor (cada 60s), retry con backoff
 - **🔔 Notificaciones seleccionables**: Elige qué alertas quieres recibir (apertura/cierre, TP, trailing, SL hit, señales, errores, etc.) desde la UI
-- **💓 Heartbeat**: El bot envía un mensaje de "sigo vivo" cada 4h con estado de conexiones y PnL
+- **💓 Heartbeat**: El bot envía un mensaje de "sigo vivo" cada 2h con estado de conexiones y PnL
 - **🔌 Alertas de conexión**: Notificación cuando el bot se desconecta de Telegram y cuando se reconecta
+- **🛡️ Backup cifrado**: Export/Import con AES-256-GCM + PBKDF2 (contraseña del usuario)
+- **🔄 Auto-arranque al encender PC**: Sin necesidad de sesión de Windows (headless SYSTEM)
+- **📋 Log junto al .exe**: Log para monitoreo de pruebas de varios días
 
 - **❔ Tooltips de ayuda**: Cada campo de configuración (Riesgo, Ajustes, APIs) tiene un botón ❔ con descripción detallada
 - **⚡ Inicio automático**: El bot arranca con Windows y se conecta automáticamente al abrir la app — sin necesidad del botón INICIAR
@@ -135,7 +137,7 @@ MiBotTrading/
 ├── services/                   # ★ SERVICIOS EXTERNOS
 │   ├── exchange_service.py     # ExchangeService — conexión con exchanges vía CCXT async
 │   ├── market_data.py          # Datos de CoinGecko (top 20 + índices)
-│   └── notifier.py             # TelegramNotifier — 10 métodos de notificación
+│   └── notifier.py             # TelegramNotifier — 12 métodos de notificación
 ├── ui/                         # ★ INTERFAZ DE USUARIO
 │   └── main_window.py          # TradingBotGUI — Tkinter (9 pestañas)
 ├── models/                     # ★ MODELOS DE DATOS
@@ -143,19 +145,16 @@ MiBotTrading/
 ├── utils/                      # ★ UTILIDADES
 │   ├── config.py               # Carga/guardado de config, credenciales, canales
 │   ├── helpers.py              # atomic_write_json, patch_aiohttp_dns
-│   ├── logger.py               # Configuración de logging
-│   ├── settings_manager.py     # Settings de UI + auto-inicio Windows
+│   ├── logger.py               # Configuración de logging + log junto al .exe
+│   ├── settings_manager.py     # Settings de UI + auto-inicio Windows (onstart)
+│   ├── crypto.py               # AES-256-GCM + PBKDF2 (encrypt/decrypt)
+│   ├── config_backup.py        # Export/Import cifrado con contraseña real
 │   ├── translations.py         # i18n — español/inglés (120+ claves)
 │   └── resilience/             # ★ SISTEMA DE RESILIENCIA
 │       ├── circuit_breaker.py  # Circuit breaker por exchange
 │       ├── retry_service.py    # Retry con backoff exponencial
 │       ├── health_monitor.py   # Monitoreo de salud de exchanges
-│       ├── state_recovery.py   # Checkpoints para recuperación de estado
-│       ├── backup_manager.py   # Backups comprimidos automáticos
-│       ├── error_handler.py    # Manejo centralizado de errores
 │       └── decorators.py       # Decoradores @retry, @circuit_breaker, @log_errors
-├── utils/
-│   ├── config_backup.py        # Export/Import cifrado con AES (cryptography.fernet)
 ├── MiBotTrading.spec           # Spec de PyInstaller para compilar .exe
 ├── tests/                      # ★ TESTS (365 tests · 95% cobertura)
 │   ├── test_parser.py          # Parseo de señales
@@ -185,12 +184,8 @@ Desde la pestaña **⚙️ Ajustes** puedes exportar/importar toda la configurac
 
 - **📤 Exportar**: Cifra API keys, riesgo, canales y ajustes en un archivo `.botconfig` protegido con contraseña
 - **📥 Importar**: Restaura toda la configuración desde un `.botconfig` existente
-- **🛡️ Cifrado AES** vía `cryptography.fernet` con derivación PBKDF2 (SHA256, 100k iteraciones)
-
-```bash
-# Dependencia adicional (ya incluida en requirements.txt)
-pip install cryptography
-```
+- **🛡️ Cifrado AES-256-GCM** con derivación PBKDF2 (SHA256, 600k iteraciones)
+- Compatible con backups v1 (texto plano) legacy
 
 ## 📦 Distribución
 
@@ -199,6 +194,8 @@ Para generar un ejecutable independiente:
 ```bash
 pyinstaller MiBotTrading.spec
 ```
+
+El .exe se puede configurar para **auto-arranque al encender el PC** sin necesidad de sesión de Windows (usuario SYSTEM).
 
 El instalador para Windows se genera con Inno Setup usando `Installer_Script.iss`.
 

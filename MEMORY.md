@@ -1,14 +1,14 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
 > ╔══════════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v2.0.1 — 18/06/2026                            ║
-> ║  Estado: ✅ FUNCIONAL, ESTABLE (Bug fixes post-Ponytail)       ║
+> ║  🟢 CHECKPOINT v2.0.2 — 18/06/2026                            ║
+> ║  Estado: ✅ FUNCIONAL, ESTABLE + Seguridad + Updater real      ║
 > ║  Tests: 324/324 pasando                                       ║
 > ║  .exe: dist/MiBotTrading.exe compilado y probado              ║
 > ║  Exchange activo: BingX (Bitget desactivado temporalmente)     ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Última actualización: 18/06/2026 (America/Caracas) — v2.0.1: bug fixes post-Ponytail*
+*Última actualización: 18/06/2026 (America/Caracas) — v2.0.2: seguridad + bug fixes + updater real*
 
 ---
 
@@ -114,7 +114,7 @@ MiBotTrading/
 ├── services/                   # ★ SERVICIOS EXTERNOS ★
 │   ├── exchange_service.py     # ExchangeService — conexión con exchanges vía CCXT
 │   ├── market_data.py          # Datos de CoinGecko (top 20 + índices)
-│   └── updater.py              # Auto-Updater via GitHub Releases
+│    └── updater.py              # Auto-Updater real: GitHub API, download, apply .bat
 │
 ├── ui/                         # ★ INTERFAZ DE USUARIO ★
 │   └── main_window.py          # TradingBotGUI — Tkinter (9 pestañas)
@@ -229,6 +229,20 @@ TradingEngine.watchdog()
 
 ---
 
+## 🔐 Seguridad
+
+- `utils/crypto.py`: Cifrado AES-256-GCM con PBKDF2 (600k iteraciones)
+- `utils/config_backup.py`: Backup cifrado real con contraseña del usuario
+- `ui/main_window.py`: Eliminado Fernet hardcodeado que rompía las conexiones
+- `.env` mantiene texto plano (estándar de la industria para apps locales)
+
+## 🚀 Auto-Updater
+
+`services/updater.py` implementado con:
+- `check_latest_version()`: Consulta GitHub Releases API via urllib
+- `download_update()`: Descarga .exe en chunks con progreso
+- `apply_update()`: Script .bat que reemplaza el .exe y reinicia
+
 ## 🧪 Tests (324 tests)
 
 ### Cobertura de tests
@@ -329,19 +343,20 @@ Se corrigieron **7 bugs** post-Ponytail sweep en una sesión de debugging + comp
 
 ## 🐛 Deuda Técnica Pendiente
 
-1. **`updater.py`** — `shell=True` con lista de argumentos duplica cmd.exe
-2. **`updater.py`** — `apply_update()` es un stub, no cierra la app antes de actualizar
-3. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
-4. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
+1. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
+2. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
+3. **Bitget desactivado** — esperando API keys reales
+4. **Tests para updater.py** — faltan tests unitarios
 
 ---
 
 ## 📌 Próximos Pasos Sugeridos
 
-- [ ] Obtener API keys reales de **Bitget** (API Key + Secret + Passphrase) para reactivarlo
+- [ ] Obtener API keys reales de **Bitget** para reactivarlo
 - [ ] Activar más exchanges (Binance, Bybit, OKX)
+- [ ] Tests para updater.py
+- [ ] Tests para crypto.py
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
-- [ ] Tests de integración con exchanges simulados
 
 ---
 

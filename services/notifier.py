@@ -202,7 +202,9 @@ class TelegramNotifier:
     async def notify_trade_closed(self, position: Position):
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
         pnl_val = position.pnl if position.pnl is not None else 0.0
-        entry_val = position.entry_price * position.amount if position.entry_price and position.amount > 0 else 0
+        # Usar el monto original (entry_filled_amount) si existe, para PnL% correcto tras TP parcial
+        original_amount = max(position.amount, position.entry_filled_amount) or position.amount
+        entry_val = position.entry_price * original_amount if position.entry_price and original_amount > 0 else 0
         pnl_pct = (pnl_val / entry_val) * 100 if entry_val > 0 else 0.0
         emoji = "✅" if pnl_val >= 0 else "❌"
         exit_p = position.exit_price if position.exit_price else position.entry_price

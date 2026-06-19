@@ -1,50 +1,58 @@
 # 🔄 SESSION_HANDOFF.md — MiBotTrading
 
 > ╔══════════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v2.0.1 — 18/06/2026                            ║
-> ║  Estado: ✅ FUNCIONAL, ESTABLE (Bug fixes post-Ponytail)       ║
+> ║  🟢 CHECKPOINT v2.0.2 — 18/06/2026                            ║
+> ║  Estado: ✅ FUNCIONAL, ESTABLE + Seguridad + Updater real      ║
 > ║  Tests: 324/324 pasando                                       ║
 > ║  .exe: dist/MiBotTrading.exe compilado y probado              ║
 > ║  Exchange activo: BingX (Bitget desactivado temporalmente)     ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Último commit: docs: v2.0.0 - checkpoint final*
+*Último commit: feat: seguridad + bug fixes + updater real + docs*
 *Fecha del handoff: 18/06/2026*
 
 ---
 
-## 🧠 Resumen de la Sesión
+## 🧠 Resumen de la Sesión (v2.0.2)
 
-Sesión de **bug fixes post-Ponytail + debugging de API keys + compilación**. Se corrigieron **7 bugs** de código y se solucionó un problema de entorno crítico (`.env` corrupto con valores Fernet).
+Sesión de **seguridad + bug fixes + updater real**.
 
-### Cambios realizados
+### 🔐 Seguridad (3 cambios)
 
-**Bugs de código corregidos (6):**
-1. `notify_dca_executed()` faltante → método agregado a `notifier.py`
-2. `Any` no importado → agregado en `market_data.py`
-3. `cb.load()` inexistente → bloque legacy eliminado de `exchange_service.py`
-4. Log falso `✅ Conectado correctamente` → `main.py` verifica que `create_client()` retornó un cliente real
-5. `tp_pnl: float = None` → type hint corregido a `Optional[float]`
-6. `password` sin uso en `config_backup.py` → docstring aclaratorio
+| Archivo | Cambio |
+|---------|--------|
+| `utils/crypto.py` 🆕 | Módulo AES-256-GCM con PBKDF2 (600k iteraciones) |
+| `utils/config_backup.py` | **Ahora cifra de verdad** con la password del usuario (antes ignoraba el parámetro). Detecta automáticamente backups v1 legacy vs v2. |
+| `ui/main_window.py` | ❌ **Eliminado Fernet hardcodeado** con clave pública que rompía las conexiones (encriptaba keys al .env pero el backend no las descifraba) |
 
-**Problema de entorno resuelto:**
-- 🔴 API keys de BingX y Bitget rechazadas → `dist/.env` tenía valores cifrados con Fernet en vez de keys reales
-- Bitget desactivado temporalmente (esperando keys reales del usuario)
-- Keys de BingX escritas manualmente al `.env`
-- Script de diagnóstico creado: `scripts/test_bingx_connection.py`
+### 🐛 Bug fixes (7 bugs corregidos)
 
-**Nuevo .exe compilado** en `dist/MiBotTrading.exe` — probado y funcional con BingX.
+| # | Severidad | Bug | Archivo | Fix |
+|---|-----------|-----|---------|-----|
+| 1 | 🔴 | **SL notification falsa** — `_sync_positions()` notificaba SL aunque la posición se cerrara por TP | `core/engine.py` | Solo notifica SL si `pos.sl_order_id AND NOT pos.tp1_hit` |
+| 2 | 🔴 | **Canales nuevos ignorados** — handler se registraba con copia estática de canales; nuevos canales no se escuchaban hasta reconectar | `main.py` | `events.NewMessage()` sin filtro + verificación `chat_id in canales_actuales` en vivo |
+| 3 | 🔴 | **Posiciones duplicadas** — si fetch_order devolvía 'closed' en dos ciclos consecutivos, se creaban dos posiciones para la misma orden | `core/engine.py` | `pop()` del dict ANTES de procesar orden llenada, no después |
+| 4 | 🟡 | **PnL% inflado** — tras TP parcial, el PnL% se calculaba sobre el monto remanente en vez del original | `services/notifier.py` | Usa `max(amount, entry_filled_amount)` en el cálculo |
+| 5 | 🟡 | **Breakeven 30s tarde** — `_check_tp1_hit()` se ejecutaba DESPUÉS del bloque de breakeven, posponiendo el SL a break-even al siguiente ciclo | `core/engine.py` | Movido `_check_tp1_hit()` ANTES del bloque de breakeven y trailing después |
+| 6 | 🟡 | **BingX leverage ignorado** — `set_leverage()` usaba `params['side']` en vez de `params['positionSide']` para BingX | `services/exchange_service.py` | Cambiado a `positionSide` (consistente con el resto del código) |
+| 7 | 🟢 | **TP1 detectado por cualquier TP** — `_check_tp1_hit()` iteraba sobre TODOS los TPs, no solo el primero | `core/engine.py` | Solo revisa `tp_order_ids[0]` |
 
-### Estado post-sesión
+### 🚀 Updater real (services/updater.py)
 
-| Componente | Estado |
-|------------|--------|
-| Tests | ✅ 324/324 pasando |
-| .exe | ✅ Compilado y probado |
-| Telegram | ✅ Conectado como juancito (@JR88121) - 3 canales |
-| BingX | ✅ Conectado correctamente |
-| Bitget | ❌ Desactivado (keys corruptas) |
-| Logs | ✅ Sin warnings de `cb.load()` ni errores de API |
+| Función | Antes (stub) | Ahora |
+|---------|-------------|-------|
+| `check_latest_version()` | `return {tag_name: current, ...}` | Consulta **GitHub API** (`/releases/latest`) con urllib. Timeout 15s. |
+| `download_update(url)` | `return None` | Descarga .exe en chunks 8KB con progreso. Timeout 120s. |
+| `apply_update(path)` | `return False` | Crea script `_update.bat` que espera, reemplaza .exe y reinicia. Solo en modo frozen. |
+
+### 🔧 Auto-arranque encender PC (sesión anterior, consolidado)
+
+- `settings_manager.py`: Tarea con `/sc onstart` + `/ru SYSTEM` — arranca sin sesión de Windows
+- `helpers.py`: `DATA_DIR` apunta a `BASE_DIR` cuando corre como SYSTEM
+- `main.py`: Modo headless (sin ventana) cuando no hay escritorio
+- `logger.py`: Log adicional junto al .exe para monitoreo de pruebas
+- `main.py`: Heartbeat cada 2h (antes 4h)
+- `main.py`: Sync inmediato de posiciones al reconectar Telegram
 
 ---
 
@@ -52,7 +60,7 @@ Sesión de **bug fixes post-Ponytail + debugging de API keys + compilación**. S
 
 ```
 MiBotTrading/
-├── main.py                     # Punto de entrada — TradingBotApp
+├── main.py                     # Punto de entrada — TradingBotApp + headless
 ├── core/                       # ★ LÓGICA PRINCIPAL
 │   ├── engine.py               # TradingEngine — orquestación de señales + watchdog
 │   ├── manager.py              # PositionManager — gestión de posiciones
@@ -60,45 +68,35 @@ MiBotTrading/
 ├── services/                   # ★ SERVICIOS EXTERNOS
 │   ├── exchange_service.py     # ExchangeService — conexión con exchanges vía CCXT async
 │   ├── market_data.py          # Datos de CoinGecko (top 20 + índices)
-│   ├── notifier.py             # TelegramNotifier — notificaciones v2
-│   └── updater.py              # Auto-Updater (stub apply_update)
+│   ├── notifier.py             # TelegramNotifier — 12 métodos + helper _notify()
+│   └── updater.py              # Auto-Updater real: GitHub API, download, apply .bat
 ├── ui/                         # ★ INTERFAZ DE USUARIO
-│   └── main_window.py          # TradingBotGUI — Tkinter (9 pestañas)
+│   └── main_window.py          # TradingBotGUI — Tkinter (9 pestañas) sin Fernet
 ├── models/                     # ★ MODELOS DE DATOS
 │   └── data_classes.py         # Position, Signal (dataclasses)
 ├── utils/                      # ★ UTILIDADES
 │   ├── config.py               # Carga/guardado de config, credenciales, canales
-│   ├── helpers.py              # atomic_write_json, patch_aiohttp_dns
-│   ├── logger.py               # Configuración de logging
-│   ├── settings_manager.py     # Settings de UI + auto-inicio Windows
+│   ├── helpers.py              # atomic_write_json, patch_aiohttp_dns, DATA_DIR para SYSTEM
+│   ├── logger.py               # Logging + log junto al .exe
+│   ├── settings_manager.py     # Settings + auto-inicio Windows (onstart SYSTEM)
+│   ├── crypto.py               # AES-256-GCM + PBKDF2 (encrypt/decrypt)
+│   ├── config_backup.py        # Export/Import cifrado real con contraseña
 │   ├── translations.py         # i18n — español/inglés (120+ claves)
-│   └── config_backup.py        # Export/Import (sin cifrado, password legacy)
+│   └── resilience/             # Circuit breaker, retry, health monitor, decorators
 ├── tests/                      # ★ TESTS (324 tests)
-│   ├── test_parser.py          # Parseo de señales
-│   ├── test_manager.py         # PositionManager
-│   ├── test_notifier.py        # TelegramNotifier
 │   ├── test_engine.py          # TradingEngine — SL, TP, DCA, trailing, breakeven
+│   ├── test_notifier.py        # TelegramNotifier
 │   ├── test_exchange_service.py# ExchangeService
-│   ├── test_market_data.py     # CoinGecko caché, 429, timeout
-│   ├── test_config_backup.py   # Export/Import
-│   ├── test_settings_manager.py# Settings — idioma, autostart
-│   ├── test_helpers.py         # atomic_write_json
-│   ├── test_logger.py          # Logging
-│   ├── test_translations.py    # i18n
-│   ├── test_config.py          # Config
-│   ├── test_data_classes.py    # Dataclasses
-│   ├── test_circuit_breaker.py # Circuit breaker
-│   ├── test_retry_service.py   # Retry con backoff
-│   ├── test_health_monitor.py  # HealthMonitor
-│   └── test_decorators.py      # Decoradores
+│   ├── test_market_data.py     # CoinGecko
+│   └── ... (18 archivos de test)
 ├── scripts/
 │   └── test_bingx_connection.py# Diagnóstico de conexión BingX
-├── dist/                       # .exe compilado + .env para el ejecutable
+├── dist/                       # .exe compilado + .env para ejecutable
 ├── logs/                       # Logs de ejecución
 ├── telegram_session/           # Sesión de Telegram guardada
 ├── .agents/skills/             # 14 skills Superpowers + Ponytail
 ├── .github/workflows/          # tests.yml, lint.yml, build.yml
-├── hooks/                      # ponytail-config.js, ponytail-instructions.js
+├── hooks/                      # ponytail plugins
 └── docs/superpowers/           # specs/ y plans/ de diseño
 ```
 
@@ -117,8 +115,8 @@ MiBotTrading/
 | TP distribución | Progresivo (50,25,15,10) |
 | Break-even | Automático al alcanzar TP1 |
 | Cooldown | 60s entre señales duplicadas |
-| Heartbeat | 4h (primer a los 5 min) |
-| Auto-start Windows | ✅ Activado por defecto |
+| Heartbeat | 2h (primer a los 5 min) |
+| Auto-start Windows | Onstart (sin sesión) ✅ |
 | Telegram canales | 3 canales activos |
 
 ---
@@ -133,21 +131,19 @@ python -m pytest tests/ -v        # 324 tests, todos pasando
 
 ## 🐛 Deuda Técnica / Bugs Conocidos
 
-1. **`updater.py`** — `shell=True` con lista de argumentos duplica cmd.exe
-2. **`updater.py`** — `apply_update()` es un stub, no cierra la app antes de actualizar
-3. **Bitget desactivado** — esperando keys reales del usuario (API Key + Secret + Passphrase)
-4. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
-5. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
-6. **CCXT v4.5.56** — BingX puede tener problemas con ciertos endpoints de wallet; probado con `swap` que funciona correctamente
+1. **Bitget desactivado** — esperando keys reales (API Key + Secret + Passphrase)
+2. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
+3. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
+4. **Faltan tests** para `utils/crypto.py` y `services/updater.py`
 
 ---
 
 ## 📋 Próximos Pasos Sugeridos
 
 - [ ] Obtener API keys reales de **Bitget** para reactivarlo
+- [ ] Compilar .exe v2.0.2 y crear release en GitHub
+- [ ] Tests para `utils/crypto.py` y `services/updater.py`
 - [ ] Activar más exchanges (Binance, Bybit, OKX)
-- [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
-- [ ] Tests de integración con exchanges simulados
 
 ---
 
@@ -176,3 +172,7 @@ python -m pytest tests/ -v        # 324 tests, todos pasando
 - **Acciones:** https://github.com/juancito8812/botdetrading/actions
 - **Releases:** https://github.com/juancito8812/botdetrading/releases
 - **Skills:** `.agents/skills/` (14 skills + Ponytail)
+
+---
+
+*Handoff generado el 18/06/2026 — v2.0.2: seguridad + bug fixes + updater real*

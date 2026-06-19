@@ -423,7 +423,7 @@ async def test_set_leverage_bingx_side_param(svc):
     svc.clients["bingx"] = client
     await svc.set_leverage("bingx", "BTC/USDT", 10, "cross", "LONG")
 
-    client.set_leverage.assert_awaited_once_with(10, "BTC/USDT", {"side": "LONG"})
+    client.set_leverage.assert_awaited_once_with(10, "BTC/USDT", {"positionSide": "LONG"})
 
 
 @pytest.mark.asyncio

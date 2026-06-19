@@ -9,8 +9,10 @@ from utils.config import (
 )
 from utils.settings_manager import load_settings, save_settings
 from utils.logger import logger
+from utils.crypto import encrypt as _crypto_encrypt, decrypt as _crypto_decrypt
 
-BACKUP_VERSION = 1
+BACKUP_VERSION = 2  # v2: cifrado real con AES-256-GCM
+
 
 def _collect_all_data():
     return {
@@ -22,34 +24,59 @@ def _collect_all_data():
         "settings": load_settings(),
     }
 
+
 def export_config(password: str, filepath: str) -> bool:
     """
-    Exporta la configuración a un archivo JSON.
-    Nota: el parámetro password se mantiene por compatibilidad con la UI
-    pero la exportación actual es en texto plano.
+    Exporta la configuración a un archivo JSON cifrado con AES-256-GCM.
+
+    La password del usuario se usa para derivar la clave vía PBKDF2.
     """
+    if not password:
+        logger.error("Se requiere una contraseña para exportar")
+        return False
     try:
         data = _collect_all_data()
+        plaintext = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+        encrypted = _crypto_encrypt(password, plaintext)
+        if not encrypted:
+            raise RuntimeError("Fallo al cifrar")
         with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
-        logger.info(f"📤 Configuración exportada a {filepath}")
+            f.write(encrypted)
+        logger.info(f"📤 Configuración exportada (cifrada) a {filepath}")
         return True
     except Exception as e:
         logger.error(f"Error exportando configuración: {e}")
         return False
 
+
 def import_config(password: str, filepath: str) -> bool:
     """
-    Importa la configuración desde un archivo JSON.
-    Nota: el parámetro password se mantiene por compatibilidad con la UI
-    pero la importación actual no requiere cifrado.
+    Importa la configuración desde un archivo cifrado con AES-256-GCM (v2)
+    o legacy en texto plano (v1).
     """
     try:
         with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        version = data.get("version", 0)
-        if version != BACKUP_VERSION:
-            raise ValueError(f"Versión de backup no soportada: {version}")
+            raw = f.read()
+
+        # Detectar si es backup v1 (texto plano) o v2 (cifrado)
+        if _is_v1_content(raw):
+            data = json.loads(raw)
+            version = data.get("version", 0)
+            if version != 1:
+                raise ValueError(f"Versión de backup no soportada: {version}")
+            logger.info("Importando backup v1 (texto plano)")
+        else:
+            # v2: requiere password y descifrado AES
+            if not password:
+                raise ValueError("Este backup requiere contraseña")
+            plaintext = _crypto_decrypt(password, raw)
+            if not plaintext:
+                raise ValueError("Contraseña incorrecta o archivo corrupto")
+            data = json.loads(plaintext)
+            version = data.get("version", 0)
+            if version != BACKUP_VERSION:
+                raise ValueError(f"Versión de backup no soportada: {version}")
+
         if not data.get("api_creds"):
             raise ValueError("El archivo de backup no contiene datos")
         save_api_creds(data["api_creds"])
@@ -61,3 +88,9 @@ def import_config(password: str, filepath: str) -> bool:
     except Exception as e:
         logger.error(f"Error importando configuración: {e}")
         return False
+
+
+def _is_v1_content(raw: str) -> bool:
+    """Detecta si el contenido es backup v1 (texto plano) vs v2 (cifrado)."""
+    raw = raw.strip()
+    return raw.startswith("{") or raw.startswith("[")

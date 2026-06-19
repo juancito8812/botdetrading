@@ -192,11 +192,15 @@ class TradingBotApp:
             StringSession(session_data), int(tg["API_ID"]), tg["API_HASH"]
         )
 
-        # Registrar handler de senales UNA SOLA VEZ (no se pierde al reconectar)
-        logger.info(f"📡 Registrando handler para {len(channels)} canales: {list(channels)[:3]}...")
-        @self.telegram_client.on(events.NewMessage(chats=list(channels)))
+        # Registrar handler de todos los mensajes nuevos, filtrar por canal dentro
+        logger.info(f"📡 Registrando handler — canales iniciales: {list(channels)[:3] if channels else '(vacio)'}...")
+        @self.telegram_client.on(events.NewMessage)
         async def handler(event):
             if not self.bot_running.is_set():
+                return
+            # Filtrar: solo procesar mensajes de canales autorizados (siempre desde disco)
+            current_channels = await asyncio.to_thread(load_channels)
+            if event.chat_id not in current_channels:
                 return
             text = event.raw_text
             chat_id = event.chat_id
@@ -207,12 +211,6 @@ class TradingBotApp:
                 self._cached_config = await asyncio.to_thread(load_risk_config)
                 self._last_config_refresh = now
             config = self._cached_config
-
-            # Recargar canales dinámicamente para reflejar cambios en la UI
-            current_channels = await asyncio.to_thread(load_channels)
-            if current_channels != channels:
-                channels.clear()
-                channels.update(current_channels)
 
             signal = parse_trading_signal(text)
             if signal:

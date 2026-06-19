@@ -4,10 +4,6 @@ import asyncio
 import threading
 import logging
 import os
-import base64
-import hashlib
-from cryptography.fernet import Fernet
-
 from utils.config import (
     load_api_creds, save_api_creds, load_risk_config, save_risk_config,
     load_channels, save_channels, EXCHANGES_DEFAULTS
@@ -1166,14 +1162,14 @@ class TradingBotGUI:
 
             ttk.Label(frame, text=i18n.t("apis_api_key")).grid(row=1, column=0, sticky='e')
             key_entry = ttk.Entry(frame, width=50, show="*")
-            key_entry.insert(0, self._decrypt(creds["exchanges"].get(ex_id, {}).get("api_key", "")))
+            key_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("api_key", ""))
             key_entry.grid(row=1, column=1, padx=5, pady=2)
             self._make_help_btn(frame, "help_api_key").grid(row=1, column=2, padx=2)
             widgets["api_key"] = key_entry
 
             ttk.Label(frame, text=i18n.t("apis_secret")).grid(row=2, column=0, sticky='e')
             sec_entry = ttk.Entry(frame, width=50, show="*")
-            sec_entry.insert(0, self._decrypt(creds["exchanges"].get(ex_id, {}).get("secret", "")))
+            sec_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("secret", ""))
             sec_entry.grid(row=2, column=1, padx=5, pady=2)
             self._make_help_btn(frame, "help_api_secret").grid(row=2, column=2, padx=2)
             widgets["secret"] = sec_entry
@@ -1181,39 +1177,23 @@ class TradingBotGUI:
             if info["needs_passphrase"]:
                 ttk.Label(frame, text=i18n.t("apis_passphrase")).grid(row=3, column=0, sticky='e')
                 pass_entry = ttk.Entry(frame, width=50, show="*")
-                pass_entry.insert(0, self._decrypt(creds["exchanges"].get(ex_id, {}).get("passphrase", "")))
+                pass_entry.insert(0, creds["exchanges"].get(ex_id, {}).get("passphrase", ""))
                 pass_entry.grid(row=3, column=1, padx=5, pady=2)
                 self._make_help_btn(frame, "help_api_passphrase").grid(row=3, column=2, padx=2)
                 widgets["passphrase"] = pass_entry
 
             self.exchange_widgets[ex_id] = widgets
 
-    def _get_cipher(self):
-        key = base64.urlsafe_b64encode(hashlib.sha256(b"MiBotTrading-Secret-Key").digest())
-        return Fernet(key)
-
-    def _encrypt(self, value: str) -> str:
-        if not value:
-            return ""
-        return self._get_cipher().encrypt(value.encode()).decode()
-
-    def _decrypt(self, value: str) -> str:
-        if not value:
-            return ""
-        try:
-            return self._get_cipher().decrypt(value.encode()).decode()
-        except Exception:
-            return value
-
     def save_apis(self):
+        """Guarda las credenciales de los exchanges en texto plano en el .env."""
         new_creds = {"exchanges": {}, "telegram": {}}
         creds = load_api_creds()
         new_creds["telegram"] = creds.get("telegram", {})
         for ex_id, w in self.exchange_widgets.items():
             new_creds["exchanges"][ex_id] = {
-                "api_key": self._encrypt(w["api_key"].get().strip()),
-                "secret": self._encrypt(w["secret"].get().strip()),
-                "passphrase": self._encrypt(w["passphrase"].get().strip()) if "passphrase" in w else "",
+                "api_key": w["api_key"].get().strip(),
+                "secret": w["secret"].get().strip(),
+                "passphrase": w["passphrase"].get().strip() if "passphrase" in w else "",
                 "enabled": w["enabled"].get()
             }
         save_api_creds(new_creds)

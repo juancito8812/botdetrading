@@ -200,7 +200,7 @@ class ExchangeService:
             # 2. Configurar Apalancamiento
             params = {}
             if exchange_id == "bingx":
-                params['side'] = side.upper()
+                params['positionSide'] = side.upper()
             
             await client.set_leverage(leverage, market_symbol, params)
             
