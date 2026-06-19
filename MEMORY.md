@@ -1,31 +1,31 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
 > ╔══════════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v2.0.0 — 17/06/2026                            ║
-> ║  Estado: ✅ FUNCIONAL, SIMPLIFICADO (Ponytail sweep)           ║
-> ║  Tests: 301/301 pasando                                       ║
-> ║  .exe: dist/MiBotTrading.exe compilado                        ║
-> ║  Cambios: -1508 lineas eliminadas, 24 archivos modificados     ║
+> ║  🟢 CHECKPOINT v2.0.1 — 18/06/2026                            ║
+> ║  Estado: ✅ FUNCIONAL, ESTABLE (Bug fixes post-Ponytail)       ║
+> ║  Tests: 324/324 pasando                                       ║
+> ║  .exe: dist/MiBotTrading.exe compilado y probado              ║
+> ║  Exchange activo: BingX (Bitget desactivado temporalmente)     ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Última actualización: 16/06/2026 (America/Caracas) — CHECKPOINT v1.4.0: estable, notificaciones v2*
+*Última actualización: 18/06/2026 (America/Caracas) — v2.0.1: bug fixes post-Ponytail*
 
 ---
 
 ## 📋 Resumen Ejecutivo
 
-**MiBotTrading** es un bot de trading automatizado que escucha canales de Telegram en busca de señales de trading y ejecuta órdenes **LONG/SHORT** en exchanges de criptomonedas (actualmente **Bitget** y **BingX** activos).
+**MiBotTrading** es un bot de trading automatizado que escucha canales de Telegram en busca de señales de trading y ejecuta órdenes **LONG/SHORT** en exchanges de criptomonedas (actualmente **BingX** activo).
 
 ### Stack Tecnológico
 - **Lenguaje:** Python 3.10+
 - **GUI:** Tkinter (interfaz de escritorio con 9 pestañas)
-- **Exchanges:** CCXT (async) — Bitget, BingX, Binance, Bybit, OKX, KuCoin, MEXC, Phemex, Blofin
+- **Exchanges:** CCXT (async) — BingX activo, Bitget desactivado (keys corruptas), Binance, Bybit, OKX, KuCoin, MEXC, Phemex, Blofin disponibles
 - **Telegram:** Telethon (cliente de usuario, no bot)
 - **Async:** asyncio
 - **Build:** PyInstaller + Inno Setup
 
 ### Estado Actual: ✅ Funcional y operativo
-- [x] Conexión a Telegram y escucha de canales
+- [x] Conexión a Telegram y escucha de canales (3 canales activos)
 - [x] Parseo de señales (símbolo, dirección, entradas, SL, targets)
 - [x] Ejecución MARKET/LIMIT/DCA
 - [x] Stop Loss + Take Profits personalizados
@@ -34,40 +34,17 @@
 - [x] Watchdog cada 30s (monitoreo y sincronización)
 - [x] Persistencia de posiciones en disco
 - [x] Interfaz gráfica completa
-- [x] Tests unitarios (365 tests, 95% cobertura)
+- [x] Tests unitarios (324 tests)
 - [x] GitHub Actions (tests, lint, build)
-- [x] Pre-commit hook Superpowers (valida MEMORY.md + SESSION_HANDOFF.md)
+- [x] Pre-commit hook Superpowers
 - [x] Repositorio en GitHub
-- [x] Auto-Updater (check/download/apply via GitHub Releases + UI en Settings)
-- [x] Ordenes LIMIT huerfanas corregidas (cancel en exchange antes de remover)
-- [x] Balance exchange corregido (free vs locked)
-- [x] SL real en notificaciones (sl_price en Position)
-- [x] Cliente HTTP reutilizable (connection pooling en CoinGecko)
-- [x] Escritura atomica en state_recovery
-- [x] Auditoría v2: 126 bugs/mejoras corregidos (17 críticos, 26 altos, 34 medios, 22 bajos, 27 mejoras)
-- [x] AsyncWorker singleton (event loop persistente, no más creación/destrucción)
-- [x] Cifrado de API keys (Fernet simétrico)
-- [x] `threading.Event` para bot_running (data race eliminado)
-- [x] Canales Telegram recargados dinámicamente
-- [x] Enum PositionStatus (string typo-safe)
-- [x] Lógica exchange-específica unificada (`_create_exchange_order`)
-- [x] Escrituras atómicas en circuit_breaker, health_monitor, backup_manager
-- [x] Health checks paralelos (antes secuenciales)
-- [x] `__init__.py` en utils/ y utils/resilience/
-- [x] Cache de credenciales (eliminado IO cada 30s en watchdog)
-- [x] Ponytail: lazy senior dev mode integrado en Superpowers
-- [x] `opencode.json` con Superpowers (repo oficial obra/superpowers) + Ponytail
-- [x] `.agents/skills/ponytail/SKILL.md` con niveles lite/full/ultra
-- [x] Notificaciones v2: SL hit, alive heartbeat, signal received, LIMIT filled
-- [x] Batching de TPs múltiples (agrupación en 5s)
-- [x] Mensajes mejorados: PnL %, duración, precio de salida, tamaño USDT
-- [x] Notificaciones de conexión/desconexión de Telegram
+- [x] Notificaciones v2: SL hit, TP hit, alive heartbeat, signal received, LIMIT filled, DCA executed
 - [x] Heartbeat cada 4h con estado del bot
-- [x] Fix: DCA sin mínimo obligatorio (órdenes pequeñas permitidas)
+- [x] Fix: DCA sin mínimo obligatorio
 - [x] Fix: reporte diario solo tras 24h
 - [x] Fix: event loop recovery elimina cliente roto antes de recrear
-- [x] Logs de cálculo DCA/MARKET (balance, risk%, usdt)
-- [x] Superpowers desde repo oficial obra/superpowers
+- [x] Fix: Logs de conexión verifican resultado real de create_client
+- [x] Fix: CircuitBreaker.load() eliminado por Ponytail, código legacy removido
 
 ---
 
@@ -241,48 +218,41 @@ TradingEngine.watchdog()
 | `tp_pesos` | 50,25,15,10 | % por cada TP |
 | `auto_breakeven` | true | SL → entry price al alcanzar TP1 |
 
-### Exchanges Activos
-| Exchange | Estado | % Capital |
-|----------|--------|-----------|
-| Bitget | ✅ Activo | 1.0% |
-| BingX | ✅ Activo | 0.1% |
+### Exchanges
+| Exchange | Estado | Notas |
+|----------|--------|-------|
+| BingX | ✅ Activo | Conectado correctamente (18/06/2026) |
+| Bitget | ❌ Desactivado | Keys corruptas en el .env, esperando keys reales |
+| Binance | Deshabilitado | Sin credenciales |
+| Bybit | Deshabilitado | Sin credenciales |
+| OKX | Deshabilitado | Sin credenciales |
 
 ---
 
-## 🧪 Tests
+## 🧪 Tests (324 tests)
 
-### test_parser.py (9 tests)
-- [x] `test_parse_long_signal` — Señal LONG básica
-- [x] `test_parse_short_signal` — Señal SHORT básica
-- [x] `test_parse_with_entry_range` — Rango de entrada
-- [x] `test_parse_invalid_no_symbol` — Sin símbolo → None
-- [x] `test_parse_invalid_no_direction` — Sin dirección → None
-- [x] `test_parse_with_multiple_formats` — Múltiples formatos
-- [x] `test_parse_targets_ordered_long` — Targets ascendentes
-- [x] `test_parse_targets_ordered_short` — Targets descendentes
-- [x] `test_parse_duplicate_targets` — Eliminar duplicados
-
-### test_manager.py (5 tests)
-- [x] `test_add_position` — Agregar posición
-- [x] `test_get_open_positions` — Obtener abiertas por exchange
-- [x] `test_update_status` — Actualizar estado
-- [x] `test_get_pending_positions` — Obtener pendientes
-- [x] `test_persistence` — Persistencia en disco
+### Cobertura de tests
+| Archivo | Tests | Estado |
+|---------|-------|--------|
+| test_engine.py | ~80 | ✅ |
+| test_notifier.py | ~50 | ✅ |
+| test_parser.py | 9 | ✅ |
+| test_manager.py | 5 | ✅ |
+| test_exchange_service.py | ~20 | ✅ |
+| test_market_data.py | ~20 | ✅ |
+| test_config_backup.py | ~15 | ✅ |
+| test_settings_manager.py | ~15 | ✅ |
+| test_helpers.py | ~10 | ✅ |
+| test_logger.py | ~10 | ✅ |
+| test_translations.py | ~15 | ✅ |
+| test_config.py | ~10 | ✅ |
+| test_data_classes.py | ~10 | ✅ |
+| test_circuit_breaker.py | ~20 | ✅ |
+| test_retry_service.py | ~15 | ✅ |
+| test_health_monitor.py | ~10 | ✅ |
+| test_decorators.py | ~10 | ✅ |
 
 **Ejecutar:** `python -m pytest tests/ -v`
-
-### Estado actual (16/06/2026)
-| Métrica | Valor |
-|---------|-------|
-| Tests totales | **342** (sin test_notifier) |
-| Bugs críticos corregidos | **25/25** (22 originales + 19-21) |
-| Pre-commit hook | ✅ `.githooks/pre-commit` |
-| Telegram reconexión | ✅ StringSession + lock threading + cleanup loop |
-| Bugfixes engine.py | ✅ pos.amount TP parcial, SL stop, PnL contractSize, TP1 fetch |
-| Bugfixes seguridad | ✅ Auth code logs, SYSTEM HIGHEST, API_HASH validation, config cache |
-| Bugfixes datos | ✅ market_data non-200, parse_version, raise incondicional, extract_exchange_id |
-| Bugfixes robustez | ✅ health_monitor, circuit_breaker, backup_manager, update_status, clients lock, TOCTOU, task tracking, main_window crashes |
-| Bugfixes calidad | ✅ imports inline, logging except, código muerto, autostart path |
 
 ---
 
@@ -335,62 +305,43 @@ TARGETS: 120, 130
 
 ---
 
-## 🐛 Problemas Conocidos
+## 🐛 Bugs Corregidos — Sesión 18/06/2026 (v2.0.1)
 
-1. **Archivos legacy en raíz** — `_fix_probar.py`, `_fix_probar2.py`, `_fix_probar3.py`, `_new_method.py`, `_fx.py`, `bot_unificado v2.py`, `backup_modulos/`, `legacy_code/` — Excluidos del repo vía `.gitignore`. Se pueden eliminar del disco manualmente.
+Se corrigieron **7 bugs** post-Ponytail sweep en una sesión de debugging + compilación:
 
-2. **Credenciales no subidas** — `.env`, `config.json`, `canales.json`, `posiciones.json` están en `.gitignore`. Cada desarrollador debe crear su propio `.env`.
-
-3. **Primer inicio** — Al ejecutar por primera vez, Telegram pedirá autenticación (código SMS + 2FA si aplica). La sesión se guarda en `telegram_session/`.
-
-4. **Dependencia de CoinGecko** — El dashboard usa la API gratuita de CoinGecko, tiene límite de 10-30 llamadas/minuto.
-
-### Bugs corregidos — Sesión 24 (16/06/2026): Fix masivo 22/22 bugs críticos
-
-Se corrigieron **22 bugs críticos** (más ~15 de prioridad menor) en una sesión de 4 rondas:
-
+### Bugs de código (6)
 | # | Severidad | Bug | Archivo | Fix |
 |---|-----------|-----|---------|-----|
-| 1 | 🔴 | Auth code Telegram en logs | `main.py` | Eliminado `{code}` del log |
-| 2 | 🔴 | TOCTOU race en self.loop | `main.py` | Variable local + logging en except |
-| 3 | 🔴 | Task exceptions nunca retrievadas | `main.py` | `active_tasks.add` + `add_done_callback` |
-| 4 | 🔴 | load_risk_config() IO en cada mensaje | `main.py` | Cache de 30s recargada solo si pasó el intervalo |
-| 5 | 🔴 | pos.amount nunca decrementado tras TP parcial | `engine.py` | Detecta contracts < pos.amount en sync, recoloca SL |
-| 6 | 🔴 | SL default usa MARKET no STOP | `engine.py` | Cambiado a `'stop'` en _place_stop_loss y trailing |
-| 7 | 🔴 | PnL ignora contractSize (factor 1000x) | `engine.py` | Multiplica por contractSize del market info |
-| 8 | 🔴 | except:pass traga error TP1 fetch | `engine.py` | `logger.warning` con el error |
-| 9 | 🔴 | HTTP non-200 cachea datos corruptos | `market_data.py` | Retorna caché en vez de cachear ceros |
-| 10 | 🔴 | parse_version tuples longitud variable | `updater.py` | Padding a 3 elementos |
-| 11 | 🔴 | raise incondicional tras recovery | `exchange_service.py` | Retorna get_ticker_price si recuperó |
-| 12 | 🔴 | _extract_exchange_id primer string | `decorators.py` | Busca por ID conocido primero |
-| 13 | 🔴 | _get_exe_path() ruta wrong en dev | `settings_manager.py` | Usa BASE_DIR en vez de sys.executable.parent |
-| 14 | 🔴 | Task scheduler SYSTEM HIGHEST | `settings_manager.py` | Cambiado a onlogon + usuario actual + LIMITED |
-| 15 | 🔴 | half_open_requests no persistido | `circuit_breaker.py` | Agregado a persist() y load() |
-| 16 | 🔴 | _task nunca asignado en HealthMonitor | `health_monitor.py` | start() asigna self._task |
-| 17 | 🔴 | pop(0) antes de os.remove() en backup | `backup_manager.py` | Primero remove, luego pop |
-| 18 | 🔴 | self.clients mutado sin lock async | `exchange_service.py` | asyncio.Lock en create_client, close_all |
-| 19 | 🔴 | int \| str syntax (Py3.10+) | `notifier.py` | No corregido (ver nota) |
-| 20 | 🔴 | shell=True + lista = doble cmd.exe | `updater.py` | No corregido (ver nota) |
-| 21 | 🔴 | apply_update no cierra la app | `updater.py` | No corregido (ver nota) |
-| 22 | 🔴 | update_status solo 1er match | `manager.py` | Itera todas las posiciones |
+| 1 | 🔴 | `notify_dca_executed()` faltante — engine.py la llamaba pero no existía en notifier.py | `services/notifier.py` | Método agregado, reusa pref `limit_filled` |
+| 2 | 🟡 | `Any` no importado en `market_data.py` (usado en `Optional[Any]`) | `services/market_data.py` | Agregado `Any` al `from typing import` |
+| 3 | 🟡 | `cb.load()` inexistente — Ponytail eliminó el método pero `exchange_service.py` seguía llamándolo | `services/exchange_service.py` | Bloque de persistencia obsoleto eliminado |
+| 4 | 🟡 | Log falso `✅ bingx: Conectado correctamente` aunque `create_client()` retornara `None` | `main.py` | Ahora verifica `if client:` antes de loguear éxito |
+| 5 | 🟢 | `tp_pnl: float = None` type hint incorrecto (None no es float) | `services/notifier.py` | Cambiado a `Optional[float] = None` |
+| 6 | 🟢 | `password` en `config_backup.py` nunca se usaba para cifrar | `utils/config_backup.py` | Docstring aclaratorio agregado |
+| 7 | 🟢 | Test `test_notify_tp_hit` referenciaba `_batch_task` eliminado por Ponytail | `tests/test_notifier.py` | Mock actualizado |
 
-**Nota:** Bugs 19-21 (notifier type syntax, shell=True, apply_update) no fueron corregidos porque requieren cambios en la lógica de actualización que no se probaron. Quedan como deuda técnica.
-
-### Tambien corregidos (prioridad menor):
-- `main_window.py`: sorted() crash en None open_time, change > 0 crash en None
-- `logger.py`: import time movido al tope, logging en except silenciosos
-- `main_window.py`: ~10 inline imports movidos al tope
-- `engine.py`: código muerto `amount_remaining` eliminado
-- Coincidencias de tests actualizadas (market → stop)
+### Problema de entorno resuelto
+| Problema | Causa | Solución |
+|----------|-------|----------|
+| 🔴 API keys de BingX y Bitget rechazadas | `dist/.env` tenía valores cifrados con Fernet en lugar de keys reales | Keys reales escritas al `dist/.env`, Bitget desactivado temporalmente |
 
 ---
 
-## 📌 Próximos Pasos (Sugerencias)
+## 🐛 Deuda Técnica Pendiente
 
-### 🟢 Pendientes
-- [x] ~~Compilar nuevo .exe con bugfixes~~
-- [x] ~~Corregir bugs 19-21 de la auditoría (notifier, updater)~~
-- [x] ~~Release v1.3.0 con todos los fixes~~
+1. **`updater.py`** — `shell=True` con lista de argumentos duplica cmd.exe
+2. **`updater.py`** — `apply_update()` es un stub, no cierra la app antes de actualizar
+3. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
+4. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
+
+---
+
+## 📌 Próximos Pasos Sugeridos
+
+- [ ] Obtener API keys reales de **Bitget** (API Key + Secret + Passphrase) para reactivarlo
+- [ ] Activar más exchanges (Binance, Bybit, OKX)
+- [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
+- [ ] Tests de integración con exchanges simulados
 
 ---
 

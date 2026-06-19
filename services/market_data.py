@@ -4,7 +4,7 @@ import aiohttp
 from aiohttp import ClientTimeout
 import logging
 import time
-from typing import Optional
+from typing import Optional, Any
 
 logger = logging.getLogger("TradingBot")
 

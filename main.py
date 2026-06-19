@@ -477,11 +477,14 @@ class TradingBotApp:
             for ex_id, ex_creds in creds["exchanges"].items():
                 if ex_creds.get("enabled"):
                     try:
-                        await asyncio.wait_for(
+                        client = await asyncio.wait_for(
                             exchange_service.create_client(ex_id, ex_creds),
                             timeout=15
                         )
-                        logger.info(f"✅ {ex_id}: Conectado correctamente")
+                        if client:
+                            logger.info(f"✅ {ex_id}: Conectado correctamente")
+                        else:
+                            logger.warning(f"⚠️ {ex_id}: No se pudo conectar (revisa API keys)")
                     except asyncio.TimeoutError:
                         logger.warning(f"⚠️ {ex_id}: Timeout 15s, continuando sin él...")
                     except Exception as e:

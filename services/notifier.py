@@ -226,7 +226,7 @@ class TelegramNotifier:
         await self.send_message(msg)
         self._add_to_history(f"{emoji} CERRADA {position.symbol} ${pnl_val:+.2f}")
 
-    async def notify_tp_hit(self, position: Position, tp_number: int, tp_price: float = None, tp_pnl: float = None):
+    async def notify_tp_hit(self, position: Position, tp_number: int, tp_price: Optional[float] = None, tp_pnl: Optional[float] = None):
         if not self.is_notification_enabled("tp_hit"):
             return
         price_str = f" a ${tp_price:,.2f}" if tp_price else ""
@@ -282,6 +282,20 @@ class TelegramNotifier:
         )
         await self.send_message(msg)
         self._add_to_history(f"✅ LIMIT {position.symbol}")
+
+
+    async def notify_dca_executed(self, exchange_id: str, market_symbol: str, price: float):
+        """Notifica que una orden DCA se ejecutó."""
+        if not self.is_notification_enabled("limit_filled"):
+            return
+        msg = (
+            f"📊 DCA ejecutado\n"
+            f"Exchange: {exchange_id}\n"
+            f"Símbolo: {market_symbol}\n"
+            f"Precio: ${price:,.2f}"
+        )
+        await self.send_message(msg)
+        self._add_to_history(f"📊 DCA {market_symbol}")
 
 
     async def notify_trailing_activated(self, position: Position):

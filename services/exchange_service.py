@@ -22,13 +22,6 @@ def _get_circuit_breaker(exchange_id: str) -> CircuitBreaker:
             failure_threshold=5,
             reset_timeout=60,
         )
-        from utils.config import DATA_DIR
-        cb_file = DATA_DIR / "resilience" / f"cb_{exchange_id}.json"
-        if cb_file.exists():
-            try:
-                _circuit_breakers[exchange_id].load(str(cb_file))
-            except Exception as e:
-                logger.warning("No se pudo cargar CB desde disco para %s: %s", exchange_id, e)
     return _circuit_breakers[exchange_id]
 
 class ExchangeService:

@@ -23,6 +23,11 @@ def _collect_all_data():
     }
 
 def export_config(password: str, filepath: str) -> bool:
+    """
+    Exporta la configuración a un archivo JSON.
+    Nota: el parámetro password se mantiene por compatibilidad con la UI
+    pero la exportación actual es en texto plano.
+    """
     try:
         data = _collect_all_data()
         with open(filepath, "w", encoding="utf-8") as f:
@@ -34,6 +39,11 @@ def export_config(password: str, filepath: str) -> bool:
         return False
 
 def import_config(password: str, filepath: str) -> bool:
+    """
+    Importa la configuración desde un archivo JSON.
+    Nota: el parámetro password se mantiene por compatibilidad con la UI
+    pero la importación actual no requiere cifrado.
+    """
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
