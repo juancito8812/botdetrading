@@ -2,14 +2,18 @@
 Auto-updater: consulta GitHub Releases, descarga y aplica actualizaciones.
 
 Flujo:
-  1. check_latest_version() → consulta API de GitHub, retorna info de la última release
-  2. download_update(url) → descarga MiBotTrading.exe
+  1. check_latest_version() → consulta GitHub (gh CLI o API), retorna info de la última release
+  2. download_update(url, tag_name) → descarga MiBotTrading.exe
   3. apply_update(path) → crea .bat que reemplaza el .exe y reinicia
 
 Todas las funciones son síncronas (usadas desde threads en la UI).
+
+REPO PRIVADO: Si el repo es privado, la API HTTP devuelve 404.
+  Se usa `gh release view` y `gh release download` como alternativa autenticada.
 """
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -20,17 +24,12 @@ from utils.helpers import BASE_DIR
 from utils.logger import logger
 
 VERSION_FILE = "VERSION"
-# Versión por defecto (fallback cuando VERSION no existe, ej: en otra PC sin el archivo)
 _CURRENT_VERSION = "v2.1.1"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
 
 
 def get_current_version() -> str:
-    """
-    Lee la versión actual desde el archivo VERSION.
-    Fallback a _CURRENT_VERSION si el archivo no existe.
-    """
     try:
         vf = Path(VERSION_FILE)
         if not vf.exists():
@@ -43,7 +42,6 @@ def get_current_version() -> str:
 
 
 def parse_version(version_str: str) -> tuple:
-    """Convierte 'v2.0.1' → (2, 0, 1)."""
     v = version_str.removeprefix("v").removeprefix("V")
     parts = v.split(".")
     try:
@@ -56,21 +54,40 @@ def parse_version(version_str: str) -> tuple:
 
 
 def is_newer_version(latest: str, current: str) -> bool:
-    """True si latest > current."""
     return parse_version(latest) > parse_version(current)
 
 
-def check_latest_version() -> Optional[dict]:
-    """
-    Consulta GitHub Releases API y retorna info de la última versión.
+def _gh_release_view() -> Optional[dict]:
+    """Usa gh CLI para obtener la última release (funciona con repos privados)."""
+    try:
+        r = subprocess.run(
+            ['gh', 'release', 'view', '--json', 'tagName,assets,body'],
+            capture_output=True, text=True, timeout=15
+        )
+        if r.returncode != 0:
+            logger.debug(f"gh CLI no disponible: {r.stderr[:100]}")
+            return None
 
-    Retorna dict con:
-      - tag_name: str (ej: "v2.0.1")
-      - download_url: str (URL directa del .exe)
-      - body: str (release notes)
+        data = json.loads(r.stdout)
+        tag_name = data.get("tagName", "")
+        body = data.get("body", "")
+        download_url = ""
+        for asset in data.get("assets", []):
+            if asset.get("name", "").lower() == _ASSET_NAME.lower():
+                download_url = asset.get("browser_download_url", "")
+                break
 
-    Retorna None si hay error (red, rate limit, etc.).
-    """
+        if not tag_name:
+            return None
+        logger.info(f"📡 Última versión (gh): {tag_name}")
+        return {"tag_name": tag_name, "download_url": download_url, "body": body}
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        logger.debug(f"gh CLI falló: {e}")
+        return None
+
+
+def _http_release_view() -> Optional[dict]:
+    """Usa la API HTTP de GitHub (solo funciona con repos públicos)."""
     try:
         req = urllib.request.Request(
             _GITHUB_API,
@@ -87,11 +104,8 @@ def check_latest_version() -> Optional[dict]:
 
         tag_name = data.get("tag_name", "")
         body = data.get("body", "")
-
-        # Buscar el asset .exe
         download_url = ""
-        assets = data.get("assets", [])
-        for asset in assets:
+        for asset in data.get("assets", []):
             if asset.get("name", "").lower() == _ASSET_NAME.lower():
                 download_url = asset.get("browser_download_url", "")
                 break
@@ -99,12 +113,10 @@ def check_latest_version() -> Optional[dict]:
         if not tag_name:
             logger.warning("GitHub API no devolvió tag_name")
             return None
-
         logger.info(f"📡 Última versión en GitHub: {tag_name}")
         return {"tag_name": tag_name, "download_url": download_url, "body": body}
-
     except urllib.error.HTTPError as e:
-        logger.warning(f"GitHub API HTTP {e.code}: {e.reason}")
+        logger.warning(f"GitHub API HTTP {e.code}: {e.reason} (repo privado?)")
         return None
     except urllib.error.URLError as e:
         logger.warning(f"Error de red consultando GitHub: {e.reason}")
@@ -114,28 +126,70 @@ def check_latest_version() -> Optional[dict]:
         return None
 
 
-def download_update(download_url: str, dest_dir: Optional[Path] = None) -> Optional[Path]:
+def check_latest_version() -> Optional[dict]:
     """
-    Descarga MiBotTrading.exe desde la URL de GitHub.
+    Consulta GitHub y retorna info de la última versión.
 
-    Args:
-        download_url: URL directa del asset.
-        dest_dir: Directorio destino (por defecto BASE_DIR).
+    Prioridad:
+      1. gh CLI (autenticado, funciona con repos privados)
+      2. HTTP API (solo repos públicos)
 
-    Returns:
-        Path al archivo descargado, o None si falla.
+    Retorna dict con:
+      - tag_name: str (ej: \"v2.1.1\")
+      - download_url: str (URL directa del .exe)
+      - body: str (release notes)
+
+    Retorna None si hay error.
     """
-    if not download_url:
-        logger.error("URL de descarga vacía")
+    info = _gh_release_view()
+    if info:
+        return info
+    return _http_release_view()
+
+
+def _gh_download_asset(tag_name: str, dest_dir: Path) -> Optional[Path]:
+    """Descarga el .exe usando gh CLI (funciona con repos privados)."""
+    import tempfile
+    import shutil
+    tmp_dir = tempfile.mkdtemp(prefix="mibot_update_")
+    try:
+        logger.info(f"⬇️ Descargando con gh release download {tag_name}...")
+        r = subprocess.run(
+            ['gh', 'release', 'download', tag_name,
+             '-p', _ASSET_NAME,
+             '-D', tmp_dir],
+            capture_output=True, text=True, timeout=300
+        )
+        if r.returncode != 0:
+            logger.warning(f"gh download falló: {r.stderr[:200]}")
+            return None
+
+        downloaded = Path(tmp_dir) / _ASSET_NAME
+        if downloaded.exists():
+            size_mb = downloaded.stat().st_size / (1024 * 1024)
+            logger.info(f"✅ Update descargado (gh): {size_mb:.0f} MB")
+            new_name = dest_dir / "MiBotTrading_new.exe"
+            if new_name.exists():
+                new_name.unlink()
+            shutil.move(str(downloaded), str(new_name))
+            return new_name
         return None
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.warning(f"gh download no disponible: {e}")
+        return None
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    dest = (dest_dir or BASE_DIR) / "MiBotTrading_new.exe"
-    logger.info(f"⬇️ Descargando update desde {download_url}")
 
+def _http_download_asset(download_url: str, dest_dir: Path) -> Optional[Path]:
+    """Descarga el .exe vía HTTP (solo funciona con repos públicos)."""
+    if not download_url:
+        return None
+    dest = dest_dir / "MiBotTrading_new.exe"
     try:
         with urllib.request.urlopen(download_url, timeout=120) as resp:
             total = int(resp.headers.get("Content-Length", 0))
-            downloaded = 0
+            downloaded_bytes = 0
             chunk_size = 8192
             with open(dest, "wb") as f:
                 while True:
@@ -143,15 +197,14 @@ def download_update(download_url: str, dest_dir: Optional[Path] = None) -> Optio
                     if not chunk:
                         break
                     f.write(chunk)
-                    downloaded += len(chunk)
-                    if total > 0 and downloaded % (chunk_size * 100) == 0:
-                        pct = downloaded / total * 100
-                        logger.info(f"⬇️  Descargando... {pct:.0f}% ({downloaded // 1024 // 1024} MB)")
+                    downloaded_bytes += len(chunk)
+                    if total > 0 and downloaded_bytes % (chunk_size * 100) == 0:
+                        pct = downloaded_bytes / total * 100
+                        logger.info(f"⬇️  Descargando... {pct:.0f}% ({downloaded_bytes // 1024 // 1024} MB)")
 
         size_mb = dest.stat().st_size / (1024 * 1024)
         logger.info(f"✅ Update descargado: {size_mb:.0f} MB → {dest}")
         return dest
-
     except urllib.error.HTTPError as e:
         logger.error(f"Error HTTP descargando: {e.code} {e.reason}")
         _cleanup_temp(dest)
@@ -166,8 +219,38 @@ def download_update(download_url: str, dest_dir: Optional[Path] = None) -> Optio
         return None
 
 
+def download_update(download_url: str, tag_name: Optional[str] = None,
+                    dest_dir: Optional[Path] = None) -> Optional[Path]:
+    """
+    Descarga MiBotTrading.exe desde GitHub.
+
+    Args:
+        download_url: URL directa del asset (fallback HTTP).
+        tag_name: Nombre del tag (ej: \"v2.1.1\") para gh CLI download.
+        dest_dir: Directorio destino (por defecto BASE_DIR).
+
+    Returns:
+        Path al archivo descargado, o None si falla.
+    """
+    dest = dest_dir or BASE_DIR
+
+    # 1. Intentar con gh CLI (funciona con privados)
+    if tag_name:
+        result = _gh_download_asset(tag_name, dest)
+        if result:
+            return result
+
+    # 2. Fallback HTTP (públicos)
+    if download_url:
+        result = _http_download_asset(download_url, dest)
+        if result:
+            return result
+
+    logger.error("No se pudo descargar la actualización por ningún método")
+    return None
+
+
 def _cleanup_temp(path: Path):
-    """Elimina archivo temporal si existe."""
     try:
         if path.exists():
             path.unlink()
@@ -176,21 +259,6 @@ def _cleanup_temp(path: Path):
 
 
 def apply_update(downloaded_path: Path) -> bool:
-    """
-    Aplica la actualización: crea un script .bat que reemplaza el .exe y reinicia.
-
-    El .bat:
-      1. Espera a que el proceso actual termine
-      2. Reemplaza MiBotTrading.exe con MiBotTrading_new.exe
-      3. Elimina MiBotTrading_new.exe
-      4. Reinicia MiBotTrading.exe
-
-    Args:
-        downloaded_path: Path al archivo descargado (MiBotTrading_new.exe).
-
-    Returns:
-        True si se lanzó el .bat correctamente.
-    """
     downloaded = Path(downloaded_path)
     if not downloaded.exists():
         logger.error(f"Archivo descargado no encontrado: {downloaded}")
@@ -206,7 +274,6 @@ def apply_update(downloaded_path: Path) -> bool:
     new_exe = exe_dir / "MiBotTrading_new.exe"
     bat_path = exe_dir / "_update.bat"
 
-    # Mover el descargado junto al .exe si no está ya ahí
     if downloaded.parent != exe_dir:
         import shutil
         shutil.move(str(downloaded), str(new_exe))

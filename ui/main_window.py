@@ -941,7 +941,7 @@ class TradingBotGUI:
 
     def _download_update(self):
         """Descarga la actualización y la aplica."""
-        if not self._upd_latest_info or not self._upd_latest_info.get("download_url"):
+        if not self._upd_latest_info:
             return
 
         self.upd_download_btn.config(state='disabled', text=i18n.t("upd_downloading"))
@@ -950,8 +950,9 @@ class TradingBotGUI:
         def _do_download():
 
             try:
-                url = self._upd_latest_info["download_url"]
-                dest = download_update(url)
+                url = self._upd_latest_info.get("download_url", "")
+                tag = self._upd_latest_info.get("tag_name", None)
+                dest = download_update(url, tag_name=tag)
                 if dest:
                     self.root.after(0, lambda: (
                         self.upd_status_label.config(text=i18n.t("upd_downloaded"), foreground=COLOR_GREEN),
