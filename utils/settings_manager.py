@@ -92,15 +92,16 @@ def enable_autostart() -> Tuple[bool, str]:
     task_name = _get_task_name()
     working_dir = str(BASE_DIR)
     
-    # Crear tarea que se ejecuta al iniciar sesión del usuario actual
+    # Crear tarea que se ejecuta al iniciar Windows (incluso sin sesión abierta)
+    # Usa /ru SYSTEM para ejecutarse como servicio del sistema
+    # La tarea se ejecuta con /rl HIGHEST para tener permisos de red completos
     cmd = [
         'schtasks', '/create', '/tn', task_name,
         '/tr', f'"{exe_path}"',
-        '/sc', 'onlogon',
-        '/ru', f'{os.environ.get("USERDOMAIN", "")}\\{os.environ.get("USERNAME", "CURRENT_USER")}',
-        '/rl', 'LIMITED',
+        '/sc', 'onstart',
+        '/ru', 'SYSTEM',
+        '/rl', 'HIGHEST',
         '/f',
-        '/it'
     ]
     
     try:

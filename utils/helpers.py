@@ -12,9 +12,14 @@ logger = logging.getLogger("TradingBot")
 
 # --- DETERMINAR RAÍZ DEL PROYECTO ---
 if getattr(sys, 'frozen', False):
-    # Si es un ejecutable (.exe) - usar APPDATA para datos escribibles
+    # Si es un ejecutable (.exe)
     BASE_DIR = Path(sys.executable).parent
-    DATA_DIR = Path(os.environ.get('APPDATA', Path.home())) / "MiBotTrading"
+    # Usar APPDATA para datos, excepto cuando corre como SYSTEM (sin sesión de usuario)
+    system_user = os.environ.get('USERNAME', '').upper() == 'SYSTEM'
+    if system_user:
+        DATA_DIR = BASE_DIR
+    else:
+        DATA_DIR = Path(os.environ.get('APPDATA', Path.home())) / "MiBotTrading"
 else:
     # Si se ejecuta como script (.py)
     BASE_DIR = Path(__file__).parent.parent

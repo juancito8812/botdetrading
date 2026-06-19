@@ -39,8 +39,17 @@ _async_worker = AsyncWorker()
 class TradingBotApp:
     def __init__(self):
         init_dirs()
-        self.root = tk.Tk()
-        self.gui = TradingBotGUI(self.root, toggle_callback=self.toggle_bot)
+        self._headless = False
+        self.root = None
+        self.gui = None
+        try:
+            self.root = tk.Tk()
+            self.gui = TradingBotGUI(self.root, toggle_callback=self.toggle_bot)
+            self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        except Exception:
+            self._headless = True
+            logger.info("🔧 Modo headless: sin interfaz gráfica")
+
         self.bot_running = threading.Event()
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.telegram_client: Optional[TelegramClient] = None
@@ -56,8 +65,6 @@ class TradingBotApp:
 
         # Configurar parche DNS
         patch_aiohttp_dns()
-
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def toggle_bot(self):
         running = self.bot_running.is_set()
@@ -80,7 +87,8 @@ class TradingBotApp:
             self._loop_stopped.clear()
 
             self.bot_running.set()
-        self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
+        if self.gui and not self._headless:
+            self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
         logger.info("Iniciando bot en segundo plano...")
 
         thread = threading.Thread(
@@ -93,7 +101,8 @@ class TradingBotApp:
             if not self.bot_running.is_set():
                 return
             self.bot_running.clear()
-        self.gui.btn_toggle_bot.config(text="🚀 INICIAR BOT")
+        if self.gui and not self._headless:
+            self.gui.btn_toggle_bot.config(text="🚀 INICIAR BOT")
         logger.info("Solicitud de detencion enviada.")
 
         # Detener watchdog (metodo sincronico)
@@ -145,12 +154,13 @@ class TradingBotApp:
 
             self.bot_running.clear()
             self._loop_stopped.set()
-            self.root.after(
-                0,
-                lambda: self.gui.btn_toggle_bot.config(
-                    text="🚀 INICIAR BOT"
+            if not self._headless and self.gui:
+                self.root.after(
+                    0,
+                    lambda: self.gui.btn_toggle_bot.config(
+                        text="🚀 INICIAR BOT"
+                    )
                 )
-            )
 
     async def _create_telegram_client(self, creds, channels):
         """Crea el cliente de Telegram UNA SOLA VEZ y registra el handler.
@@ -330,16 +340,17 @@ class TradingBotApp:
         )
         logger.info(f"🔔 Notificador inicializado (chat_id: {notification_chat_id})")
 
-        # Actualizar estado en UI
-        try:
-            if not me_info:
-                me_info = await self.telegram_client.get_me()
-            user_str = f"{getattr(me_info, 'first_name', '?')} (@{getattr(me_info, 'username', '?')})"
-            phone_str = getattr(me_info, 'phone', '') or ''
-            self.root.after(0, lambda u=user_str, p=phone_str, cid=notification_chat_id:
-                self.gui.update_telegram_status(True, u, p, cid))
-        except Exception:
-            pass
+        # Actualizar estado en UI (solo si hay GUI)
+        if not self._headless:
+            try:
+                if not me_info:
+                    me_info = await self.telegram_client.get_me()
+                user_str = f"{getattr(me_info, 'first_name', '?')} (@{getattr(me_info, 'username', '?')})"
+                phone_str = getattr(me_info, 'phone', '') or ''
+                self.root.after(0, lambda u=user_str, p=phone_str, cid=notification_chat_id:
+                    self.gui.update_telegram_status(True, u, p, cid))
+            except Exception:
+                pass
 
         return notifier
 
@@ -412,6 +423,10 @@ class TradingBotApp:
                 # Asegurar que el watchdog se esté ejecutando (solo uno a la vez)
                 trading_engine.stop_watchdog()
                 trading_engine._watchdog_task = asyncio.create_task(trading_engine.watchdog())
+
+                # Forzar sync inmediato de posiciones al reconectar
+                logger.info("🔄 Sincronizando posiciones inmediatamente...")
+                await trading_engine._watchdog_tick()
 
                 # Bloquear hasta que se pierda la conexion o se detenga el bot
                 await tc.run_until_disconnected()
@@ -523,17 +538,34 @@ class TradingBotApp:
             logger.info(
                 "Credenciales detectadas. Iniciando bot automáticamente..."
             )
-            # Actualizar botón inmediatamente para evitar flash visual
-            self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
-            self.root.after(500, self.start_bot)
+            if not self._headless:
+                self.gui.btn_toggle_bot.config(text="🛑 DETENER BOT")
+                self.root.after(500, self.start_bot)
+            else:
+                # Headless: iniciar inmediatamente
+                self.start_bot()
 
-        self.root.mainloop()
+        if self._headless:
+            # Headless: mantener vivo el hilo principal
+            logger.info("🤖 Bot en modo headless — monitorea por Telegram")
+            try:
+                while True:
+                    time.sleep(60)
+                    if not self.bot_running.is_set():
+                        # Si el bot se detuvo inesperadamente, reintentar
+                        logger.warning("🔄 Bot detenido, reiniciando...")
+                        self.start_bot()
+            except KeyboardInterrupt:
+                logger.info("🛑 Bot detenido por el usuario")
+                self.stop_bot()
+        else:
+            self.root.mainloop()
 
     async def _alive_loop(self):
         first = True
         while self.bot_running.is_set():
             if not first:
-                await asyncio.sleep(14400)
+                await asyncio.sleep(7200)
             else:
                 first = False
                 await asyncio.sleep(300)  # primer heartbeat a los 5 min

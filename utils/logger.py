@@ -1,13 +1,16 @@
 import logging
 import os
+import sys
 import time
 from logging.handlers import TimedRotatingFileHandler
 import gzip
 import shutil
 from utils.config import LOG_FILE
 
+
 def _compressed_namer(name):
     return name + ".gz"
+
 
 def _compress_rotator(source, dest):
     try:
@@ -18,6 +21,7 @@ def _compress_rotator(source, dest):
     except Exception as e:
         log = logging.getLogger("TradingBot")
         log.warning("Error comprimiendo log %s: %s", source, e)
+
 
 def _cleanup_old_logs(log_file, max_age_days=30):
     log = logging.getLogger("TradingBot")
@@ -37,27 +41,44 @@ def _cleanup_old_logs(log_file, max_age_days=30):
     except Exception as e:
         log.warning(f"Error limpiando logs antiguos: {e}")
 
+
 def setup_logger():
     logger = logging.getLogger("TradingBot")
     logger.setLevel(logging.INFO)
 
     if not logger.handlers:
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+        # Handler principal en DATA_DIR con rotación diaria
         fh = TimedRotatingFileHandler(
             LOG_FILE, when='midnight', interval=1,
             backupCount=30, encoding='utf-8'
         )
         fh.namer = _compressed_namer
         fh.rotator = _compress_rotator
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)
         logger.addHandler(fh)
 
         _cleanup_old_logs(LOG_FILE, max_age_days=30)
 
+        # Handler adicional junto al .exe (solo cuando es ejecutable)
+        if getattr(sys, 'frozen', False):
+            from utils.helpers import BASE_DIR
+            exe_log = BASE_DIR / "log_bot.txt"
+            try:
+                exe_handler = logging.FileHandler(exe_log, encoding='utf-8')
+                exe_handler.setFormatter(formatter)
+                logger.addHandler(exe_handler)
+                logger.info(f"📝 Log también en: {exe_log}")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo crear log en {exe_log}: {e}")
+
+        # Consola
         ch = logging.StreamHandler()
         ch.setFormatter(formatter)
         logger.addHandler(ch)
 
     return logger
+
 
 logger = setup_logger()

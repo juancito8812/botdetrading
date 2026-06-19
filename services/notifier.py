@@ -85,6 +85,14 @@ class TelegramNotifier:
         """Retorna las últimas N notificaciones."""
         return self.history[-count:]
 
+    async def _notify(self, notif_type: str, msg: str, history: str) -> bool:
+        """Helper: check pref -> send -> add history. Retorna True si envió."""
+        if not self.is_notification_enabled(notif_type):
+            return False
+        ok = await self.send_message(msg)
+        if ok:
+            self._add_to_history(history)
+        return ok
 
     async def _resolve_chat_id(self) -> Any:
         """
@@ -168,8 +176,6 @@ class TelegramNotifier:
             return False
 
     async def notify_trade_open(self, position: Position):
-        if not self.is_notification_enabled("trade_open"):
-            return
         side_emoji = "🚀" if position.side.lower() == "buy" else "🔻"
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
         size_usdt = position.amount * position.entry_price * position.leverage
@@ -191,12 +197,9 @@ class TelegramNotifier:
             f"SL: {sl_text}\n"
             f"TPs: {tp_count} niveles"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"{side_emoji} {side_text} ABIERTA {position.symbol}")
+        await self._notify("trade_open", msg, f"{side_emoji} {side_text} ABIERTA {position.symbol}")
 
     async def notify_trade_closed(self, position: Position):
-        if not self.is_notification_enabled("trade_closed"):
-            return
         side_text = "LONG" if position.side.lower() == "buy" else "SHORT"
         pnl_val = position.pnl if position.pnl is not None else 0.0
         entry_val = position.entry_price * position.amount if position.entry_price and position.amount > 0 else 0
@@ -223,12 +226,9 @@ class TelegramNotifier:
             f"PnL: ${pnl_val:+.2f} ({pnl_pct:+.2f}%)\n"
             f"{duration}"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"{emoji} CERRADA {position.symbol} ${pnl_val:+.2f}")
+        await self._notify("trade_closed", msg, f"{emoji} CERRADA {position.symbol} ${pnl_val:+.2f}")
 
     async def notify_tp_hit(self, position: Position, tp_number: int, tp_price: Optional[float] = None, tp_pnl: Optional[float] = None):
-        if not self.is_notification_enabled("tp_hit"):
-            return
         price_str = f" a ${tp_price:,.2f}" if tp_price else ""
         pnl_line = f"\nPnL: ${tp_pnl:+.2f}" if tp_pnl is not None else ""
         msg = (
@@ -236,12 +236,9 @@ class TelegramNotifier:
             f"Símbolo: {position.symbol}\n"
             f"Exchange: {position.exchange_id}{pnl_line}"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"🎯 TP{tp_number} {position.symbol}")
+        await self._notify("tp_hit", msg, f"🎯 TP{tp_number} {position.symbol}")
 
     async def notify_sl_hit(self, position: Position):
-        if not self.is_notification_enabled("sl_hit"):
-            return
         loss = position.pnl if position.pnl is not None else 0.0
         exit_p = position.exit_price if position.exit_price else position.entry_price
         msg = (
@@ -252,13 +249,10 @@ class TelegramNotifier:
             f"Salida: ${exit_p:,.2f}\n"
             f"Pérdida: ${loss:+.2f}"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"🛑 SL {position.symbol} ${loss:+.2f}")
+        await self._notify("sl_hit", msg, f"🛑 SL {position.symbol} ${loss:+.2f}")
 
 
     async def notify_signal_received(self, signal, exchange_id: str, action: str):
-        if not self.is_notification_enabled("signal_received"):
-            return
         msg = (
             f"📡 Señal recibida\n"
             f"Símbolo: {signal.symbol}\n"
@@ -266,13 +260,10 @@ class TelegramNotifier:
             f"Exchange: {exchange_id}\n"
             f"Acción: {action}"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"📡 {signal.symbol} {action}")
+        await self._notify("signal_received", msg, f"📡 {signal.symbol} {action}")
 
 
     async def notify_limit_filled(self, position: Position):
-        if not self.is_notification_enabled("limit_filled"):
-            return
         msg = (
             f"✅ Orden LIMIT llenada\n"
             f"Exchange: {position.exchange_id}\n"
@@ -280,44 +271,35 @@ class TelegramNotifier:
             f"Entrada: ${position.entry_price:,.2f}\n"
             f"Cantidad: {position.amount}"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"✅ LIMIT {position.symbol}")
+        await self._notify("limit_filled", msg, f"✅ LIMIT {position.symbol}")
 
 
     async def notify_dca_executed(self, exchange_id: str, market_symbol: str, price: float):
         """Notifica que una orden DCA se ejecutó."""
-        if not self.is_notification_enabled("limit_filled"):
-            return
         msg = (
             f"📊 DCA ejecutado\n"
             f"Exchange: {exchange_id}\n"
             f"Símbolo: {market_symbol}\n"
             f"Precio: ${price:,.2f}"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"📊 DCA {market_symbol}")
+        await self._notify("limit_filled", msg, f"📊 DCA {market_symbol}")
 
 
     async def notify_trailing_activated(self, position: Position):
         """Notifica que el trailing stop se activó."""
-        if not self.is_notification_enabled("trailing_activated"):
-            return
         msg = (
             f"🔝 Trailing Stop activado\n"
             f"Símbolo: {position.symbol}\n"
             f"Exchange: {position.exchange_id}\n"
             f"Precio entrada: ${position.entry_price:,.2f}"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"🔝 Trailing {position.symbol}")
+        await self._notify("trailing_activated", msg, f"🔝 Trailing {position.symbol}")
 
     async def notify_health_change(
         self, exchange: str, status: str,
         consecutive_failures: int = 0, avg_latency_ms: float = 0.0,
     ):
         """Notifica cambio en el estado de salud de un exchange."""
-        if not self.is_notification_enabled("health_change"):
-            return
         emoji = "✅" if status == "healthy" else ("⚠️" if status == "degraded" else "🔴")
         msg = (
             f"{emoji} Health Monitor - {exchange}\n"
@@ -325,33 +307,24 @@ class TelegramNotifier:
             f"Fallos consecutivos: {consecutive_failures}\n"
             f"Latencia: {avg_latency_ms:.0f}ms"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"{emoji} {exchange}: {status.upper()}")
+        await self._notify("health_change", msg, f"{emoji} {exchange}: {status.upper()}")
 
     async def notify_circuit_breaker(
         self, exchange: str, state: str, retry_after: float = 0.0,
     ):
         """Notifica cambio de estado en el circuit breaker."""
-        if not self.is_notification_enabled("circuit_breaker"):
-            return
         msg = (
             f"🔴 Circuit Breaker - {exchange}\n"
             f"Estado: {state.upper()}\n"
             f"Reintentar en: {retry_after:.0f}s"
         )
-        await self.send_message(msg)
-        self._add_to_history(f"🔴 CB {exchange}: {state.upper()}")
+        await self._notify("circuit_breaker", msg, f"🔴 CB {exchange}: {state.upper()}")
 
     async def notify_error(self, module: str, error_message: str):
         """Notifica un error crítico del sistema."""
-        if not self.is_notification_enabled("system_error"):
-            return
-        msg = (
-            f"❌ Error en {module}\n"
-            f"{error_message[:200]}"
-        )
-        await self.send_message(msg)
-        self._add_to_history(f"❌ Error en {module}")
+        await self._notify("system_error",
+            f"❌ Error en {module}\n{error_message[:200]}",
+            f"❌ Error en {module}")
 
     async def send_daily_report(
         self, positions: List[Position], balances: Dict[str, float],
@@ -383,5 +356,6 @@ class TelegramNotifier:
         else:
             lines.append("  (sin datos - exchanges no conectados)")
 
-        await self.send_message("\n".join(lines))
-        self._add_to_history("📊 Reporte diario enviado")
+        ok = await self.send_message("\n".join(lines))
+        if ok:
+            self._add_to_history("📊 Reporte diario enviado")
