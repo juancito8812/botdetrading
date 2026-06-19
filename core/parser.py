@@ -27,12 +27,15 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     if not symbol:
         return None
         
-    # 2. Dirección (LONG/BUY o SHORT/SELL)
+    # 2. Dirección (LONG/BUY, SHORT/SELL, o SCALP como fallback)
     direction = None
     if re.search(r'\b(LONG|BUY)\b', upper):
         direction = "Buy"
     elif re.search(r'\b(SHORT|SELL)\b', upper):
         direction = "Sell"
+    elif re.search(r'\bSCALP\b', upper):
+        # SCALP sin direccion explicita → default Buy (tipicamente Long)
+        direction = "Buy"
         
     if not direction:
         return None

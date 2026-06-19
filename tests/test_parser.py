@@ -85,6 +85,44 @@ def test_parse_duplicate_targets():
     assert len(signal.targets) == 1, f"Esperaba 1 target único, obtuvo {len(signal.targets)}"
 
 
+def test_parse_scalp_long():
+    """Señal SCALP con LONG explicito."""
+    signal = _assert_signal("Scalp Long $PARTI (Leverage 5x) F\nEntry: 0.06095 - 0.05730\nTP: 0.06520 - 0.07090 - 0.07544 - 0.08069 - 0.08738\nSL: 0.05450")
+    assert signal.symbol == "PARTI"
+    assert signal.direccion == "Buy"
+    assert signal.entry_min == 0.05730
+    assert signal.entry_max == 0.06095
+    assert signal.stop_loss == 0.05450
+    assert len(signal.targets) == 5
+
+
+def test_parse_scalp_default_buy():
+    """Señal SCALP sin direccion explicita → default Buy."""
+    signal = _assert_signal("SCALP $SOL\nEntry: 100\nSL: 95\nTP: 120, 130")
+    assert signal.symbol == "SOL"
+    assert signal.direccion == "Buy"
+    assert len(signal.targets) == 2
+
+
+def test_parse_scalp_short():
+    """Señal SCALP con SHORT explicito → Sell."""
+    signal = _assert_signal("Scalp Short $DOGE\nEntry: 0.5\nSL: 0.55\nTP: 0.45, 0.40")
+    assert signal.symbol == "DOGE"
+    assert signal.direccion == "Sell"
+
+
+def test_parse_symbol_without_usdt():
+    """Simbolo $XXX sin USDT."""
+    signal = _assert_signal("LONG $BTC\nENTRY: 100\nSL: 90\nTARGETS: 110")
+    assert signal.symbol == "BTC"
+
+
+def test_parse_tp_without_number():
+    """TP: sin numero individual (TP: val1, val2...)."""
+    signal = _assert_signal("LONG ETH/USDT\nENTRY: 3500\nSL: 3400\nTP: 3600, 3700, 3800")
+    assert len(signal.targets) == 3
+
+
 if __name__ == "__main__":
     test_parse_long_signal()
     test_parse_short_signal()
@@ -95,4 +133,9 @@ if __name__ == "__main__":
     test_parse_targets_ordered_long()
     test_parse_targets_ordered_short()
     test_parse_duplicate_targets()
+    test_parse_scalp_long()
+    test_parse_scalp_default_buy()
+    test_parse_scalp_short()
+    test_parse_symbol_without_usdt()
+    test_parse_tp_without_number()
 print("✅ Todos los tests del parser pasaron correctamente.")
