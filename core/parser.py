@@ -12,11 +12,17 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     """
     upper = text.upper()
     
-    # 1. Extraer Símbolo (ej: BTC/USDT, #ETHUSDT, SOL-USDT)
+    # 1. Extraer Símbolo (ej: BTC/USDT, #ETHUSDT, SOL-USDT, $PARTI)
     symbol = None
+    # Prioridad 1: formato con USDT (BTC/USDT, ETHUSDT, SOL-USDT)
     m_sym = re.search(r'[\$#]?([A-Z0-9]+)[/-]?USDT', upper)
     if m_sym:
         symbol = m_sym.group(1)
+    else:
+        # Prioridad 2: formato $SIMBOLO o #SIMBOLO sin USDT (ej: $PARTI, #BTC)
+        m_sym = re.search(r'[\$#]([A-Z0-9]{2,})', upper)
+        if m_sym:
+            symbol = m_sym.group(1)
     
     if not symbol:
         return None
@@ -54,8 +60,8 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     
     # 5. Take Profits (TP/Targets)
     targets = []
-    # Opción A: Lista en una sola línea (ej: "Targets: 66000, 67000" o "Take Profit: 66000")
-    m_targets_line = re.search(r'(?:TARGETS\s*|TAKE\s*PROFIT)\s*[:\-]?\s*([\d\.\s\,\-]+)', upper)
+    # Opción A: Lista en una sola línea (ej: "Targets: 66000, 67000" o "Take Profit: 66000" o "TP: 0.06520 - 0.07090")
+    m_targets_line = re.search(r'(?:TARGETS\s*|TAKE\s*PROFIT|\bTP\b\s*)[:\-]?\s*([\d\.\s\,\-]+)', upper)
     if m_targets_line:
         try:
             targets = [float(x) for x in re.findall(r'[\d\.]+', m_targets_line.group(1))]
