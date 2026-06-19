@@ -13,6 +13,7 @@ from utils.config import (load_api_creds, load_risk_config,
                           load_channels, init_dirs, BASE_DIR)
 from utils.logger import logger
 from utils.helpers import patch_aiohttp_dns
+from utils.crypto import encrypt as _crypto_encrypt, decrypt as _crypto_decrypt
 from services.exchange_service import exchange_service
 from core.engine import trading_engine, health_monitor
 from core.parser import parse_trading_signal
@@ -182,11 +183,19 @@ class TradingBotApp:
 
         session_dir = BASE_DIR / "telegram_session"
         session_dir.mkdir(parents=True, exist_ok=True)
-        session_file = session_dir / "user_session.string"
+        session_file = session_dir / "user_session.enc"
 
         session_data = None
         if session_file.exists():
-            session_data = session_file.read_text().strip() or None
+            try:
+                encrypted = session_file.read_text().strip()
+                api_hash = tg.get("API_HASH", "")
+                if encrypted and api_hash:
+                    decrypted = _crypto_decrypt(api_hash, encrypted)
+                    if decrypted:
+                        session_data = decrypted.strip() or None
+            except Exception:
+                logger.warning("No se pudo descifrar sesion existente, se pedira autenticacion")
 
         self.telegram_client = TelegramClient(
             StringSession(session_data), int(tg["API_ID"]), tg["API_HASH"]
@@ -231,15 +240,24 @@ class TradingBotApp:
                 logger.info("Formato de señal no reconocido.")
 
     def _save_telegram_session(self):
-        """Guarda la sesion de StringSession a disco."""
+        """Guarda la sesion de StringSession a disco (cifrada con AES-256-GCM)."""
         if not self.telegram_client:
+            return
+        tg = load_api_creds()["telegram"]
+        api_hash = tg.get("API_HASH", "")
+        if not api_hash:
+            logger.warning("No se puede cifrar sesion: API_HASH no disponible")
             return
         try:
             session_dir = BASE_DIR / "telegram_session"
             session_dir.mkdir(parents=True, exist_ok=True)
             session_str = self.telegram_client.session.save()
-            (session_dir / "user_session.string").write_text(session_str)
-            logger.debug("Sesion Telegram guardada.")
+            encrypted = _crypto_encrypt(api_hash, session_str)
+            if encrypted:
+                (session_dir / "user_session.enc").write_text(encrypted)
+                logger.debug("Sesion Telegram guardada (cifrada).")
+            else:
+                logger.warning("Fallo al cifrar sesion Telegram")
         except Exception as e:
             logger.warning(f"No se pudo guardar sesion Telegram: {e}")
 

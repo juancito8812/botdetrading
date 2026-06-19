@@ -21,7 +21,7 @@ from utils.logger import logger
 
 VERSION_FILE = "VERSION"
 # Versión por defecto (fallback cuando VERSION no existe, ej: en otra PC sin el archivo)
-_CURRENT_VERSION = "v2.0.2"
+_CURRENT_VERSION = "v2.1.0"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
 

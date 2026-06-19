@@ -46,36 +46,24 @@ def export_config(password: str, filepath: str) -> bool:
         return True
     except Exception as e:
         logger.error(f"Error exportando configuración: {e}")
-        return False
-
-
-def import_config(password: str, filepath: str) -> bool:
+        return Falsedef import_config(password: str, filepath: str) -> bool:
     """
-    Importa la configuración desde un archivo cifrado con AES-256-GCM (v2)
-    o legacy en texto plano (v1).
+    Importa la configuración desde un archivo cifrado con AES-256-GCM (v2).
     """
     try:
+        if not password:
+            raise ValueError("Este backup requiere contraseña")
         with open(filepath, "r", encoding="utf-8") as f:
             raw = f.read()
 
-        # Detectar si es backup v1 (texto plano) o v2 (cifrado)
-        if _is_v1_content(raw):
-            data = json.loads(raw)
-            version = data.get("version", 0)
-            if version != 1:
-                raise ValueError(f"Versión de backup no soportada: {version}")
-            logger.info("Importando backup v1 (texto plano)")
-        else:
-            # v2: requiere password y descifrado AES
-            if not password:
-                raise ValueError("Este backup requiere contraseña")
-            plaintext = _crypto_decrypt(password, raw)
-            if not plaintext:
-                raise ValueError("Contraseña incorrecta o archivo corrupto")
-            data = json.loads(plaintext)
-            version = data.get("version", 0)
-            if version != BACKUP_VERSION:
-                raise ValueError(f"Versión de backup no soportada: {version}")
+        # Solo v2: descifrado AES requerido
+        plaintext = _crypto_decrypt(password, raw)
+        if not plaintext:
+            raise ValueError("Contraseña incorrecta o archivo corrupto")
+        data = json.loads(plaintext)
+        version = data.get("version", 0)
+        if version != BACKUP_VERSION:
+            raise ValueError(f"Versión de backup no soportada: {version}")
 
         if not data.get("api_creds"):
             raise ValueError("El archivo de backup no contiene datos")
@@ -88,9 +76,3 @@ def import_config(password: str, filepath: str) -> bool:
     except Exception as e:
         logger.error(f"Error importando configuración: {e}")
         return False
-
-
-def _is_v1_content(raw: str) -> bool:
-    """Detecta si el contenido es backup v1 (texto plano) vs v2 (cifrado)."""
-    raw = raw.strip()
-    return raw.startswith("{") or raw.startswith("[")

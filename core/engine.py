@@ -34,7 +34,6 @@ class TradingEngine:
         self._last_health_check_time = 0.0  # timestamp del último health check
         # Cargar órdenes LIMIT pendientes desde disco
         self._load_pending_limits()
-        self._cached_creds = load_api_creds()
         self._added_exchanges: set = set()
 
     def _signal_to_dict(self, signal: 'Signal') -> dict:
@@ -811,9 +810,10 @@ class TradingEngine:
     async def _sync_failed_exchanges(self):
         """Reintenta conexión con exchanges fallidos."""
         failed_snapshot = list(exchange_service.failed_exchanges)
+        creds = load_api_creds()
         for ex_id in failed_snapshot:
             logger.info(f"🔄 Reintentando conexión con {ex_id}...")
-            ex_creds = self._cached_creds["exchanges"].get(ex_id, {})
+            ex_creds = creds["exchanges"].get(ex_id, {})
             if ex_creds.get("enabled"):
                 await exchange_service.create_client(ex_id, ex_creds)
 
