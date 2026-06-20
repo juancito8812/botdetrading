@@ -1,14 +1,14 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
 > ╔══════════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v2.1.3 — 19/06/2026                            ║
-> ║  Estado: 🧪 PRODUCCIÓN — Build fix + auto-update funciona     ║
-> ║  Tests: 440+ pasando                                         ║
-> ║  Cambios: __init__.py en packages, repo público, auto-update ║
+> ║  🟢 CHECKPOINT v2.1.4 — 19/06/2026                            ║
+> ║  Estado: 🧪 PRODUCCIÓN — .exe funcional + auto-update OK     ║
+> ║  Tests: 147 pasando (engine+parser+exchange_service)          ║
+> ║  Cambios: __init__.py con imports explícitos, fix syntax     ║
 > ║  Exchanges activos: BingX + Bitget (ambos operativos)         ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Última actualización: 19/06/2026 (America/Caracas) — v2.1.3: Build fix + auto-update funcional*
+*Última actualización: 19/06/2026 (America/Caracas) — v2.1.4: PyInstaller fix final — .exe funcional*
 
 ---
 
@@ -354,9 +354,15 @@ TARGETS: 120, 130
 
 | Problema | Causa | Fix |
 |----------|-------|-----|
-| 🔴 **v2.1.2 .exe no abre** — `ImportError: cannot import name 'config_backup' from 'utils'` | Faltaban `__init__.py` en packages (core, services, ui, utils, models). PyInstaller no resuelve namespace packages sin ellos | Creados `__init__.py` vacíos en los 5 directorios |
-| 🟢 **Auto-update no funcionaba** | Repo era privado, HTTP API 404 | Repo hecho público + tag v2.1.3 |
-| 🟢 **v2.1.1 .exe nunca se había compilado** | Solo existía en código, sin tag+release | Tag v2.1.2 y v2.1.3 creados, builds ejecutándose |
+| 🔴 **v2.1.2 .exe no abre** — `ImportError: cannot import name 'config_backup' from 'utils'` | Faltaban `__init__.py` en packages | Creados `__init__.py` vacíos en 5 directorios |
+| 🟢 **Auto-update no funcionaba** | Repo era privado | Repo hecho público |
+
+#### v2.1.4 — PyInstaller fix final (.exe funcional)
+
+| Problema | Causa | Fix |
+|----------|-------|-----|
+| 🔴 **v2.1.3 .exe mismo error** — `cannot import name 'config_backup' from 'utils' (__init__.py)` | `__init__.py` vacíos — PyInstaller frozen importer no resuelve submodules sin import explícito | `utils/__init__.py`: `from . import config_backup` |
+| 🔴 **SyntaxError en config_backup.py** | `return Falsedef import_config(...)` pegado sin newline | Newline añadido |
 
 ---
 

@@ -46,7 +46,10 @@ def export_config(password: str, filepath: str) -> bool:
         return True
     except Exception as e:
         logger.error(f"Error exportando configuración: {e}")
-        return Falsedef import_config(password: str, filepath: str) -> bool:
+        return False
+
+
+def import_config(password: str, filepath: str) -> bool:
     """
     Importa la configuración desde un archivo cifrado con AES-256-GCM (v2).
     """

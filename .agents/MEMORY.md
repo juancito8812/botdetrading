@@ -158,6 +158,12 @@ Cada llamada a exchange pasa por:
   - **Test Limit Long**: Formato "Limit Long $SIMBOLO" ya soportado
   - **Tests**: 146 tests (engine 85 + parser 18 + exchange_service 43)
 
+- **[19/06/2026] -- Fix build v2.1.4:**
+  - **utils/__init__.py**: `from . import config_backup` para que PyInstaller resuelva el submodule
+  - **utils/config_backup.py**: Fix syntax error `return Falsedef` -> `return False` + newline
+  - **Tests**: 147 tests (todos pasando)
+  - **Tag**: v2.1.4 - build del .exe funcional
+
 ## Proximos Pasos / TODOs
 
 - [ ] Activar mas exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto

@@ -24,7 +24,7 @@ from utils.helpers import BASE_DIR
 from utils.logger import logger
 
 VERSION_FILE = "VERSION"
-_CURRENT_VERSION = "v2.1.3"
+_CURRENT_VERSION = "v2.1.4"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
 
