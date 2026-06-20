@@ -1,14 +1,14 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
 > ╔══════════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v2.1.4 — 19/06/2026                            ║
-> ║  Estado: 🧪 PRODUCCIÓN — .exe funcional + auto-update OK     ║
-> ║  Tests: 147 pasando (engine+parser+exchange_service)          ║
-> ║  Cambios: __init__.py con imports explícitos, fix syntax     ║
+> ║  🟢 CHECKPOINT v2.1.9 — 19/06/2026                            ║
+> ║  Estado: 🧪 PRODUCCIÓN — Auditoría seguridad completa        ║
+> ║  Tests: 164 pasando (engine+parser+exchange_service+config)   ║
+> ║  Cambios: .env cifrado, sesión derivada, cache GitHub, logs  ║
 > ║  Exchanges activos: BingX + Bitget (ambos operativos)         ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Última actualización: 19/06/2026 (America/Caracas) — v2.1.4: PyInstaller fix final — .exe funcional*
+*Última actualización: 19/06/2026 (America/Caracas) — v2.1.9: Auditoría seguridad completa (7/7 hallazgos resueltos)*
 
 ---
 
@@ -239,9 +239,9 @@ TradingEngine.watchdog()
 ## 🚀 Auto-Updater
 
 `services/updater.py` implementado con:
-- `check_latest_version()`: Consulta GitHub Releases API via urllib
+- `check_latest_version()`: Consulta GitHub Releases API via urllib (cache 5 min)
 - `download_update()`: Descarga .exe en chunks con progreso
-- `apply_update()`: Script .bat que reemplaza el .exe y reinicia
+- `apply_update()`: Renombra a .update (abre GitHub en navegador - evita Windows Defender)
 
 ## 🧪 Tests (324 tests)
 
@@ -364,6 +364,23 @@ TARGETS: 120, 130
 | 🔴 **v2.1.3 .exe mismo error** — `cannot import name 'config_backup' from 'utils' (__init__.py)` | `__init__.py` vacíos — PyInstaller frozen importer no resuelve submodules sin import explícito | `utils/__init__.py`: `from . import config_backup` |
 | 🔴 **SyntaxError en config_backup.py** | `return Falsedef import_config(...)` pegado sin newline | Newline añadido |
 
+#### v2.1.7 — Auto-update sin Windows Defender
+
+| Problema | Solución |
+|----------|---------|
+| 🔴 Windows Defender bloqueaba .bat y .ps1 | Abre GitHub Releases en navegador. Usuario descarga manualmente desde el navegador (confiable para Defender) |
+
+#### v2.1.8/v2.1.9 — Auditoría de seguridad completa
+
+| ID | Hallazgo | Fix |
+|----|----------|-----|
+| H-1 🔴 | `.env` en texto plano | Cifrado AES-256-GCM con MachineGuid + salt. Migración automática desde legacy |
+| M-1 🟡 | Sesión Telegram cifrada con API_HASH directo | Clave derivada (API_HASH + MachineGuid). Fallback para sesiones legacy |
+| M-2 🟡 | GitHub API sin cache (60 req/hora) | Cache de 5 min en check_latest_version() |
+| M-3 🟡 | Número de teléfono visible en UI | Enmascarado a últimos 4 dígitos |
+| L-1 🟢 | .exe descargado sin validación | _verify_exe(): tamaño >1MB + cabecera PE "MZ" |
+| L-2 🟢 | API keys visibles en logs | SensitiveDataFilter: enmascara API_KEY, SECRET, PASSPHRASE en logs |
+
 ---
 
 ## 🐛 Deuda Técnica Pendiente
@@ -383,7 +400,9 @@ TARGETS: 120, 130
 - [x] Mejora: TPs antes que SL + Watchdog cancel SL/TP
 - [x] Fix build: __init__.py faltantes
 - [x] Repo público + auto-update funcional
-- [ ] Desplegar v2.1.3 a producción
+- [x] Auditoría seguridad completa (7/7 hallazgos)
+- [x] Build .exe funcional + auto-update OK
+- [x] Fix 40109 Bitget + BingX setLeverage + Parser REJECT_PATTERNS
 - [ ] Activar más exchanges (Binance, Bybit, OKX)
 - [ ] Tests para updater.py y crypto.py
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)

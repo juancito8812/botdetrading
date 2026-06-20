@@ -4,9 +4,9 @@
 
 - **Proposito:** Bot de trading automatizado que recibe senales via Telegram y ejecuta ordenes en exchanges de criptomonedas (Bitget, BingX).
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexion exchanges), Telethon (Telegram), asyncio
-- **Ultimas features:** Dashboard auto-refresh 60s + Auto-start Windows por defecto + Bot auto-inicia al abrir
-- **Ultima sesion:** 19/06/2026 - Fix produccion: 40109 Bitget plan orders + BingX setLeverage + Parser + Watchdog cancel SL/TP
-- **Version de memoria:** 11
+- **Ultimas features:** Auditoria seguridad completa (7/7 hallazgos resueltos)
+- **Ultima sesion:** 19/06/2026 - Auditoria seguridad + fixes produccion + build
+- **Version de memoria:** 12
 
 ## Arquitectura
 
@@ -164,6 +164,15 @@ Cada llamada a exchange pasa por:
   - **Tests**: 147 tests (todos pasando)
   - **Tag**: v2.1.4 - build del .exe funcional
 
+- **[19/06/2026] -- Auditoria seguridad v2.1.8/v2.1.9 (7 hallazgos):**
+  - **H-1 (.env cifrado)**: `config.py` - AES-256-GCM + MachineGuid + salt
+  - **M-1 (Sesion derivada)**: `main.py` - clave API_HASH + MachineGuid para cifrar sesion Telegram
+  - **M-2 (Cache GitHub)**: `updater.py` - cache 5 min para check_latest_version()
+  - **M-3 (Phone mask)**: `main.py` - ultimos 4 digitos del telefono en UI
+  - **L-1 (Validacion .exe)**: `updater.py` - _verify_exe() tamaño + cabecera PE
+  - **L-2 (Filtro logs)**: `logger.py` - SensitiveDataFilter enmascara API keys
+  - **Tests**: 164 tests (engine+parser+exchange_service+config)
+
 ## Proximos Pasos / TODOs
 
 - [ ] Activar mas exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto
@@ -176,7 +185,8 @@ Cada llamada a exchange pasa por:
 - [x] Tooltips de ayuda + Notificaciones seleccionables
 - [x] Dashboard auto-refresh + Auto-start Windows + Bot auto-inicia
 - [x] Fix produccion v2.1.2: 40109, BingX, parser, watchdog
-- [ ] Desplegar v2.1.2 a produccion
+- [x] Desplegar v2.1.9 a produccion
+- [x] Auditoria seguridad completa (7/7 hallazgos)
 - [ ] Graficos en pestana Reportes (matplotlib para PnL historico)
 - [ ] Tests de integracion con exchanges simulados
 - [ ] Cubrir watchdog loop de engine.py (de 69% a 85%)
