@@ -23,10 +23,11 @@ from utils.helpers import BASE_DIR
 from utils.logger import logger
 
 VERSION_FILE = "VERSION"
-_CURRENT_VERSION = "v2.1.7"
+_CURRENT_VERSION = "v2.1.8"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
 _GITHUB_RELEASES = "https://github.com/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
+_CACHE_TTL = 300  # 5 min cache para no exceder rate limit de GitHub (60 req/hora sin auth)
 
 
 def get_current_version() -> str:
@@ -126,9 +127,15 @@ def _http_release_view() -> Optional[dict]:
         return None
 
 
+# Cache simple para evitar exceder rate limit de GitHub
+_cache_result = None
+_cache_time = 0.0
+
+
 def check_latest_version() -> Optional[dict]:
     """
     Consulta GitHub y retorna info de la última versión.
+    Cachea el resultado por {_CACHE_TTL}s para no exceder rate limits.
 
     Prioridad:
       1. gh CLI (autenticado, funciona con repos privados)
@@ -141,10 +148,22 @@ def check_latest_version() -> Optional[dict]:
 
     Retorna None si hay error.
     """
+    import time
+    global _cache_result, _cache_time
+
+    now = time.time()
+    if _cache_result and (now - _cache_time) < _CACHE_TTL:
+        logger.debug("Usando versión cacheadas (TTL %ds)", _CACHE_TTL)
+        return _cache_result
+
     info = _gh_release_view()
+    if not info:
+        info = _http_release_view()
+
     if info:
-        return info
-    return _http_release_view()
+        _cache_result = info
+        _cache_time = now
+    return info
 
 
 def _gh_download_asset(tag_name: str, dest_dir: Path) -> Optional[Path]:

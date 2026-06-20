@@ -191,7 +191,12 @@ class TradingBotApp:
                 encrypted = session_file.read_text().strip()
                 api_hash = tg.get("API_HASH", "")
                 if encrypted and api_hash:
-                    decrypted = _crypto_decrypt(api_hash, encrypted)
+                    # Intentar con clave derivada primero
+                    key = self._get_session_key(api_hash)
+                    decrypted = _crypto_decrypt(key, encrypted)
+                    if not decrypted:
+                        # Fallback: clave legacy (API_HASH directo) - migración
+                        decrypted = _crypto_decrypt(api_hash, encrypted)
                     if decrypted:
                         session_data = decrypted.strip() or None
             except Exception:
@@ -239,8 +244,24 @@ class TradingBotApp:
             else:
                 logger.info("Formato de señal no reconocido.")
 
+    def _get_session_key(self, api_hash: str) -> str:
+        """Deriva una clave para cifrar la sesión de Telegram.
+        Combina API_HASH + MachineGuid para evitar que API_HASH solo pueda descifrar.
+        """
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography")
+            machine_id, _ = winreg.QueryValueEx(key, "MachineGuid")
+            winreg.CloseKey(key)
+        except Exception:
+            import uuid
+            machine_id = str(uuid.getnode())
+        return f"{api_hash}::{machine_id}"
+
     def _save_telegram_session(self):
-        """Guarda la sesion de StringSession a disco (cifrada con AES-256-GCM)."""
+        """Guarda la sesion de StringSession a disco (cifrada con AES-256-GCM).
+        Usa clave derivada (API_HASH + MachineGuid) en vez de API_HASH directo.
+        """
         if not self.telegram_client:
             return
         tg = load_api_creds()["telegram"]
@@ -252,10 +273,11 @@ class TradingBotApp:
             session_dir = BASE_DIR / "telegram_session"
             session_dir.mkdir(parents=True, exist_ok=True)
             session_str = self.telegram_client.session.save()
-            encrypted = _crypto_encrypt(api_hash, session_str)
+            key = self._get_session_key(api_hash)
+            encrypted = _crypto_encrypt(key, session_str)
             if encrypted:
                 (session_dir / "user_session.enc").write_text(encrypted)
-                logger.debug("Sesion Telegram guardada (cifrada).")
+                logger.debug("Sesion Telegram guardada (cifrada con clave derivada).")
             else:
                 logger.warning("Fallo al cifrar sesion Telegram")
         except Exception as e:
@@ -363,7 +385,9 @@ class TradingBotApp:
                     me_info = await self.telegram_client.get_me()
                 user_str = f"{getattr(me_info, 'first_name', '?')} (@{getattr(me_info, 'username', '?')})"
                 phone_str = getattr(me_info, 'phone', '') or ''
-                self.root.after(0, lambda u=user_str, p=phone_str, cid=notification_chat_id:
+                # Mostrar solo últimos 4 dígitos por seguridad
+                masked_phone = phone_str[-4:] if len(phone_str) > 4 else "****"
+                self.root.after(0, lambda u=user_str, p=masked_phone, cid=notification_chat_id:
                     self.gui.update_telegram_status(True, u, p, cid))
             except Exception:
                 pass
