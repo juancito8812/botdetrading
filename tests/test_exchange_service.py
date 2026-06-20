@@ -423,7 +423,7 @@ async def test_set_leverage_bingx_side_param(svc):
     svc.clients["bingx"] = client
     await svc.set_leverage("bingx", "BTC/USDT", 10, "cross", "LONG")
 
-    client.set_leverage.assert_awaited_once_with(10, "BTC/USDT", {"positionSide": "LONG"})
+    client.set_leverage.assert_awaited_once_with(10, "BTC/USDT", {"side": "LONG"})
 
 
 @pytest.mark.asyncio
@@ -564,7 +564,7 @@ async def test_cancel_order_success(svc):
     svc.clients["bitget"] = client
     result = await svc.cancel_order("bitget", "BTC/USDT", "order_123")
     assert result is True
-    client.cancel_order.assert_awaited_once_with("order_123", "BTC/USDT")
+    client.cancel_order.assert_awaited_once_with("order_123", "BTC/USDT", {"planType": "normal_plan"})
 
 
 @pytest.mark.asyncio

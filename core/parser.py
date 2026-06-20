@@ -11,7 +11,19 @@ def parse_trading_signal(text: str) -> Optional[Signal]:
     Retorna un objeto Signal o None si no se reconoce el formato.
     """
     upper = text.upper()
-    
+
+    # 0. Filtro rápido: rechazar mensajes que NO son señales de entrada
+    #    (ej: mensajes de pérdida/cierre que contienen palabras clave)
+    REJECT_PATTERNS = [
+        r'\d+\.?\d*%?\s*Loss',          # "17.8% Loss" o "6.150 Loss"
+        r'took\s+this\s+\w+\s+out',    # "took this one out"
+        r'Volatility across',             # "Volatility across global markets..."
+    ]
+    for pattern in REJECT_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            logger.debug(f"📪 Mensaje rechazado por patrón: {pattern}")
+            return None
+
     # 1. Extraer Símbolo (ej: BTC/USDT, #ETHUSDT, SOL-USDT, $PARTI)
     symbol = None
     # Prioridad 1: formato con USDT (BTC/USDT, ETHUSDT, SOL-USDT)

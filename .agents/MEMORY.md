@@ -5,8 +5,8 @@
 - **Proposito:** Bot de trading automatizado que recibe senales via Telegram y ejecuta ordenes en exchanges de criptomonedas (Bitget, BingX).
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexion exchanges), Telethon (Telegram), asyncio
 - **Ultimas features:** Dashboard auto-refresh 60s + Auto-start Windows por defecto + Bot auto-inicia al abrir
-- **Ultima sesion:** 14/06/2026 - Dashboard auto-refresh + Auto-start Windows + Fix pack/grid
-- **Version de memoria:** 9
+- **Ultima sesion:** 19/06/2026 - Fix produccion: 40109 Bitget plan orders + BingX setLeverage + Parser + Watchdog cancel SL/TP
+- **Version de memoria:** 10
 
 ## Arquitectura
 
@@ -115,7 +115,7 @@ Cada llamada a exchange pasa por:
 
 ## Estado Actual
 
-- **Lo que se esta trabajando:** Dashboard UX + auto-start Windows + fix pack/grid
+- **Lo que se esta trabajando:** Estabilizacion produccion (fix 40109, BingX, parser, watchdog)
 - **Exchanges activos en config.json:** bitget, bingx
 - **Apalancamiento:** 5x
 - **Modo margen:** Cross
@@ -149,6 +149,15 @@ Cada llamada a exchange pasa por:
   - **main.py**: Auto-configura tarea de Windows al arrancar, boton se actualiza inmediatamente (sin flash), fix desempaquetado tuple enable_autostart()
   - **tests/test_settings_manager.py**: Test actualizado para nuevo default True
 
+- **[19/06/2026] -- Fix produccion v2.1.2 (3 bugs + parser):**
+  - **Bug 40109 Bitget**: `fetch_plan_order()` + `cancel_order()` con `planType: 'normal_plan'` para Bitget. Arregla 5 callers
+  - **BingX setLeverage**: `positionSide` -> `side` en params (elimina warning)
+  - **Watchdog cancel SL/TP**: Cancela SL y TPs al detectar posicion cerrada
+  - **Parser REJECT_PATTERNS**: Rechaza mensajes con Loss, took out, Volatility
+  - **Parser TPs antes que SL**: TPs primero, SL despues (Bitget sin reduceOnly)
+  - **Test Limit Long**: Formato "Limit Long $SIMBOLO" ya soportado
+  - **Tests**: 146 tests (engine 85 + parser 18 + exchange_service 43)
+
 ## Proximos Pasos / TODOs
 
 - [ ] Activar mas exchanges (Binance, Bybit, OKX) con el nuevo sistema robusto
@@ -160,6 +169,8 @@ Cada llamada a exchange pasa por:
 - [x] Fixes estabilidad + cobertura 75% -> 87%
 - [x] Tooltips de ayuda + Notificaciones seleccionables
 - [x] Dashboard auto-refresh + Auto-start Windows + Bot auto-inicia
+- [x] Fix produccion v2.1.2: 40109, BingX, parser, watchdog
+- [ ] Desplegar v2.1.2 a produccion
 - [ ] Graficos en pestana Reportes (matplotlib para PnL historico)
 - [ ] Tests de integracion con exchanges simulados
 - [ ] Cubrir watchdog loop de engine.py (de 69% a 85%)
@@ -168,10 +179,12 @@ Cada llamada a exchange pasa por:
 
 - Archivos temporales/legacy excluidos via `.gitignore`
 - Repositorio GitHub: https://github.com/juancito8812/botdetrading.git (rama master)
-- Tests: 348 tests en total, todos pasando (87% cobertura)
+- Tests: 348+ tests en total, todos pasando (146 de engine+parser+exchange_service)
 - Auto-start con Windows: habilitado por defecto, crea tarea Programador de Tareas al primer arranque
 - Bot auto-inicia si hay credenciales configuradas (no necesita clic en INICIAR)
 - Dashboard carga datos automaticamente al abrir y refresca cada 60s
+- Bug 40109 Bitget: fetch_plan_order + cancel_order con planType arreglan consulta/cancelacion de plan orders
+- BingX setLeverage: cambiado de positionSide a side param
 
 ---
 

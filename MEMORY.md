@@ -1,14 +1,14 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
 > ╔══════════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v2.0.2 — 18/06/2026                            ║
-> ║  Estado: 🧪 PRUEBA DE 1 SEMANA INICIADA                       ║
-> ║  Tests: 324/324 pasando                                       ║
-> ║  .exe: v2.0.2 compilado + Release en GitHub                   ║
+> ║  🟢 CHECKPOINT v2.1.2 — 19/06/2026                            ║
+> ║  Estado: 🧪 PRODUCCIÓN — Logs analizados, 3 bugs fijados      ║
+> ║  Tests: 440+ pasando (146 engine+parser+exchange_service)      ║
+> ║  Cambios: Fix 40109 Bitget, BingX setLeverage, Parser+Watchdog║
 > ║  Exchanges activos: BingX + Bitget (ambos operativos)         ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Última actualización: 18/06/2026 (America/Caracas) — v2.0.2: inicio prueba 1 semana*
+*Última actualización: 19/06/2026 (America/Caracas) — v2.1.2: Fixes post-producción*
 
 ---
 
@@ -319,40 +319,42 @@ TARGETS: 120, 130
 
 ---
 
-## 🐛 Bugs Corregidos — Sesión 18/06/2026 (v2.0.1)
+## 🐛 Bugs Corregidos — Sesión 19/06/2026 (v2.1.2: Post-producción)
 
-Se corrigieron **7 bugs** post-Ponytail sweep en una sesión de debugging + compilación:
+Analizado log de 24h en producción. Se corrigieron **3 bugs** y se mejoró el parser:
 
-### Bugs de código (6)
-| # | Severidad | Bug | Archivo | Fix |
-|---|-----------|-----|---------|-----|
-| 1 | 🔴 | `notify_dca_executed()` faltante — engine.py la llamaba pero no existía en notifier.py | `services/notifier.py` | Método agregado, reusa pref `limit_filled` |
-| 2 | 🟡 | `Any` no importado en `market_data.py` (usado en `Optional[Any]`) | `services/market_data.py` | Agregado `Any` al `from typing import` |
-| 3 | 🟡 | `cb.load()` inexistente — Ponytail eliminó el método pero `exchange_service.py` seguía llamándolo | `services/exchange_service.py` | Bloque de persistencia obsoleto eliminado |
-| 4 | 🟡 | Log falso `✅ bingx: Conectado correctamente` aunque `create_client()` retornara `None` | `main.py` | Ahora verifica `if client:` antes de loguear éxito |
-| 5 | 🟢 | `tp_pnl: float = None` type hint incorrecto (None no es float) | `services/notifier.py` | Cambiado a `Optional[float] = None` |
-| 6 | 🟢 | `password` en `config_backup.py` nunca se usaba para cifrar | `utils/config_backup.py` | Docstring aclaratorio agregado |
-| 7 | 🟢 | Test `test_notify_tp_hit` referenciaba `_batch_task` eliminado por Ponytail | `tests/test_notifier.py` | Mock actualizado |
+### Bug 1 🔴 — 40109: TP1 de Bitget nunca detectado
+| Item | Detalle |
+|------|---------|
+| **Síntoma** | Cada ~32s: `⚠️ Error fetching TP1 order for BAT: bitget {"code":"40109","msg":"The data of the order cannot be found"}` durante 2.5h |
+| **Causa** | `_check_tp1_hit()` usaba `client.fetch_order()` que no funciona para plan orders de Bitget (necesitan `planType: 'normal_plan'`) |
+| **Fix** | Nuevo método `fetch_plan_order()` en `exchange_service.py` que pasa `params={'planType': 'normal_plan'}` para Bitget. También `cancel_order()` ahora pasa el mismo param. Un solo cambio arregla 5 callers |
 
-### Problema de entorno resuelto
-| Problema | Causa | Solución |
-|----------|-------|----------|
-| 🔴 API keys de BingX y Bitget rechazadas | `dist/.env` tenía valores cifrados con Fernet en lugar de keys reales | Keys reales escritas al `dist/.env`, Bitget desactivado temporalmente |
+### Bug 2 🟡 — BingX setLeverage warning
+| Item | Detalle |
+|------|---------|
+| **Síntoma** | En cada trade: `⚠️ bingx: No se pudo configurar apalancamiento/margen: bingx setLeverage() requires a side argument` |
+| **Causa** | `set_leverage()` pasaba `params['positionSide']` pero BingX requiere `params['side']` |
+| **Fix** | Cambiado `positionSide` → `side` en `exchange_service.py:set_leverage()` |
+
+### Bug 3 🟡 — Parser no filtraba mensajes de pérdida
+| Item | Detalle |
+|------|---------|
+| **Síntoma** | Mensaje de SL hit se ejecutó como orden de compra (AVAX comprado a 6.041 con SL en 6.15) |
+| **Causa** | Parser detectaba `$AVAX/USDT` + `LONG` + `STOP LOSS` sin validar que era mensaje de cierre |
+| **Fix** | Filtro `REJECT_PATTERNS` en `parser.py`: rechaza `% Loss`, `took this one out`, `Volatility across` |
+
+### Mejora 🟢 — TPs antes que SL + Watchdog cancel SL/TP
+| Item | Detalle |
+|------|---------|
+| **Problema** | SL se colocaba primero (reduceOnly 100%) → TPs bloqueados por límite reduceOnly |
+| **Fix** | TPs primero, SL después (Bitget sin reduceOnly). Watchdog cancela SL+TPs al cerrar posición |
 
 ---
 
-## 🧪 Prueba de 1 Semana
-
-- **Iniciada:** 18/06/2026
-- **Ubicación:** Otra PC (dist/ comprimido y copiado)
-- **Exchanges activos:** BingX + Bitget
-- **Auto-arranque:** Onstart + SYSTEM (sin sesión de Windows)
-- **Monitoreo:** Heartbeats cada 2h a Telegram
-- **Logs:** log_bot.txt junto al .exe
-
 ## 🐛 Deuda Técnica Pendiente
 
-1. **Archivos legacy en raíz** — `_fix_probar.py`, `legacy_code/`, etc. excluidos vía `.gitignore` pero existen en disco
+1. **Archivos legacy en raíz** — excluidos vía `.gitignore` pero existen en disco
 2. **CoinGecko API gratuita** — Límite 10-30 llamadas/minuto
 3. **Tests para updater.py y crypto.py** — faltan tests unitarios
 
@@ -360,7 +362,12 @@ Se corrigieron **7 bugs** post-Ponytail sweep en una sesión de debugging + comp
 
 ## 📌 Próximos Pasos Sugeridos
 
-- [ ] Revisar resultados de la prueba de 1 semana
+- [x] Analizar log de producción (24h)
+- [x] Fix 40109 Bitget plan orders
+- [x] Fix BingX setLeverage
+- [x] Fix parser: filtrar mensajes de pérdida
+- [x] Mejora: TPs antes que SL + Watchdog cancel SL/TP
+- [ ] Desplegar v2.1.2 a producción
 - [ ] Activar más exchanges (Binance, Bybit, OKX)
 - [ ] Tests para updater.py y crypto.py
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)

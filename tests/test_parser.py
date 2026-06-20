@@ -123,6 +123,44 @@ def test_parse_tp_without_number():
     assert len(signal.targets) == 3
 
 
+def test_reject_loss_message():
+    """Mensaje con 'Loss' debe ser rechazado."""
+    text = "📍SIGNAL ID: #2161📍\nCOIN: $AVAX/USDT (2-5X)\nDirection: LONG\n➖➖➖➖➖➖➖\n\nSTOP LOSS: 6.150\n\n🚫17.8% Loss (2x)🚫\n\nVolatility across global markets took this one out."
+    signal = parse_trading_signal(text)
+    assert signal is None, "Mensaje de pérdida NO debe parsearse como señal"
+
+
+def test_reject_took_out_message():
+    """Mensaje con 'took this one out' debe ser rechazado."""
+    text = "$BTC took this one out. On to the next."
+    signal = parse_trading_signal(text)
+    assert signal is None
+
+
+def test_accept_valid_signal_with_signal_id():
+    """Señal real con SIGNAL ID NO debe ser rechazada (es apertura)."""
+    text = "📍SIGNAL ID: #2162📍\nCOIN: $ZEC/USDT (2-5x)\nDirection: LONG\n➖➖➖➖➖➖➖\nENTRY: 436.00 - 440.00\n\nTARGETS: 460.00 - 480.00 - 505.00\n\nSTOP LOSS: 400.00"
+    signal = parse_trading_signal(text)
+    assert signal is not None, "Señal real NO debe ser rechazada"
+    assert signal.symbol == "ZEC"
+    assert signal.direccion == "Buy"
+
+
+def test_parse_limit_long_format():
+    """Formato 'Limit Long $SIMBOLO (Leverage X) Entry: ... TP: ...'."""
+    text = "Limit Long $BASED (Leverage 4x) ↗️\n\nEntry: 0.07725 - 0.08411\nTP: 0.09261 - 0.10187"
+    signal = parse_trading_signal(text)
+    assert signal is not None, "Limit Long debe parsearse"
+    assert signal.symbol == "BASED"
+    assert signal.direccion == "Buy"
+    assert signal.entry_min == 0.07725
+    assert signal.entry_max == 0.08411
+    assert len(signal.targets) == 2
+    assert signal.targets[0] == 0.09261
+    assert signal.targets[1] == 0.10187
+    assert signal.stop_loss is None  # No tiene SL
+
+
 if __name__ == "__main__":
     test_parse_long_signal()
     test_parse_short_signal()

@@ -1665,7 +1665,7 @@ class TradingBotGUI:
                         position.market_symbol, 'limit', sl_side, sl_amount, new_sl, {
                             'stopPrice': new_sl,
                             'planType': 'normal_plan',
-                            'reduceOnly': True
+                            # Sin reduceOnly para no bloquear TPs existentes
                         }
                     ))
                 else:

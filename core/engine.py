@@ -116,7 +116,7 @@ class TradingEngine:
             params['tdMode'] = config.get("modo_margen", "cross")
         return params
 
-    def _create_exchange_order(self, exchange_id, side_upper, stop_price, is_tp=False):
+    def _create_exchange_order(self, exchange_id, side_upper, stop_price, is_tp=False, reduce_only=True):
         if exchange_id == "bingx":
             order_type = 'TRIGGER_LIMIT' if is_tp else 'TRIGGER_MARKET'
             price = stop_price if is_tp else None
@@ -124,11 +124,15 @@ class TradingEngine:
         elif exchange_id == "bitget":
             order_type = 'limit'
             price = stop_price
-            params = {'stopPrice': stop_price, 'planType': 'normal_plan', 'reduceOnly': True}
+            params = {'stopPrice': stop_price, 'planType': 'normal_plan'}
+            if reduce_only:
+                params['reduceOnly'] = True
         else:
             order_type = 'limit' if is_tp else 'stop'
             price = stop_price if is_tp else None
-            params = {'stopPrice': stop_price, 'reduceOnly': True}
+            params = {'stopPrice': stop_price}
+            if reduce_only:
+                params['reduceOnly'] = True
         return order_type, price, params
 
     def _validate_price_deviation(self, price: float, entry_min: float,
@@ -255,14 +259,14 @@ class TradingEngine:
                 entry_order_ids=[entry_order_id] if entry_order_id else []
             )
 
-            # 5. Colocar Stop Loss (SL)
-            await self._place_stop_loss(client, exchange_id, market_symbol, signal, amount, side_upper, new_pos)
-
-            # 6. Colocar Take Profits (TP) con distribución personalizada (#5)
+            # 5. Colocar Take Profits PRIMERO (reduceOnly: True, no bloquear por SL)
             tp_amounts = self._calculate_tp_amounts(amount, signal.targets, config)
             await self._place_take_profits(
                 client, exchange_id, market_symbol, signal, tp_amounts, side_upper, new_pos
             )
+
+            # 6. Colocar Stop Loss DESPUÉS (Bitget: sin reduceOnly para no exceder límite)
+            await self._place_stop_loss(client, exchange_id, market_symbol, signal, amount, side_upper, new_pos)
 
             pos_manager.add_position(new_pos)
             logger.info(f"✅ Ejecución completa en {exchange_id} a {entry_price}")
@@ -535,7 +539,11 @@ class TradingEngine:
     async def _place_stop_loss(
         self, client, exchange_id, market_symbol, signal, amount, side_upper, new_pos
     ):
-        """Coloca Stop Loss."""
+        """Coloca Stop Loss.
+
+        En Bitget: se coloca SIN reduceOnly para no bloquear las órdenes TP
+        que ya están colocadas (reduceOnly total no debe exceder el tamaño de posición).
+        """
         if not signal.stop_loss:
             return
 
@@ -544,7 +552,12 @@ class TradingEngine:
         sl_amount = float(client.amount_to_precision(market_symbol, amount))
 
         try:
-            order_type, price, params = self._create_exchange_order(exchange_id, side_upper, signal.stop_loss)
+            # Bitget: SL sin reduceOnly (las TPs ya consumieron el límite)
+            use_reduce_only = exchange_id != "bitget"
+            order_type, price, params = self._create_exchange_order(
+                exchange_id, side_upper, signal.stop_loss,
+                is_tp=False, reduce_only=use_reduce_only
+            )
             sl_order = await client.create_order(market_symbol, order_type, sl_side, sl_amount, price, params)
 
             new_pos.sl_order_id = sl_order.get('id')
@@ -639,9 +652,12 @@ class TradingEngine:
 
         client = exchange_service.clients.get(exchange_id)
         if client:
-            await self._place_stop_loss(client, exchange_id, market_symbol, signal, filled, side_upper, new_pos)
+            # TPs primero, SL después (Bitget: SL sin reduceOnly)
             tp_amounts = self._calculate_tp_amounts(filled, signal.targets, config)
             await self._place_take_profits(client, exchange_id, market_symbol, signal, tp_amounts, side_upper, new_pos)
+
+            use_reduce_only = exchange_id != "bitget"
+            await self._place_stop_loss(client, exchange_id, market_symbol, signal, filled, side_upper, new_pos)
 
         pos_manager.add_position(new_pos)
         if self.notifier:
@@ -728,6 +744,22 @@ class TradingEngine:
                 exit_price = float(position_data.get('markPrice', 0)) or pos.entry_price
 
                 if contracts == 0:
+                    # 🔥 Cancelar órdenes SL/TP huérfanas (por cierre manual)
+                    if pos.sl_order_id:
+                        try:
+                            await exchange_service.cancel_order(
+                                pos.exchange_id, pos.market_symbol, pos.sl_order_id
+                            )
+                        except Exception as e:
+                            logger.warning(f"⚠️ Error cancelando SL huérfano {pos.sl_order_id}: {e}")
+                    for tp_id in pos.tp_order_ids:
+                        try:
+                            await exchange_service.cancel_order(
+                                pos.exchange_id, pos.market_symbol, tp_id
+                            )
+                        except Exception as e:
+                            logger.warning(f"⚠️ Error cancelando TP huérfano {tp_id}: {e}")
+
                     pos.exit_price = exit_price
                     pos.close_time = time.time()
                     pos.status = PositionStatus.CLOSED
@@ -749,7 +781,11 @@ class TradingEngine:
                         sl_amount = float(client.amount_to_precision(pos.market_symbol, contracts))
                         side_upper = 'LONG' if pos.side.lower() == 'buy' else 'SHORT'
                         await exchange_service.cancel_order(pos.exchange_id, pos.market_symbol, pos.sl_order_id)
-                        order_type, price, params = self._create_exchange_order(pos.exchange_id, side_upper, pos.sl_price)
+                        use_reduce_only = pos.exchange_id != "bitget"
+                        order_type, price, params = self._create_exchange_order(
+                            pos.exchange_id, side_upper, pos.sl_price,
+                            reduce_only=use_reduce_only
+                        )
                         sl_order = await client.create_order(pos.market_symbol, order_type, sl_side, sl_amount, price, params)
                         pos.sl_order_id = sl_order.get('id')
                     pos_manager.save()
@@ -793,19 +829,28 @@ class TradingEngine:
                 logger.debug(f"Watchdog: Error verificando posición {pos.symbol}: {e}")
 
     async def _check_tp1_hit(self, pos, client):
-        """Verifica si TP1 fue alcanzado. Solo revisa el primer TP."""
+        """Verifica si TP1 fue alcanzado. Solo revisa el primer TP.
+
+        Para Bitget usa fetch_plan_order (las TP son plan orders),
+        para otros exchanges usa client.fetch_order directo.
+        """
         if not pos.tp1_hit and pos.tp_order_ids:
             tp1_id = pos.tp_order_ids[0]  # Solo TP1
             try:
-                order = await client.fetch_order(tp1_id, pos.market_symbol)
-                if order.get('status') == 'closed' or order.get('filled', 0) > 0:
+                if pos.exchange_id == "bitget":
+                    order = await exchange_service.fetch_plan_order(
+                        pos.exchange_id, pos.market_symbol, tp1_id
+                    )
+                else:
+                    order = await client.fetch_order(tp1_id, pos.market_symbol)
+                if order and (order.get('status') == 'closed' or order.get('filled', 0) > 0):
                     pos.tp1_hit = True
                     pos_manager.save()
                     logger.info(f"🎯 TP1 alcanzado para {pos.symbol} en {pos.exchange_id}")
                     if self.notifier:
                         await self.notifier.notify_tp_hit(pos, 1)
             except Exception as e:
-                logger.warning(f"⚠️ Error fetching TP1 order for {pos.symbol}: {e}")
+                logger.debug(f"⚠️ Error fetching TP1 for {pos.symbol} en {pos.exchange_id}: {e}")
 
     async def _sync_failed_exchanges(self):
         """Reintenta conexión con exchanges fallidos."""
@@ -958,7 +1003,10 @@ class TradingEngine:
             sl_amount = float(client.amount_to_precision(pos.market_symbol, pos.amount))
             side_upper = 'LONG' if pos.side.lower() == 'buy' else 'SHORT'
 
-            order_type, price, params = self._create_exchange_order(pos.exchange_id, side_upper, new_sl)
+            order_type, price, params = self._create_exchange_order(
+                pos.exchange_id, side_upper, new_sl,
+                reduce_only=pos.exchange_id != "bitget"
+            )
             sl_order = await client.create_order(pos.market_symbol, order_type, sl_side, sl_amount, price, params)
 
             pos.sl_order_id = sl_order.get('id')
@@ -1008,7 +1056,10 @@ class TradingEngine:
             sl_side = 'sell' if pos.side.lower() == 'buy' else 'buy'
             side_upper = 'LONG' if pos.side.lower() == 'buy' else 'SHORT'
 
-            order_type, price, params = self._create_exchange_order(pos.exchange_id, side_upper, pos.entry_price)
+            order_type, price, params = self._create_exchange_order(
+                pos.exchange_id, side_upper, pos.entry_price,
+                reduce_only=pos.exchange_id != "bitget"
+            )
             sl_order = await client.create_order(pos.market_symbol, order_type, sl_side, pos.amount, price, params)
 
             pos.sl_order_id = sl_order.get('id')

@@ -200,7 +200,7 @@ class ExchangeService:
             # 2. Configurar Apalancamiento
             params = {}
             if exchange_id == "bingx":
-                params['positionSide'] = side.upper()
+                params['side'] = side.upper()  # BingX requires 'side' param (LONG/SHORT/BOTH)
             
             await client.set_leverage(leverage, market_symbol, params)
             
@@ -276,12 +276,37 @@ class ExchangeService:
 
     @retry_decorator(max_retries=2, base_delay=1.0)
     @timeout_decorator(seconds=30)
+    async def fetch_plan_order(self, exchange_id: str, market_symbol: str, order_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Busca una orden planificada (plan order) en Bitget.
+        Para otros exchanges, usa fetch_order normal.
+        """
+        with self._clients_lock:
+            client = self.clients.get(exchange_id)
+            if not client:
+                return None
+        try:
+            if exchange_id == "bitget":
+                # Bitget plan orders necesitan planType param
+                return await client.fetch_order(order_id, market_symbol, params={'planType': 'normal_plan'})
+            else:
+                return await client.fetch_order(order_id, market_symbol)
+        except Exception as e:
+            logger.debug(f"Error fetching plan order {order_id} en {exchange_id}: {e}")
+            return None
+
+    @retry_decorator(max_retries=2, base_delay=1.0)
+    @timeout_decorator(seconds=30)
     async def cancel_order(self, exchange_id: str, market_symbol: str, order_id: str):
         with self._clients_lock:
             client = self.clients.get(exchange_id)
             if not client: return False
         try:
-            await client.cancel_order(order_id, market_symbol)
+            params = {}
+            if exchange_id == "bitget":
+                # Bitget plan orders (SL/TP) necesitan planType param
+                params['planType'] = 'normal_plan'
+            await client.cancel_order(order_id, market_symbol, params)
             return True
         except RuntimeError as e:
             if "Event loop is closed" in str(e):

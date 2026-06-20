@@ -572,8 +572,27 @@ async def test_place_stop_loss_bitget(mock_ex_svc, engine):
     args, kwargs = mock_client.create_order.call_args
     assert args[1] == "limit"
     assert args[5].get("planType") == "normal_plan"
-    assert args[5].get("reduceOnly") is True
+    # SL en Bitget NO debe tener reduceOnly (para no bloquear TPs)
+    assert args[5].get("reduceOnly") is None or args[5].get("reduceOnly") is False
     assert pos.sl_order_id == "sl_bitget"
+
+
+@pytest.mark.asyncio
+@patch("core.engine.exchange_service")
+async def test_place_stop_loss_bitget_no_reduce_only(mock_ex_svc, engine):
+    """SL en Bitget NO debe tener reduceOnly."""
+    mock_client = _mock_client()
+    mock_client.create_order = AsyncMock(return_value={"id": "sl_bitget_no_ro"})
+
+    signal = _sig(stop_loss=65000)
+    pos = Position(exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+                   side="Buy", entry_price=67000, amount=0.01, leverage=5)
+    await engine._place_stop_loss(mock_client, "bitget", "BTC/USDT", signal, 0.01, "LONG", pos)
+
+    args, kwargs = mock_client.create_order.call_args
+    assert args[5].get("planType") == "normal_plan"
+    assert args[5].get("reduceOnly") is None or args[5].get("reduceOnly") is False
+    assert pos.sl_order_id == "sl_bitget_no_ro"
 
 
 @pytest.mark.asyncio
@@ -1453,3 +1472,96 @@ async def test_decide_market_when_price_in_range(mock_ex_svc, engine):
     )
     assert ok is True
     assert isinstance(result, dict)  # MARKET
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests: Cancelar órdenes SL/TP al cerrar posición
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_position_closed_cancels_sl_tp(mock_ex_svc, mock_pm, engine):
+    """Al detectar posición cerrada, cancela SL y TPs."""
+    mock_client = MagicMock()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.fetch_position = AsyncMock(return_value={"contracts": 0})  # Cerrada
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(
+        exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+        side="Buy", entry_price=67000, amount=0.01, leverage=5,
+        status=PositionStatus.OPEN,
+        sl_order_id="sl_123",
+        tp_order_ids=["tp_1", "tp_2"],
+    )
+    mock_pm.get_open_positions.return_value = [pos]
+    engine.notifier = AsyncMock()
+
+    await engine._watchdog_tick()
+
+    # Verificar que se cancelaron SL y ambos TPs
+    assert mock_ex_svc.cancel_order.call_count == 3
+    mock_ex_svc.cancel_order.assert_any_call("bitget", "BTC/USDT", "sl_123")
+    mock_ex_svc.cancel_order.assert_any_call("bitget", "BTC/USDT", "tp_1")
+    mock_ex_svc.cancel_order.assert_any_call("bitget", "BTC/USDT", "tp_2")
+    assert pos.status == PositionStatus.CLOSED
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_position_closed_no_sl_tp_orders(mock_ex_svc, mock_pm, engine):
+    """Posición sin SL/TP no causa error al cerrar."""
+    mock_client = MagicMock()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.fetch_position = AsyncMock(return_value={"contracts": 0})
+    mock_ex_svc.cancel_order = AsyncMock()
+
+    pos = Position(
+        exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+        side="Buy", entry_price=67000, amount=0.01, leverage=5,
+        status=PositionStatus.OPEN,
+        sl_order_id=None,
+        tp_order_ids=[],
+    )
+    mock_pm.get_open_positions.return_value = [pos]
+    engine.notifier = AsyncMock()
+
+    await engine._watchdog_tick()
+
+    # Sin órdenes que cancelar → no debe llamar a cancel_order
+    mock_ex_svc.cancel_order.assert_not_called()
+    assert pos.status == PositionStatus.CLOSED
+
+
+@pytest.mark.asyncio
+@patch("core.engine.pos_manager")
+@patch("core.engine.exchange_service")
+async def test_position_closed_cancel_error_doesnt_block(mock_ex_svc, mock_pm, engine):
+    """Error cancelando una orden no interrumpe las demás."""
+    mock_client = MagicMock()
+    mock_ex_svc.clients = {"bitget": mock_client}
+    mock_ex_svc.fetch_position = AsyncMock(return_value={"contracts": 0})
+    # La primera cancelación falla, la segunda y tercera funcionan
+    mock_ex_svc.cancel_order = AsyncMock(side_effect=[
+        Exception("API error"),
+        True,
+        True,
+    ])
+
+    pos = Position(
+        exchange_id="bitget", symbol="BTC/USDT", market_symbol="BTC/USDT",
+        side="Buy", entry_price=67000, amount=0.01, leverage=5,
+        status=PositionStatus.OPEN,
+        sl_order_id="sl_123",
+        tp_order_ids=["tp_1", "tp_2"],
+    )
+    mock_pm.get_open_positions.return_value = [pos]
+    engine.notifier = AsyncMock()
+
+    await engine._watchdog_tick()
+
+    # Debe haber intentado las 3 cancelaciones
+    assert mock_ex_svc.cancel_order.call_count == 3
+    assert pos.status == PositionStatus.CLOSED
