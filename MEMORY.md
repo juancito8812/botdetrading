@@ -1,14 +1,14 @@
 # 🧠 Memoria del Proyecto — MiBotTrading
 
 > ╔══════════════════════════════════════════════════════════════════╗
-> ║  🟢 CHECKPOINT v2.1.2 — 19/06/2026                            ║
-> ║  Estado: 🧪 PRODUCCIÓN — Logs analizados, 3 bugs fijados      ║
-> ║  Tests: 440+ pasando (146 engine+parser+exchange_service)      ║
-> ║  Cambios: Fix 40109 Bitget, BingX setLeverage, Parser+Watchdog║
+> ║  🟢 CHECKPOINT v2.1.3 — 19/06/2026                            ║
+> ║  Estado: 🧪 PRODUCCIÓN — Build fix + auto-update funciona     ║
+> ║  Tests: 440+ pasando                                         ║
+> ║  Cambios: __init__.py en packages, repo público, auto-update ║
 > ║  Exchanges activos: BingX + Bitget (ambos operativos)         ║
 > ╚══════════════════════════════════════════════════════════════════╝
 
-*Última actualización: 19/06/2026 (America/Caracas) — v2.1.2: Fixes post-producción*
+*Última actualización: 19/06/2026 (America/Caracas) — v2.1.3: Build fix + auto-update funcional*
 
 ---
 
@@ -319,36 +319,44 @@ TARGETS: 120, 130
 
 ---
 
-## 🐛 Bugs Corregidos — Sesión 19/06/2026 (v2.1.2: Post-producción)
+### 🐛 Bugs Corregidos — Sesión 19/06/2026
 
-Analizado log de 24h en producción. Se corrigieron **3 bugs** y se mejoró el parser:
+#### v2.1.2 (3 bugs post-producción)
 
-### Bug 1 🔴 — 40109: TP1 de Bitget nunca detectado
+**Bug 1 🔴 — 40109: TP1 de Bitget nunca detectado**
 | Item | Detalle |
 |------|---------|
 | **Síntoma** | Cada ~32s: `⚠️ Error fetching TP1 order for BAT: bitget {"code":"40109","msg":"The data of the order cannot be found"}` durante 2.5h |
 | **Causa** | `_check_tp1_hit()` usaba `client.fetch_order()` que no funciona para plan orders de Bitget (necesitan `planType: 'normal_plan'`) |
 | **Fix** | Nuevo método `fetch_plan_order()` en `exchange_service.py` que pasa `params={'planType': 'normal_plan'}` para Bitget. También `cancel_order()` ahora pasa el mismo param. Un solo cambio arregla 5 callers |
 
-### Bug 2 🟡 — BingX setLeverage warning
+**Bug 2 🟡 — BingX setLeverage warning**
 | Item | Detalle |
 |------|---------|
 | **Síntoma** | En cada trade: `⚠️ bingx: No se pudo configurar apalancamiento/margen: bingx setLeverage() requires a side argument` |
 | **Causa** | `set_leverage()` pasaba `params['positionSide']` pero BingX requiere `params['side']` |
 | **Fix** | Cambiado `positionSide` → `side` en `exchange_service.py:set_leverage()` |
 
-### Bug 3 🟡 — Parser no filtraba mensajes de pérdida
+**Bug 3 🟡 — Parser no filtraba mensajes de pérdida**
 | Item | Detalle |
 |------|---------|
 | **Síntoma** | Mensaje de SL hit se ejecutó como orden de compra (AVAX comprado a 6.041 con SL en 6.15) |
 | **Causa** | Parser detectaba `$AVAX/USDT` + `LONG` + `STOP LOSS` sin validar que era mensaje de cierre |
 | **Fix** | Filtro `REJECT_PATTERNS` en `parser.py`: rechaza `% Loss`, `took this one out`, `Volatility across` |
 
-### Mejora 🟢 — TPs antes que SL + Watchdog cancel SL/TP
+**Mejora 🟢 — TPs antes que SL + Watchdog cancel SL/TP**
 | Item | Detalle |
 |------|---------|
 | **Problema** | SL se colocaba primero (reduceOnly 100%) → TPs bloqueados por límite reduceOnly |
 | **Fix** | TPs primero, SL después (Bitget sin reduceOnly). Watchdog cancela SL+TPs al cerrar posición |
+
+#### v2.1.3 — Build fix + auto-update funcional
+
+| Problema | Causa | Fix |
+|----------|-------|-----|
+| 🔴 **v2.1.2 .exe no abre** — `ImportError: cannot import name 'config_backup' from 'utils'` | Faltaban `__init__.py` en packages (core, services, ui, utils, models). PyInstaller no resuelve namespace packages sin ellos | Creados `__init__.py` vacíos en los 5 directorios |
+| 🟢 **Auto-update no funcionaba** | Repo era privado, HTTP API 404 | Repo hecho público + tag v2.1.3 |
+| 🟢 **v2.1.1 .exe nunca se había compilado** | Solo existía en código, sin tag+release | Tag v2.1.2 y v2.1.3 creados, builds ejecutándose |
 
 ---
 
@@ -367,7 +375,9 @@ Analizado log de 24h en producción. Se corrigieron **3 bugs** y se mejoró el p
 - [x] Fix BingX setLeverage
 - [x] Fix parser: filtrar mensajes de pérdida
 - [x] Mejora: TPs antes que SL + Watchdog cancel SL/TP
-- [ ] Desplegar v2.1.2 a producción
+- [x] Fix build: __init__.py faltantes
+- [x] Repo público + auto-update funcional
+- [ ] Desplegar v2.1.3 a producción
 - [ ] Activar más exchanges (Binance, Bybit, OKX)
 - [ ] Tests para updater.py y crypto.py
 - [ ] Gráficos en pestaña Reportes (matplotlib para PnL histórico)
