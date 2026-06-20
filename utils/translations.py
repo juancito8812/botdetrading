@@ -248,6 +248,8 @@ TRANSLATIONS = {
         "upd_auto_check": "Buscar actualizaciones al iniciar",
         "upd_restart": "Descargado. La app se cerrará para aplicar la actualización.",
         "upd_release_notes": "Notas de la versión:",
+        "upd_download_manual": "🌐 Abriendo GitHub Releases en el navegador...",
+        "upd_open_github": "🌐 ABRIR GITHUB",
 
         # ─── Notification Preferences ──────────
         "notif_title": "Notificaciones Seleccionables",
@@ -532,6 +534,8 @@ TRANSLATIONS = {
         "upd_auto_check": "Check for updates on startup",
         "upd_restart": "Downloaded. The app will close to apply the update.",
         "upd_release_notes": "Release notes:",
+        "upd_download_manual": "🌐 Opening GitHub Releases in browser...",
+        "upd_open_github": "🌐 OPEN GITHUB",
 
         # ─── Notification Preferences ──────────
         "notif_title": "Selectable Notifications",

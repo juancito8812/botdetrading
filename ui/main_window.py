@@ -20,7 +20,7 @@ from core.manager import pos_manager
 from models.data_classes import PositionStatus
 from core.engine import health_monitor, trading_engine
 from services.updater import (get_current_version, check_latest_version,
-                              is_newer_version, download_update, apply_update)
+                              is_newer_version, get_releases_url)
 from utils.logger import logger
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
@@ -940,58 +940,21 @@ class TradingBotGUI:
             self.upd_notes_text.pack(fill='x', padx=5, pady=5)
 
     def _download_update(self):
-        """Descarga la actualización y la aplica."""
+        """
+        Abre la página de GitHub Releases en el navegador.
+        El usuario descarga manualmente desde ahí (evita Windows Defender).
+        """
         if not self._upd_latest_info:
             return
 
-        self.upd_download_btn.config(state='disabled', text=i18n.t("upd_downloading"))
-        self.upd_status_label.config(text=i18n.t("upd_downloading"), foreground="gray")
-
-        def _do_download():
-
-            try:
-                url = self._upd_latest_info.get("download_url", "")
-                tag = self._upd_latest_info.get("tag_name", None)
-                dest = download_update(url, tag_name=tag)
-                if dest:
-                    self.root.after(0, lambda: (
-                        self.upd_status_label.config(text=i18n.t("upd_downloaded"), foreground=COLOR_GREEN),
-                    ))
-                    # Apply update: lanza el .bat, luego cierra la app inmediatamente
-                    success = apply_update(dest)
-                    if success:
-                        self.root.after(0, lambda: self.root.destroy())
-                    else:
-                        self.root.after(0, lambda: (
-                            self.upd_status_label.config(
-                                text="Error al aplicar la actualización",
-                                foreground=COLOR_RED
-                            ),
-                            self.upd_download_btn.config(
-                                state='normal', text=i18n.t("upd_download")
-                            ),
-                        ))
-                else:
-                    self.root.after(0, lambda: (
-                        self.upd_status_label.config(
-                            text="Error al descargar la actualización",
-                            foreground="#ff4444"
-                        ),
-                        self.upd_download_btn.config(
-                            state='normal', text=i18n.t("upd_download")
-                        ),
-                    ))
-            except Exception as e:
-                self.root.after(0, lambda: (
-                    self.upd_status_label.config(
-                        text=f"Error: {str(e)[:60]}", foreground="#ff4444"
-                    ),
-                    self.upd_download_btn.config(
-                        state='normal', text=i18n.t("upd_download")
-                    ),
-                ))
-
-        threading.Thread(target=_do_download, daemon=True).start()
+        import webbrowser
+        url = get_releases_url()
+        webbrowser.open(url)
+        self.upd_status_label.config(
+            text=i18n.t("upd_download_manual"),
+            foreground=COLOR_GREEN
+        )
+        self.upd_download_btn.config(text=i18n.t("upd_open_github"), state='normal')
 
     def _export_config(self):
         """Exporta toda la configuración a un archivo .botconfig cifrado."""

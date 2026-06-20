@@ -23,8 +23,9 @@ from utils.helpers import BASE_DIR
 from utils.logger import logger
 
 VERSION_FILE = "VERSION"
-_CURRENT_VERSION = "v2.1.6"
+_CURRENT_VERSION = "v2.1.7"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
+_GITHUB_RELEASES = "https://github.com/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
 
 
@@ -257,61 +258,35 @@ def _cleanup_temp(path: Path):
         pass
 
 
+def get_releases_url() -> str:
+    """Retorna la URL de la página de releases en GitHub."""
+    return _GITHUB_RELEASES
+
+
 def apply_update(downloaded_path: Path) -> bool:
     """
-    Aplica la actualización: reemplaza el .exe actual con el descargado.
+    Prepara la actualización: renombra el .exe descargado a .update.
 
-    Usa PowerShell en vez de .bat para evitar bloqueos de Windows Defender.
+    Ya no crea scripts (Windows Defender los bloquea).
+    El usuario debe cerrar el bot, reemplazar manualmente y reiniciar.
     """
     downloaded = Path(downloaded_path)
     if not downloaded.exists():
         logger.error(f"Archivo descargado no encontrado: {downloaded}")
         return False
 
-    if not getattr(sys, 'frozen', False):
-        logger.info("Modo script: la actualización requiere ejecutar manualmente")
-        return False
+    exe_dir = downloaded.parent
+    update_file = exe_dir / "MiBotTrading.exe.update"
 
-    exe_path = Path(sys.executable)
-    exe_dir = exe_path.parent
-    exe_name = exe_path.name
-    new_exe = exe_dir / "MiBotTrading_new.exe"
-    ps_path = exe_dir / "_update.ps1"
-
-    if downloaded.parent != exe_dir:
-        import shutil
-        shutil.move(str(downloaded), str(new_exe))
-
-    # PowerShell script - más confiable para Windows Defender que .bat
-    ps_content = f"""
-# Esperar a que el bot termine
-$retry = 0
-while ($retry -lt 30) {{
-    $proc = Get-Process -Name "{exe_path.stem}" -ErrorAction SilentlyContinue
-    if (-not $proc) {{ break }}
-    Start-Sleep -Seconds 1
-    $retry++
-}}
-
-# Reemplazar ejecutable
-Move-Item -Force "{new_exe}" "{exe_path}"
-
-# Iniciar nueva versión
-Start-Process "{exe_path}"
-
-# Auto-eliminar este script
-Remove-Item -Force "$PSCommandPath"
-"""
     try:
-        ps_path.write_text(ps_content, encoding="utf-8")
-        logger.info(f"📝 Script de actualización creado: {ps_path}")
-        subprocess.Popen(
-            ['powershell.exe', '-ExecutionPolicy', 'Bypass',
-             '-WindowStyle', 'Hidden', '-File', str(ps_path)],
-            close_fds=True,
-        )
-        logger.info("🚀 Script de actualización lanzado, cerrando bot...")
+        # Renombrar a .update para que Windows no lo marque como ejecutable
+        if update_file.exists():
+            update_file.unlink()
+        import shutil
+        shutil.move(str(downloaded), str(update_file))
+        logger.info(f"📦 Update preparado: {update_file}")
+        logger.info("ℹ️  Cierra el bot, reemplaza MiBotTrading.exe por MiBotTrading.exe.update y reinicia")
         return True
     except Exception as e:
-        logger.error(f"Error creando script de actualización: {e}")
+        logger.error(f"Error preparando actualización: {e}")
         return False
