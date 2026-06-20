@@ -12,7 +12,6 @@ REPO PRIVADO: Si el repo es privado, la API HTTP devuelve 404.
   Se usa `gh release view` y `gh release download` como alternativa autenticada.
 """
 import json
-import os
 import subprocess
 import sys
 import urllib.request
@@ -24,7 +23,7 @@ from utils.helpers import BASE_DIR
 from utils.logger import logger
 
 VERSION_FILE = "VERSION"
-_CURRENT_VERSION = "v2.1.5"
+_CURRENT_VERSION = "v2.1.6"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
 
@@ -259,6 +258,11 @@ def _cleanup_temp(path: Path):
 
 
 def apply_update(downloaded_path: Path) -> bool:
+    """
+    Aplica la actualización: reemplaza el .exe actual con el descargado.
+
+    Usa PowerShell en vez de .bat para evitar bloqueos de Windows Defender.
+    """
     downloaded = Path(downloaded_path)
     if not downloaded.exists():
         logger.error(f"Archivo descargado no encontrado: {downloaded}")
@@ -272,32 +276,40 @@ def apply_update(downloaded_path: Path) -> bool:
     exe_dir = exe_path.parent
     exe_name = exe_path.name
     new_exe = exe_dir / "MiBotTrading_new.exe"
-    bat_path = exe_dir / "_update.bat"
+    ps_path = exe_dir / "_update.ps1"
 
     if downloaded.parent != exe_dir:
         import shutil
         shutil.move(str(downloaded), str(new_exe))
 
-    bat_content = f"""@echo off
-chcp 65001 >nul
-title Actualizando MiBotTrading...
-echo Esperando a que el bot termine...
-:loop
-tasklist /fi "IMAGENAME eq {exe_name}" 2>nul | find /i "{exe_name}" >nul
-if not errorlevel 1 (
-    timeout /t 2 /nobreak >nul
-    goto loop
-)
-echo Reemplazando ejecutable...
-move /y "{new_exe}" "{exe_path}" >nul
-echo Iniciando nueva version...
-start "" "{exe_path}"
-del "%~f0"
+    # PowerShell script - más confiable para Windows Defender que .bat
+    ps_content = f"""
+# Esperar a que el bot termine
+$retry = 0
+while ($retry -lt 30) {{
+    $proc = Get-Process -Name "{exe_path.stem}" -ErrorAction SilentlyContinue
+    if (-not $proc) {{ break }}
+    Start-Sleep -Seconds 1
+    $retry++
+}}
+
+# Reemplazar ejecutable
+Move-Item -Force "{new_exe}" "{exe_path}"
+
+# Iniciar nueva versión
+Start-Process "{exe_path}"
+
+# Auto-eliminar este script
+Remove-Item -Force "$PSCommandPath"
 """
     try:
-        bat_path.write_text(bat_content, encoding="utf-8")
-        logger.info(f"📝 Script de actualización creado: {bat_path}")
-        os.startfile(str(bat_path))
+        ps_path.write_text(ps_content, encoding="utf-8")
+        logger.info(f"📝 Script de actualización creado: {ps_path}")
+        subprocess.Popen(
+            ['powershell.exe', '-ExecutionPolicy', 'Bypass',
+             '-WindowStyle', 'Hidden', '-File', str(ps_path)],
+            close_fds=True,
+        )
         logger.info("🚀 Script de actualización lanzado, cerrando bot...")
         return True
     except Exception as e:
