@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 import time
 from logging.handlers import TimedRotatingFileHandler
@@ -41,12 +42,33 @@ def _cleanup_old_logs(log_file, max_age_days=30):
     except Exception as e:
         log.warning(f"Error limpiando logs antiguos: {e}")
 
+class SensitiveDataFilter(logging.Filter):
+    """Filtro que oculta API keys y secrets en los logs."""
+    # Patrones de datos sensibles a enmascarar
+    _SENSITIVE_PATTERNS = [
+        (re.compile(r'(API_KEY|SECRET|PASSPHRASE)=[A-Za-z0-9_\-+/=]+', re.I),
+         lambda m: f"{m.group(1)}=***"),
+        (re.compile(r'(apiKey|secret|passphrase)["\']?\s*[:=]\s*["\'][A-Za-z0-9_\-+/=]+["\']', re.I),
+         lambda m: f"{m.group(1)}='***'"),
+    ]
+
+    def filter(self, record):
+        if hasattr(record, 'msg') and isinstance(record.msg, str):
+            for pattern, replacer in self._SENSITIVE_PATTERNS:
+                record.msg = pattern.sub(replacer, record.msg)
+        return True
+
 
 def setup_logger():
     logger = logging.getLogger("TradingBot")
     logger.setLevel(logging.INFO)
 
     if not logger.handlers:
+        # Agregar filtro de datos sensibles
+        sensitive_filter = SensitiveDataFilter()
+        logger.addFilter(sensitive_filter)
+
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
         # Handler principal en DATA_DIR con rotación diaria

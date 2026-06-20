@@ -23,7 +23,7 @@ from utils.helpers import BASE_DIR
 from utils.logger import logger
 
 VERSION_FILE = "VERSION"
-_CURRENT_VERSION = "v2.1.8"
+_CURRENT_VERSION = "v2.1.9"
 _GITHUB_API = "https://api.github.com/repos/juancito8812/botdetrading/releases/latest"
 _GITHUB_RELEASES = "https://github.com/juancito8812/botdetrading/releases/latest"
 _ASSET_NAME = "MiBotTrading.exe"
@@ -269,6 +269,30 @@ def download_update(download_url: str, tag_name: Optional[str] = None,
     return None
 
 
+def _verify_exe(path: Path) -> bool:
+    """
+    Verifica que el archivo descargado sea un .exe válido.
+    Comprueba: tamaño mínimo (1MB) y cabecera PE ("MZ").
+    """
+    try:
+        if not path.exists():
+            return False
+        size_mb = path.stat().st_size / (1024 * 1024)
+        if size_mb < 1:
+            logger.error(f"Archivo demasiado pequeño ({size_mb:.1f} MB), parece corrupto")
+            return False
+        with open(path, "rb") as f:
+            magic = f.read(2)
+        if magic != b"MZ":
+            logger.error(f"Cabecera PE inválida: {magic.hex()}, el archivo puede estar corrupto")
+            return False
+        logger.debug(f"✅ .exe validado: {size_mb:.1f} MB, cabecera PE correcta")
+        return True
+    except Exception as e:
+        logger.error(f"Error validando .exe: {e}")
+        return False
+
+
 def _cleanup_temp(path: Path):
     try:
         if path.exists():
@@ -284,7 +308,7 @@ def get_releases_url() -> str:
 
 def apply_update(downloaded_path: Path) -> bool:
     """
-    Prepara la actualización: renombra el .exe descargado a .update.
+    Prepara la actualización: verifica el .exe y lo renombra a .update.
 
     Ya no crea scripts (Windows Defender los bloquea).
     El usuario debe cerrar el bot, reemplazar manualmente y reiniciar.
@@ -292,6 +316,12 @@ def apply_update(downloaded_path: Path) -> bool:
     downloaded = Path(downloaded_path)
     if not downloaded.exists():
         logger.error(f"Archivo descargado no encontrado: {downloaded}")
+        return False
+
+    # Validar integridad del .exe
+    if not _verify_exe(downloaded):
+        logger.error("❌ El archivo descargado no pasó la validación, cancelando actualización")
+        _cleanup_temp(downloaded)
         return False
 
     exe_dir = downloaded.parent
