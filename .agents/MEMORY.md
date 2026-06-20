@@ -6,7 +6,7 @@
 - **Stack:** Python 3.10+, Tkinter (GUI), CCXT (conexion exchanges), Telethon (Telegram), asyncio
 - **Ultimas features:** Dashboard auto-refresh 60s + Auto-start Windows por defecto + Bot auto-inicia al abrir
 - **Ultima sesion:** 19/06/2026 - Fix produccion: 40109 Bitget plan orders + BingX setLeverage + Parser + Watchdog cancel SL/TP
-- **Version de memoria:** 10
+- **Version de memoria:** 11
 
 ## Arquitectura
 
